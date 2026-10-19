@@ -41,7 +41,7 @@ button.sel{border-color:var(--cy);background:rgba(95,246,255,.15);box-shadow:ins
 .torch::after{content:'';position:absolute;left:-60px;top:-60px;width:130px;height:130px;background:radial-gradient(#ff9a2e33,transparent 65%);animation:flick .3s infinite alternate}
 @keyframes flick{to{transform:scale(.88,1.08);opacity:.85}}
 .sprite{width:32px;height:32px;transform:scale(3);transform-origin:bottom;image-rendering:pixelated;background-size:100%;z-index:1}
-#hero{animation:atk 1s steps(2) infinite}.boss{transform:scale(4.5);animation:bob 1.2s steps(2) infinite}
+#hero{animation:atk 1s steps(2) infinite}.boss{transform:scale(4.5);}.boss.big{transform:scale(5.6);}.boss{animation:bob 1.2s steps(2) infinite}
 @keyframes atk{50%{translate:4px 0}}@keyframes bob{50%{translate:0 -2px}}.hit{filter:brightness(2.5) drop-shadow(0 0 2px #fff)}
 #fx{position:absolute;inset:0;pointer-events:none;z-index:2}
 .dmg{position:absolute;font:700 20px 'Rajdhani';color:#fff;text-shadow:0 0 6px var(--cy),0 2px 0 #000;animation:up 1s ease-out forwards}

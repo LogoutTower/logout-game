@@ -1,7 +1,7 @@
 import { CLASSES, newHero, heroDps, levelCost, gearCost, computeProgress, applyXp, bossName, fmt, fmtDur, xpToNext } from './game.js';
 import { makeBackend } from './storage.js';
 import { OFFLINE_CAP_HOURS, MAX_FLOOR } from '../config.js';
-import { bossSprite, heroSprite } from './sprites.js';
+import { bossSprite, bossIsBig, heroSprite } from './sprites.js';
 import { SLOTS, CREATION_SLOTS, itemsFor, isUnlocked, unlockText, defaultLook, migrateSave, recordClear, equip, titleOf, nameColorOf, fakeProfile, byId, SAVE_VERSION } from './cosmetics.js';
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
@@ -94,7 +94,7 @@ function buy(kind) {
 }
 function render() {
   const h = save.heroes[0];
-  $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('boss').style.backgroundImage = bossSprite(floor.floor);
+  $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('boss').style.backgroundImage = bossSprite(floor.floor); $('boss').classList.toggle('big', bossIsBig(floor.floor));
   const won = floor.floor >= MAX_FLOOR && floor.hp <= 0;
   $('bname').textContent = won ? 'Log out enabled' : bossName(floor.floor);
   $('floor').textContent = won ? 'System notice · the tower is silent' : `Guardian of Floor ${floor.floor} / ${MAX_FLOOR}`;

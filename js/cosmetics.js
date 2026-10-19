@@ -6,7 +6,7 @@ export const CATALOG = [
   I('skin-1', 'skin', 'Pale', '#f1d1b5'), I('skin-2', 'skin', 'Sand', '#c9a27a'), I('skin-3', 'skin', 'Umber', '#8a5a3c'), I('skin-4', 'skin', 'Deep', '#5a3825'),
   I('skin-ghost', 'skin', 'Ghost', '#b8f3ff', { floor: 7 }),
   // hair colour
-  I('hc-ink', 'hairColor', 'Ink', '#1b1030'), I('hc-rust', 'hairColor', 'Rust', '#b4532a'), I('hc-straw', 'hairColor', 'Straw', '#e8c35a'), I('hc-plum', 'hairColor', 'Plum', '#7a3d9e'),
+  I('hc-ink', 'hairColor', 'Ink', '#3b2c66'), I('hc-rust', 'hairColor', 'Rust', '#b4532a'), I('hc-straw', 'hairColor', 'Straw', '#e8c35a'), I('hc-plum', 'hairColor', 'Plum', '#7a3d9e'),
   I('hc-silver', 'hairColor', 'Static Silver', '#d6e2ff', { floor: 2 }), I('hc-neon', 'hairColor', 'Neon Cyan', '#3ff7ff', { top3: 1 }),
   // hair style
   I('hs-short', 'hairStyle', 'Short', 'short'), I('hs-long', 'hairStyle', 'Long', 'long'), I('hs-spiky', 'hairStyle', 'Spiky', 'spiky'), I('hs-hood', 'hairStyle', 'Hood', 'hood'),
@@ -95,9 +95,10 @@ export function fakeProfile(name) {
 import { shade } from './pixel.js';
 // ---------- layered sprite: 16x16 layer grid, shaded/outlined to 32x32 ----------
 export const HERO_SIZE = 32;
-const BASE = [
-  '................', '................', '......kkkk......', '.....kSSSSk.....', '.....kSeSek.....', '.....kSSSSk.....', '......kSSk......',
-  '....kOOOOOOk....', '...SkOTOOTOkS...', '...S.kOOOOk.S...', '....kOOOOOOk....', '.....kTTTTk.....', '.....kk..kk.....', '.....bb..bb.....', '................', '................'];
+const BASE = [ // chibi proportions: big head (rows 2-8), small body (rows 9-15)
+  '................', '................', '.....kkkkkk.....', '....kSSSSSSk....', '...kSSSSSSSSk...', '...kSSeSSeSSk...', '...kSSfSSfSSk...', '...kSmSSSSmSk...',
+  '....kSSSSSSk....', '.....kOOOOk.....', '....kOOOOOOk....', '...SkOTOOTOkS...', '....kOOOOOOk....', '.....kTTTTk.....', '.....bb..bb.....', '.....bb..bb.....'];
+const HAND_DY = 3; // weapons were authored for the old hand row; shift down to the chibi hand
 const WEAPONS = { // [x,y,ch] lists drawn at the hero's right hand (col 12-15)
   sword: [[13,2,'W'],[13,3,'W'],[13,4,'W'],[13,5,'W'],[13,6,'W'],[12,7,'w'],[13,7,'w'],[14,7,'w'],[13,8,'w']],
   axe: [[13,3,'w'],[13,4,'w'],[13,5,'w'],[13,6,'w'],[13,7,'w'],[13,8,'w'],[14,3,'W'],[15,3,'W'],[14,4,'W'],[15,4,'W'],[14,5,'W']],
@@ -110,20 +111,26 @@ const WEAPONS = { // [x,y,ch] lists drawn at the hero's right hand (col 12-15)
   wand: [[13,5,'W'],[14,4,'W'],[12,4,'W'],[13,3,'W'],[13,6,'w'],[13,7,'w'],[13,8,'w']],
 };
 /** Returns {rows: 32 strings of 32 chars, pal: char->colour} for a look + class. */
-export const heroGrid = (look, cls) => { const g = heroGrid16(look, cls); return shade(g.rows, g.pal); };
+export const heroGrid = (look, cls) => { const g = heroGrid16(look, cls); return shade(g.rows, g.pal, { flat: 'fm' }); };
 export function heroGrid16(look, cls) {
   const g = BASE.map(r => [...r]), set = (x, y, c) => { if (x >= 0 && x < 16 && y >= 0 && y < 16) g[y][x] = c; };
+  const fill = (x0, x1, y0, y1, c) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) set(x, y, c); };
   const style = byId(look.outfitStyle).value, hair = byId(look.hairStyle).value;
-  if (style === 'robe') { for (let y = 11; y <= 13; y++) for (let x = 5; x <= 10; x++) set(x, y, y === 13 ? 'T' : 'O'); set(4, 12, 'k'); set(11, 12, 'k'); }
-  if (style === 'plate') { set(3, 7, 'T'); set(4, 7, 'T'); set(11, 7, 'T'); set(12, 7, 'T'); set(6, 9, 'T'); set(9, 9, 'T'); }
-  if (style === 'cloak') { for (let y = 7; y <= 12; y++) { set(2, y, 'O'); set(13, y, 'O'); } set(1, 8, 'T'); set(14, 8, 'T'); }
-  if (hair === 'short') { for (let x = 5; x <= 10; x++) set(x, 2, 'H'); set(5, 3, 'H'); set(10, 3, 'H'); }
-  if (hair === 'long') { for (let x = 5; x <= 10; x++) set(x, 2, 'H'); for (let y = 3; y <= 8; y++) { set(4, y, 'H'); set(11, y, 'H'); } set(5, 3, 'H'); set(10, 3, 'H'); }
-  if (hair === 'spiky') { for (let x = 5; x <= 10; x++) set(x, 2, 'H'); [5, 7, 9].forEach(x => set(x, 1, 'H')); [6, 8, 10].forEach(x => set(x, 0, 'H')); set(5, 3, 'H'); }
-  if (hair === 'hood') { for (let x = 4; x <= 11; x++) set(x, 2, 'O'); for (let y = 3; y <= 6; y++) { set(4, y, 'O'); set(11, y, 'O'); } set(5, 1, 'O'); set(6, 1, 'O'); set(9, 1, 'O'); set(10, 1, 'O'); set(5, 3, 'H'); set(10, 3, 'H'); }
-  if (hair === 'crown') { for (let x = 5; x <= 10; x++) set(x, 2, 'H'); [5, 7, 8, 10].forEach(x => set(x, 1, 'y')); set(7, 0, 'y'); }
-  for (const [x, y, c] of WEAPONS[byId(look.weapon).value] || []) set(x, y, c);
-  const pal = { k: '#12062a', e: '#12062a', b: '#3a2a55', y: '#ffd84f', p: '#ff4fd8', S: byId(look.skin).value, H: byId(look.hairColor).value,
+  if (style === 'robe') { fill(4, 11, 13, 14, 'O'); fill(4, 11, 15, 15, 'T'); }
+  if (style === 'plate') { [3, 4, 11, 12].forEach(x => set(x, 10, 'T')); set(6, 12, 'T'); set(9, 12, 'T'); }
+  if (style === 'cloak') { fill(2, 2, 10, 14, 'O'); fill(13, 13, 10, 14, 'O'); set(1, 11, 'T'); set(14, 11, 'T'); }
+  const top = () => { fill(4, 11, 2, 2, 'H'); fill(3, 12, 3, 3, 'H'); [3, 4, 5, 7, 9, 10, 11, 12].forEach(x => set(x, 4, 'H')); };
+  if (hair === 'short') top();
+  if (hair === 'long') { top(); fill(2, 3, 5, 10, 'H'); fill(12, 13, 5, 10, 'H'); }
+  if (hair === 'spiky') { top(); [4, 6, 8, 10, 11].forEach(x => set(x, 1, 'H')); set(5, 0, 'H'); set(9, 0, 'H'); }
+  if (hair === 'hood') { fill(5, 10, 1, 1, 'O'); fill(3, 12, 2, 2, 'O'); fill(2, 13, 3, 3, 'O'); fill(2, 3, 4, 9, 'O'); fill(12, 13, 4, 9, 'O'); [4, 5, 10, 11].forEach(x => set(x, 4, 'H')); }
+  if (hair === 'crown') { top(); fill(4, 11, 1, 1, 'y'); [4, 7, 8, 11].forEach(x => set(x, 0, 'y')); }
+  // class silhouettes
+  if (cls === 'Vanguard') { fill(0, 3, 10, 14, 'T'); fill(1, 2, 11, 13, 'O'); set(3, 10, 'T'); set(12, 10, 'T'); } // kite shield + pauldrons
+  if (cls === 'Blade') { [[4, 9], [3, 9], [2, 10], [1, 10], [1, 11], [0, 12]].forEach(([x, y]) => set(x, y, 'r')); } // trailing scarf
+  if (cls === 'Arcanist' && hair !== 'hood' && hair !== 'crown') { set(10, 0, 'O'); set(11, 0, 'O'); fill(7, 9, 1, 1, 'O'); fill(5, 10, 2, 2, 'T'); fill(2, 13, 3, 3, 'O'); } // soft pointed hat
+  for (const [x, y, c] of WEAPONS[byId(look.weapon).value] || []) set(x, y + HAND_DY, c);
+  const pal = { k: '#12062a', e: '#12062a', f: '#2a1d45', m: '#ff8fa8', r: '#ff3355', b: '#3a2a55', y: '#ffd84f', p: '#ff4fd8', S: byId(look.skin).value, H: byId(look.hairColor).value,
     O: byId(look.outfitColor).value, T: byId(look.trim).value, W: byId(look.weaponColor).value, w: '#6b4a2b' };
   return { rows: g.map(r => r.join('')), pal };
 }

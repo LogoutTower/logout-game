@@ -41,6 +41,7 @@ for (const slot of ['skin', 'hairColor', 'outfitColor', 'trim', 'weaponColor']) 
 // bosses: 10 valid 32x32 sprites, several distinct silhouettes
 const { bossGrid, bossShape } = await import('../js/sprites.js');
 const shapes = new Set();
-for (let f = 1; f <= 10; f++) { const g = bossGrid(f); assert.equal(g.rows.length, 32); g.rows.forEach(r => assert.equal(r.length, 32)); for (const ch of g.rows.join('')) assert(ch === '.' || g.pal[ch]); shapes.add(bossShape(f).rows.join('|')); }
-assert(shapes.size >= 4, 'at least 4 boss silhouettes');
+for (let f = 1; f <= 10; f++) { const g = bossGrid(f); assert.equal(g.rows.length, 32); g.rows.forEach(r => assert.equal(r.length, 32)); for (const ch of g.rows.join('')) assert(ch === '.' || g.pal[ch]); shapes.add(bossShape(f).rows.map(r => r.replace(/[^.]/g, '#')).join('|')); }
+assert.equal(shapes.size, 10, 'every floor boss has its own silhouette');
+for (let f = 1; f <= 10; f++) { const filled = bossShape(f).rows.join('').replace(/\./g, '').length; assert(filled > 200, `boss ${f} is a substantial sprite`); }
 console.log('cosmetics tests passed');
