@@ -3,7 +3,7 @@
 // test/guilds.test.mjs runs the same cases through both.
 export const CHAT_MAX = 200, CHAT_SLOW_MS = 10000, CHAT_KEEP = 100;
 // Starter list; the server copy lives in public.chat_banned_words so moderators can extend it without a deploy.
-export const BANNED = ['fuck', 'shit', 'cunt', 'bitch', 'asshole', 'bastard', 'dick', 'pussy', 'whore', 'slut', 'nigger', 'nigga', 'faggot', 'fag', 'retard', 'rape', 'kys', 'nazi'];
+export const BANNED = ['fuck', 'shit', 'cunt', 'bitch', 'asshole', 'bastard', 'dick', 'pussy', 'whore', 'slut', 'nigger', 'nigga', 'faggot', 'fag', 'retard', 'rape', 'kys', 'nazi', 'kike', 'tranny', 'wetback', 'beaner', 'towelhead'];
 const LEET = { 0: 'o', 1: 'i', 3: 'e', 4: 'a', 5: 's', 7: 't', 8: 'b', 9: 'g', '@': 'a', $: 's', '!': 'i' };
 export const normWord = w => [...w.toLowerCase()].map(c => LEET[c] ?? c).join('').replace(/[^a-z]/g, '');
 const LINK = [

@@ -104,7 +104,7 @@ function showCreate() {
 function handleClears(clears = [], quiet = false) {
   const me = save.heroes[0].name, all = [];
   for (const c of clears) {
-    const got = recordClear(save, c.floor, gmValid ? 0 : c.ranking.indexOf(me) + 1, c.maxHp ? (c.dmg?.[me] || 0) / c.maxHp : 1); all.push(...got);
+    const got = recordClear(save, c.floor, gmValid ? 0 : (c.rank ?? c.ranking.indexOf(me) + 1), c.maxHp ? (c.dmg?.[me] || 0) / c.maxHp : 1); all.push(...got);
     for (const it of got) { log(`System notice: cosmetic unlocked — ${it.label}.`); if (!quiet) notice(`Cosmetic unlocked — ${it.label}`); }
     const share = c.maxHp ? (c.dmg?.[me] || 0) / c.maxHp : 0, d = grantDrops(save, c.floor, share);
     for (const it of d.items) { const R = rarityOf(it.rarity); if (it.rarity === 'unique') { log(`System notice: UNIQUE item acquired — ${it.name} · ${it.stamp}. ${it.ability.text}; drawback: ${it.drawback.text}.`, R.color); if (!quiet) notice(`UNIQUE item acquired — ${it.name}`, R.color, it); lootLines.push(`<span class="uniq">UNIQUE ${esc(it.name)}</span>`); continue; } log(`Loot · ${R.label} ${it.name} (Floor ${c.floor})`, R.color); lootLines.push(`<span style="color:${R.color}">${esc(R.label)} ${esc(it.name)}</span>`); if (!quiet) notice(`${R.label} drop — ${it.name}`, R.color, it); }
@@ -129,7 +129,7 @@ async function startGame(fresh = false) {
   $('helpBtn').onclick = () => { $('more').close(); tourShow(0); }; $('sysBtn').onclick = openSystem; $('mapBtn').onclick = openMap; $('floorBtn').onclick = openMap; $('chatBtn').onclick = openChat;
   $('lbBtn').onclick = () => $('lbSheet').showModal(); $('top3').onclick = () => $('lbSheet').showModal(); $('logBtn').onclick = () => $('logSheet').showModal(); $('sbBtn').onclick = openSandboxUi;
   $('tabGuild').hidden = !featureOn(FEATURES, 'guilds', gmValid); $('chatBtn').hidden = !featureOn(FEATURES, 'chat', gmValid);
-  $('topbar').classList.remove('hidden'); $('tabbar').classList.remove('hidden'); setInterval(badgePoll, 30000); setTimeout(badgePoll, 4000);
+  $('topbar').classList.remove('hidden'); $('tabbar').classList.remove('hidden'); setInterval(badgePoll, 60000); setTimeout(badgePoll, 4000);
   setInterval(tick, 1000); setInterval(sync, 5000); render(); renderLb();
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
@@ -214,6 +214,7 @@ function render() {
   H('gearL').textContent = `Forge ${fmt(gearCost(h))}g`; $('gear').disabled = save.gold < gearCost(h);
 }
 async function renderLb() {
+  if (document.hidden && $('lb').innerHTML) return; // background tab: no board refetch (free-tier egress)
   const h = save.heroes[0];
   let rows = await be.leaderboard(h.name); if (localStaffOnly()) rows = boardWithStaff([{ name: h.name, damage: localStaffDmg, staff: true }, ...(rows.players || rows).filter(r => r.name !== h.name && !r.staff)], null, 10); // local-only staff: shown, never sent
   await refreshTags(); const badge = n => gv2On() && gTags[n] ? bannerBadge(displayBanner(gTags[n].banner, gTags[n].staff), gTags[n].tag) + (gTags[n].staff ? `<span class="smark" title="Staff guild">${STAFF_MARK}</span>` : '') : '';
@@ -424,7 +425,7 @@ let myGuild = null, guildAll = false;
 const meArg = () => ({ name: save.heroes[0].name, staff: gmValid });
 let gv2Info = null; const gv2On = () => featureOn(FEATURES, 'guildsV2', gmValid) && !!be?.guildInfo;
 let gTags = {}, gTagsAt = 0; const tagBanner = tag => { const t = Object.values(gTags).find(x => x.tag === tag); return t ? displayBanner(t.banner, t.staff) : tag === STAFF_GUILD.tag ? ZERO_BANNER : undefined; }; // ZERO is reserved for the staff guild
-async function refreshTags() { if (!gv2On() || Date.now() - gTagsAt < 30000) return; gTagsAt = Date.now(); try { gTags = await be.guildTags(floor.floor) || {}; } catch {} }
+async function refreshTags() { if (!gv2On() || Date.now() - gTagsAt < 300000) return; gTagsAt = Date.now(); try { gTags = await be.guildTags(floor.floor) || {}; } catch {} }
 async function openGuild() {
   if (gv2On() && !localStaffOnly()) { try { gv2Info = await be.guildInfo(); } catch (e) { gv2Info = null; } } guildSeen();
   if (gv2Info?.guild) { $('guildSub').textContent = `· [${gv2Info.guild.tag}] ${gv2Info.guild.name}`; renderGuildV2(gv2Info, { be, save, el: $('guildBody'), name: save.heroes[0].name, canPost: (be.canChat?.() ?? true) && !localStaffOnly(), staff: gmValid, log: m => log(`System notice: ${m}`), refresh: async () => { myGuild = await be.myGuild(); if (save.ctx) save.ctx.guild = !!myGuild; render(); await openGuild(); } }); if (!$('guild').open) $('guild').showModal(); return; }
@@ -460,7 +461,7 @@ async function pollChat() {
   if (chatFloor !== floor.floor) { chatFloor = floor.floor; chatLast = 0; chatMsgs.length = 0; }
   try { const n = await be.chatFetch(chatLast); for (const m of n) { chatMsgs.push(m); chatLast = Math.max(chatLast, m.id); } if (chatMsgs.length > 100) chatMsgs.splice(0, chatMsgs.length - 100); if (n.length) renderChat(); } catch {}
 }
-// ---- Badge dots (polled every 30s while visible; guild info at most once a minute): floor chat, guild chat, finished quests, join requests.
+// ---- Badge dots (polled every 60 s while visible; guild info at most every 2 min): floor chat, guild chat, finished quests, join requests.
 let chatSeen = null, chatSeenFloor = null, gSeen = null, gSeenGuild = null, lastGPoll = 0; const gDots = { req: false, quest: false, chat: false };
 const questKey = i => `${i.week}:${(i.quests || []).filter(q => q.done).map(q => q.idx).join(',')}`;
 function syncMoreDot() { setDot('dotMore', !$('dotChat').hidden, 'New floor chat'); setDot('dotGuild', gDots.req || gDots.quest || gDots.chat, [gDots.req ? 'Join requests waiting' : '', gDots.quest ? 'Guild quest completed' : '', gDots.chat ? 'New guild chat' : ''].filter(Boolean).join(' · ')); }
@@ -470,7 +471,7 @@ async function badgePoll() {
     if (chatSeenFloor !== floor.floor) { chatSeenFloor = floor.floor; chatSeen = null; }
     try { const n = await be.chatFetch(chatSeen || 0); if (chatSeen !== null && n.some(m => m.name !== me)) setDot('dotChat', true); chatSeen = Math.max(chatSeen || 0, ...n.map(m => m.id)); } catch {}
   }
-  if (gv2On() && myGuild && !localStaffOnly() && !$('guild').open && Date.now() - lastGPoll > 59e3) {
+  if (gv2On() && myGuild && !localStaffOnly() && !$("guild").open && Date.now() - lastGPoll > 119e3) {
     lastGPoll = Date.now(); try { gv2Info = await be.guildInfo(); } catch {} const i = gv2Info;
     if (i?.guild) {
       if (gSeenGuild !== i.guild.id) { gSeenGuild = i.guild.id; gSeen = null; }
@@ -487,7 +488,7 @@ async function openChat() {
   $('chatSub').textContent = `· Floor ${floor.floor}`;
   const can = be.canChat() && !localStaffOnly();
   $('chatIn').disabled = $('chatSend').disabled = !can;
-  $('chatNote').textContent = can ? `Max ${CHAT_MAX} characters, 1 message every 10 s. Links and addresses are blocked.` : localStaffOnly() ? 'Local staff unlock: chat needs the server role.' : 'Bind your identity (System) to post. You can still read.';
+  $('chatNote').textContent = can ? `Max ${CHAT_MAX} characters, 1 message every 10 s, 30 an hour. Links and addresses are blocked.${be.isAnonymous?.() ? ' Guests can post after a few minutes of climbing.' : ''}` : localStaffOnly() ? 'Local staff unlock: chat needs the server role.' : 'Chat is not available on this device right now.';
   $('chatForm').onsubmit = async e => { e.preventDefault(); const r = cleanChat($('chatIn').value); if (!r.ok) { $('chatNote').textContent = 'Not sent: ' + r.reason; return; }
     try { await be.chatPost(save.heroes[0].name, $('chatIn').value, meArg()); $('chatIn').value = ''; $('chatNote').textContent = ''; await pollChat(); } catch (err) { $('chatNote').textContent = 'Not sent: ' + err.message; } };
   if (!$('chat').open) $('chat').showModal(); renderChat(); await pollChat(); chatSeen = Math.max(chatSeen || 0, chatLast); chatSeenFloor = floor.floor;

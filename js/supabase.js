@@ -1,9 +1,9 @@
 // SupabaseBackend: same interface as LocalBackend (init, loadSave, saveSave, getFloor, submitDamage, leaderboard) plus identity helpers.
 // Only constructed when SUPABASE_URL and SUPABASE_ANON_KEY are set. Free-tier friendly: damage is batched and flushed every
-// 30s, the floor is polled every 30s, no realtime subscriptions. The client is injected so tests can use a mock.
+// 60 s, the floor is polled every 60 s (free-tier egress), no realtime subscriptions. The client is injected so tests can use a mock.
 import { sanitizeSave } from './gm.js';
 import { boardWithStaff } from './ranks.js';
-export const FLUSH_MS = 30000, POLL_MS = 30000;
+export const FLUSH_MS = 60000, POLL_MS = 60000, LB_MS = 60000; // free-tier egress budget: see docs/LAUNCH-REHEARSAL.md
 const SIGN_STATEMENT = 'Sign in to $LOGOUT. This is a signature only: it does not send a transaction, move funds or share your keys.';
 /** Last-write-wins by updatedAt. Ties keep the local copy (the cloud copy may be a staff-stripped mirror of it). */
 export function mergeSaves(local, cloud) {
@@ -46,7 +46,7 @@ export class SupabaseBackend {
     if (s && s !== cloud) await this._push(s); // first bind / offline edits: local copy wins and is uploaded
     return s;
   }
-  async saveSave(s) { // cache locally every time; push to the cloud at most every FLUSH_MS
+  async saveSave(s) { // cache locally every time; push to the cloud at most every FLUSH_MS (60 s)
     s.updatedAt = this.now(); this.store.setItem(this.k + '.save', JSON.stringify(s)); this._dirty = s;
     if (this.now() - (this._lastPush || 0) >= FLUSH_MS) await this._push(s);
   }
@@ -60,7 +60,7 @@ export class SupabaseBackend {
     }
     return { ...this.floor, hp: this.floor.hp - this.pending };
   }
-  /** Batched: damage accumulates locally and is sent to submit_damage at most every FLUSH_MS. The server clamps it. */
+  /** Batched: damage accumulates locally and is sent to submit_damage at most every FLUSH_MS (60 s). The server clamps it. */
   async submitDamage(playerName, amount, hero = {}) {
     if (this.holdUploads) { const f = await this.getFloor(); return { ...f, advanced: false, accepted: 0, clears: [] }; } // local-only staff: nothing is sent
     this.pending += amount; this.meta = { name: playerName, level: hero.level || 1, gear: hero.gear || 0 }; // staff status is decided by the server role
@@ -68,7 +68,7 @@ export class SupabaseBackend {
     return this.flush();
   }
   async flush() {
-    const amt = Math.floor(this.pending); this.pending -= amt; this.lastFlush = this.now(); if (this._dirty) await this._push(this._dirty);
+    const amt = Math.floor(this.pending); this.pending -= amt; this.lastFlush = this.now(); this._lb = null; if (this._dirty) await this._push(this._dirty);
     const { data, error } = await this.sb.rpc('submit_damage', { p_amount: amt, p_name: this.meta.name || 'Nameless', p_level: this.meta.level || 1, p_gear: this.meta.gear || 0 });
     if (error) { this.pending += amt; const f = await this.getFloor(); return { ...f, advanced: false, accepted: 0, clears: [], offline: true }; } // unreachable / rate-limited: keep the damage and retry next flush
     const before = this.floor?.floor; this.floor = { floor: data.floor, hp: Number(data.hp), maxHp: Number(data.max_hp), gmUntil: Date.parse(data.gm_present_until || 0) || 0, announce: data.gm_announce || null, marks: data.gm_marks || {} }; this.lastPoll = this.now();
@@ -76,19 +76,26 @@ export class SupabaseBackend {
     return { ...this.floor, advanced: data.floor !== before && before != null, accepted: Number(data.accepted), clears };
   }
   /** Tower Map history from floor_clears; [] if the table/read is unavailable (never throws). */
-  async floorHistory() { try { const { data, error } = await this.sb.from('floor_clears').select('floor, ranking, at').order('id', { ascending: false }).limit(300); if (error || !data) return [];
+  async floorHistory() { try { const r = await this.sb.rpc('floor_history'); if (!r.error && Array.isArray(r.data)) return r.data; } catch {} // lean RPC (open-chat addendum); older servers: full rows
+    try { const { data, error } = await this.sb.from('floor_clears').select('floor, ranking, at').order('id', { ascending: false }).limit(300); if (error || !data) return [];
     return data.map(r => ({ floor: r.floor, at: r.at, top: r.ranking?.[0] || null })); } catch { return []; } }
   /** Heroes who dealt damage on this floor (cheap head count); null if unavailable. */
   async floorHeroes(floor) { try { const { count, error } = await this.sb.from('damage').select('user_id', { count: 'exact', head: true }).eq('floor', floor); return error ? null : count; } catch { return null; } }
   async _clears() { // floors cleared since we last looked: { floor, ranking (non-staff names), dmg {name: dmg}, maxHp }
+    try { const me = this.meta?.name || 'Nameless', r = await this.sb.rpc('my_clears', { p_after: this.seenClear, p_name: me }); // lean: my rank + my damage only
+      if (!r.error && Array.isArray(r.data)) return r.data.map(c => { this.seenClear = Math.max(this.seenClear, c.id); this.store.setItem(this.k + '.seenClear', String(this.seenClear)); return { floor: c.floor, rank: Number(c.rank), ranking: [], dmg: { [me]: Number(c.dmg) }, maxHp: Number(c.max_hp) }; }); } catch {}
     const { data, error } = await this.sb.from('floor_clears').select('*').gt('id', this.seenClear).order('id'); const out = []; if (error) return out;
     for (const c of data || []) { this.seenClear = Math.max(this.seenClear, c.id); this.store.setItem(this.k + '.seenClear', String(this.seenClear)); out.push({ floor: c.floor, ranking: c.ranking || [], dmg: c.dmg || {}, maxHp: Number(c.max_hp) }); }
     return out;
   }
-  async leaderboard(me = null) {
-    const f = (await this.getFloor()).floor;
-    const { data, error } = await this.sb.from('damage').select('name, damage, is_staff').eq('floor', f).order('damage', { ascending: false }).limit(50);
-    return boardWithStaff((error ? [] : data || []).map(r => ({ name: r.name, damage: Number(r.damage), staff: !!r.is_staff })), me, 10, { truncated: (data || []).length >= 50 });
+  async leaderboard(me = null) { // cached LB_MS: the board is redrawn every sync (5 s) but only refetched twice a minute (free-tier egress)
+    const f = (await this.getFloor()).floor; const c = this._lb;
+    if (c && c.f === f && c.me === me && this.now() - c.at < LB_MS) return c.rows;
+    const rows = await this._leaderboard(f, me); this._lb = { f, me, at: this.now(), rows }; return rows;
+  }
+  async _leaderboard(f, me) {
+    const { data, error } = await this.sb.from('damage').select('name, damage, is_staff').eq('floor', f).order('damage', { ascending: false }).limit(25);
+    return boardWithStaff((error ? [] : data || []).map(r => ({ name: r.name, damage: Number(r.damage), staff: !!r.is_staff })), me, 10, { truncated: (data || []).length >= 25 });
   }
   // ---- guilds + floor chat (tables from supabase/schema-addendum-guilds-chat.sql; all writes are RPCs)
   async _rpc(fn, args) { if (this.holdUploads) throw new Error('local staff unlock: nothing is sent until the server role is granted'); const { data, error } = await this.sb.rpc(fn, args); if (error) throw new Error(error.message || String(error)); return data; }
@@ -115,7 +122,7 @@ export class SupabaseBackend {
   async guildChatFetch(after = 0) { const { data, error } = await this.sb.from('guild_messages').select('id, author, name, is_staff, body, at').gt('id', after).order('id', { ascending: true }).limit(50); return error ? [] : data || []; }
   async guildChatPost(name, body) { return this._rpc('guild_chat_post', { p_name: name, p_body: body }); }
   async guildTags(floor) { try { const { data, error } = await this.sb.rpc('guild_tags', { p_floor: floor }); return error ? {} : data || {}; } catch { return {}; } }
-  canChat() { return !this.isAnonymous() && !this.holdUploads; } // identity-bound accounts only (the server checks too)
+  canChat() { return !this.holdUploads; } // every player may post; the server gates guests (5 min of play, rate limits: schema-addendum-open-chat.sql)
   async chatFetch(after = 0) { const f = (await this.getFloor()).floor;
     const { data, error } = await this.sb.from('chat_messages').select('id, floor, author, name, guild_tag, is_staff, body, at').eq('floor', f).gt('id', after).order('id', { ascending: true }).limit(50);
     return error ? [] : data || []; }

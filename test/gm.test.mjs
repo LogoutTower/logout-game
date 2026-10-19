@@ -73,7 +73,7 @@ clean(fs.readFileSync(new URL('../preview-bosses.html', import.meta.url), 'utf8'
   const d1 = mk(), d2 = mk(); d2.ctx = { decree: true }; const a = simulate(d1, 60), z = simulate(d2, 60); assert(Math.abs(z.gold / a.gold - 1.05) < 1e-9 && Math.abs(z.xp / a.xp - 1.05) < 1e-9, "Shaper's Decree +5%");
   assert(G.shouldAnnounce(null, 3, 0)); assert(!G.shouldAnnounce({ floor: 3, at: 0 }, 3, 5 * 60e3), 'rate limited'); assert(G.shouldAnnounce({ floor: 3, at: 0 }, 3, 11 * 60e3)); assert(G.shouldAnnounce({ floor: 3, at: 0 }, 4, 1));
   assert(featureOn({ x: 'gm' }, 'x', true) && !featureOn({ x: 'gm' }, 'x', false) && featureOn({ x: 'all' }, 'x') && !featureOn({ x: 'off' }, 'x', true) && !featureOn({}, 'x', true));
-  const cfg = await import('../config.js'); assert.equal(cfg.FEATURES.bindIdentity, 'gm', 'Bind identity is staff early access'); }
+  const cfg = await import('../config.js'); assert.equal(cfg.FEATURES.bindIdentity, 'all', 'Bind identity is open to every player'); }
 // ---- sandbox: separate state; the real save and the floor state stay byte-identical
 { globalThis.localStorage = mem(); const be = new LocalBackend(); be._sim = function (w) { w.t = 1; this._adv(w); }; await be.getFloor();
   const save = gmSave(); const before = JSON.stringify(save), world = globalThis.localStorage.getItem('logout.v1.world');

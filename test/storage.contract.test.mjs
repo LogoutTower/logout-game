@@ -50,8 +50,8 @@ const mc = mockClient();
 const sb = await contract('supabase', async () => ({ be: new SupabaseBackend(mc, { storage: globalThis.localStorage, now: () => t }) }), advance);
 // ---- Supabase specifics
 assert(mc.T.profiles[0] && sb.isAnonymous(), 'guest-first: anonymous sign-in on init');
-{ const rpcs = mc.calls.filter(c => c[0] === 'rpc').length; await sb.submitDamage('Tess', 5, {}); await sb.submitDamage('Tess', 5, {}); assert.equal(mc.calls.filter(c => c[0] === 'rpc').length, rpcs, 'damage batched (no RPC inside 30s)');
-  t += FLUSH_MS; await sb.submitDamage('Tess', 5, {}); assert.equal(mc.calls.filter(c => c[0] === 'rpc').length, rpcs + 1, 'flushed after 30s'); }
+{ const rpcs = mc.calls.filter(c => c[0] === 'rpc' && c[1] === 'submit_damage').length; await sb.submitDamage('Tess', 5, {}); await sb.submitDamage('Tess', 5, {}); assert.equal(mc.calls.filter(c => c[0] === 'rpc' && c[1] === 'submit_damage').length, rpcs, 'damage batched (no RPC inside 30s)');
+  t += FLUSH_MS; await sb.submitDamage('Tess', 5, {}); assert.equal(mc.calls.filter(c => c[0] === 'rpc' && c[1] === 'submit_damage').length, rpcs + 1, 'flushed after 30s'); }
 assert.equal(mergeSaves({ updatedAt: 5, a: 1 }, { updatedAt: 3, a: 2 }).a, 1); assert.equal(mergeSaves({ updatedAt: 3, a: 1 }, { updatedAt: 5, a: 2 }).a, 2); assert.equal(mergeSaves(null, { a: 2 }).a, 2); assert.equal(mergeSaves({ a: 1 }, null).a, 1);
 { // first wallet bind: local progress is merged into the new account's cloud save
   globalThis.localStorage = mem(); const c = mockClient(), be = new SupabaseBackend(c, { storage: globalThis.localStorage, now: () => t }); await be.init();

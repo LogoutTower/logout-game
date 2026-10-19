@@ -8,7 +8,7 @@ const { newHero, simulate, guildMul } = await import('../js/game.js');
 const { LocalBackend } = await import('../js/storage.js');
 const { SupabaseBackend } = await import('../js/supabase.js');
 const { FEATURES } = await import('../config.js');
-assert.equal(FEATURES.guilds, 'all'); assert.equal(FEATURES.chat, 'all'); assert.equal(FEATURES.bindIdentity, 'gm'); // live since the addendum ran; posting still needs a bound identity
+assert.equal(FEATURES.guilds, 'all'); assert.equal(FEATURES.chat, 'all'); assert.equal(FEATURES.bindIdentity, 'all'); // open to every player; guests may chat after the open-chat addendum gate
 // validation
 assert(checkGuild('Night Bell', 'nb').ok && checkGuild('Night Bell', 'nb').tag === 'NB');
 for (const [n, t] of [['ab', 'AB'], ['x'.repeat(25), 'AB'], ['Good', 'A'], ['Good', 'ABCDE'], ['evil.com', 'EV'], ['Shitlords', 'SL'], ['Ok Name', 'F4CK'.replace('4', 'U')]]) assert(!checkGuild(n, t).ok, `rejected: ${n} ${t}`);
@@ -37,6 +37,6 @@ const calls = []; const sb = { auth: { getSession: async () => ({ data: { sessio
   from: () => { const q = { select: () => q, eq: () => q, gt: () => q, order: () => q, limit: () => q, maybeSingle: async () => ({ data: null }), single: async () => ({ data: { id: 1, floor: 3, hp: 1, max_hp: 1, max_floor: 10 } }), then: r => r({ data: [] }) }; return q; },
   rpc: async (fn, a) => (calls.push([fn, a]), { data: fn === 'guild_board' ? [{ id: 1, name: 'One', tag: 'ONE', members: 2, damage: '5' }] : {} }) };
 const s = new SupabaseBackend(sb, { storage: mem() }); await s.init();
-assert.equal(s.canChat(), false, 'guests read only'); await s.chatPost('Tess', 'hi'); await s.createGuild('One', 'ONE'); assert.deepEqual(calls.map(c => c[0]), ['chat_post', 'guild_create']);
+assert.equal(s.canChat(), true, 'guests may post (server gates them)'); await s.chatPost('Tess', 'hi'); await s.createGuild('One', 'ONE'); assert.deepEqual(calls.map(c => c[0]), ['chat_post', 'guild_create']);
 assert.equal((await s.guildBoard())[0].damage, 5); s.holdUploads = true; await assert.rejects(s.joinGuild('ONE'), /local staff/); assert.equal(s.canChat(), false);
 console.log('guild + chat tests passed');
