@@ -1,7 +1,7 @@
 // Town hub (one safe town per floor): inn rest + Well Rested buff, a seeded rotating shop, and original NPC sprites. Pure (no DOM).
 import { heroMaxHp, heroHp, buffsOf, effectsOf, RESTED, ELIXIR } from './game.js';
 import { rng, baseHp, bossInfo } from './floors.js';
-import { rollItem, salvageValue, bagSize } from './loot.js';
+import { rollItem, salvageValue, bagSize, salvageGold, salvagePay } from './loot.js';
 import { talentBonus } from './talents.js';
 import { canvas, shadeShape } from './bosses.js';
 const tier = f => Math.sqrt(baseHp(f) / baseHp(1)); // price scale per floor
@@ -56,3 +56,19 @@ const NPC = {
   } },
 };
 export function npcGrid(key) { const c = canvas(); NPC[key].draw(c); return shadeShape({ rows: c.rows(), pal: NPC[key].pal }); }
+// ---- Sell to the merchant (NPC only; no player trading). Price = the old salvage value (incl. Codex Second Draft),
+// so balance is unchanged. Locked items are never sold; staff items can't be sold at all; a Unique needs its own confirm
+// (sellItem(..., { confirmUnique: true })) and is never part of a bulk sale.
+export const sellPrice = (save, it) => salvageGold(save, it);
+export const sellable = it => !!it && !it.gm && !String(it.id).startsWith('gm-') && !it.sandbox;
+export function toggleLock(save, i) { const it = save.inv[i]; if (!it || !sellable(it)) return false; it.locked = !it.locked; return true; }
+export function sellItem(save, i, { confirmUnique = false } = {}) {
+  const it = save.inv[i]; if (!sellable(it) || it.locked) return 0; if (it.rarity === 'unique' && !confirmUnique) return 0;
+  const g = salvagePay(save, it); save.inv.splice(i, 1); save.gold += g; return g;
+}
+export const BULK_RARITIES = ['common', 'uncommon'];
+export function bulkPreview(save, rarities = BULK_RARITIES) { const items = save.inv.filter(it => sellable(it) && !it.locked && it.rarity !== 'unique' && rarities.includes(it.rarity)); return { count: items.length, gold: items.reduce((s, it) => s + sellPrice(save, it), 0) }; }
+export function sellBulk(save, rarities = BULK_RARITIES) {
+  let gold = 0, count = 0; for (let i = save.inv.length - 1; i >= 0; i--) { const it = save.inv[i]; if (sellable(it) && !it.locked && it.rarity !== 'unique' && rarities.includes(it.rarity)) { gold += sellItem(save, i); count++; } }
+  return { count, gold };
+}

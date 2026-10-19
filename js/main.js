@@ -16,6 +16,9 @@ import { openSandbox, sandboxFloor, sandboxFight, sandboxLoot, closeSandbox, san
 import { legendaryWeaponDps, rerollItem, chooseDestiny, DESTINY_MS } from './loot.js';
 import { cx, CODEX, isCodex } from './codex.js';
 import { galaxyTier, mountGalaxy } from './galaxy.js';
+import { itemIcon } from './icons.js';
+import { sellPrice, sellable, toggleLock, sellItem, bulkPreview, sellBulk } from './town.js';
+const ico = (it, cls = 'ico') => `<i class="${cls}${it.rarity === 'unique' ? ' ushim' : ''}" style='background-image:${itemIcon(it).replace(/'/g, '%27')}' aria-hidden="true"></i>`;
 import { ELEMENT_WORD } from './loot.js'; const ELEMENTS = Object.keys(ELEMENT_WORD);
 import { classOf } from './game.js';
 import { holderStatus } from './supabase.js';
@@ -28,7 +31,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 let lootLines = [];
 let be, save, floor, pending = 0, recent = { dmg: 0, gold: 0, xp: 0 }, quietSync = true, cls = 'Vanguard', draftLook = defaultLook('Vanguard'), toastT;
 const log = (m, color) => { const d = document.createElement('div'); d.textContent = m; if (m.startsWith('System notice')) d.className = 'rune'; if (color) { d.style.color = color; d.className = 'loot'; } if (color === '#7ff6ff') d.className = 'loot uniq'; $('log').prepend(d); };
-function notice(m, color) { const n = document.createElement('div'); n.className = 'notice' + (color === '#7ff6ff' ? ' uniq' : ''); if (color) n.style.borderColor = color; if (color && cx(save?.heroes?.[0], 'cx-reader')) { n.classList.add('glow-rare'); n.style.setProperty('--glow', color); } /* Thread-Reader */ n.innerHTML = `<small>◈ System notice</small><span${color ? ` style="color:${color}"` : ''}>${esc(m)}</span>`; $('notices').append(n); setTimeout(() => n.remove(), color === '#7ff6ff' ? 7000 : 3200); }
+function notice(m, color, item = null) { const n = document.createElement('div'); n.className = 'notice' + (color === '#7ff6ff' ? ' uniq' : ''); if (color) n.style.borderColor = color; if (color && cx(save?.heroes?.[0], 'cx-reader')) { n.classList.add('glow-rare'); n.style.setProperty('--glow', color); } /* Thread-Reader */ n.innerHTML = `<small>◈ System notice</small>${item ? ico(item) : ''}<span${color ? ` style="color:${color}"` : ''}>${esc(m)}</span>`; $('notices').append(n); setTimeout(() => n.remove(), color === '#7ff6ff' ? 7000 : 3200); }
 const sessionStart = Date.now(); let hits = 0, lastWhisper = Date.now();
 const WHISPERS = ['The weapon hums a floor number you have not reached.', 'Something in the blade asks whether you remember logging in.', 'A whisper: "the guardian is afraid of you."', 'The weapon murmurs your name, then someone else\'s.', 'A voice from the steel: "one more floor."'];
 function floorCleared(f) { $('clearedSub').textContent = `${bossName(f)} has fallen`; const c = $('cleared'); c.classList.remove('show'); void c.offsetWidth; c.classList.add('show'); }
@@ -94,7 +97,7 @@ function handleClears(clears = [], quiet = false) {
     const got = recordClear(save, c.floor, gmValid ? 0 : c.ranking.indexOf(me) + 1, c.maxHp ? (c.dmg?.[me] || 0) / c.maxHp : 1); all.push(...got);
     for (const it of got) { log(`System notice: cosmetic unlocked — ${it.label}.`); if (!quiet) notice(`Cosmetic unlocked — ${it.label}`); }
     const share = c.maxHp ? (c.dmg?.[me] || 0) / c.maxHp : 0, d = grantDrops(save, c.floor, share);
-    for (const it of d.items) { const R = rarityOf(it.rarity); if (it.rarity === 'unique') { log(`System notice: UNIQUE item acquired — ${it.name} · ${it.stamp}. ${it.ability.text}; drawback: ${it.drawback.text}.`, R.color); if (!quiet) notice(`UNIQUE item acquired — ${it.name}`, R.color); lootLines.push(`<span class="uniq">UNIQUE ${esc(it.name)}</span>`); continue; } log(`Loot · ${R.label} ${it.name} (Floor ${c.floor})`, R.color); lootLines.push(`<span style="color:${R.color}">${esc(R.label)} ${esc(it.name)}</span>`); if (!quiet) notice(`${R.label} drop — ${it.name}`, R.color); }
+    for (const it of d.items) { const R = rarityOf(it.rarity); if (it.rarity === 'unique') { log(`System notice: UNIQUE item acquired — ${it.name} · ${it.stamp}. ${it.ability.text}; drawback: ${it.drawback.text}.`, R.color); if (!quiet) notice(`UNIQUE item acquired — ${it.name}`, R.color, it); lootLines.push(`<span class="uniq">UNIQUE ${esc(it.name)}</span>`); continue; } log(`Loot · ${R.label} ${it.name} (Floor ${c.floor})`, R.color); lootLines.push(`<span style="color:${R.color}">${esc(R.label)} ${esc(it.name)}</span>`); if (!quiet) notice(`${R.label} drop — ${it.name}`, R.color, it); }
     if (d.salvaged) log(`Bag full: a drop was salvaged for ${fmt(d.salvaged)} gold.`);
     if (d.cosmetic) { const it = byId(d.cosmetic); log(`System notice: rare cosmetic drop — ${it.label}!`, '#ffb02e'); lootLines.push(`<span style="color:#ffb02e">${esc(it.label)} (cosmetic)</span>`); all.push(it); if (!quiet) notice(`Rare cosmetic — ${it.label}`, '#ffb02e'); }
   }
@@ -124,7 +127,7 @@ function tick() {
   codexTick(p);
   save.gold += p.gold; recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp; pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage);
   if (applyXp(save.heroes, p.xp).length) { log(`System notice: level ${save.heroes[0].level} reached.`); notice(`Level ${save.heroes[0].level} reached · +1 talent point`); }
-  for (const it of trickleDrops(save, p.secs, floor.floor, p.secs > 2 ? TRICKLE.offlineMax : Infinity)) { const R = rarityOf(it.rarity); log(`Loot · ${R.label} ${it.name}${it.salvaged ? ' (bag full: salvaged)' : ''}`, R.color); notice(`${R.label} find — ${it.name}`, R.color); }
+  for (const it of trickleDrops(save, p.secs, floor.floor, p.secs > 2 ? TRICKLE.offlineMax : Infinity)) { const R = rarityOf(it.rarity); log(`Loot · ${R.label} ${it.name}${it.salvaged ? ' (bag full: salvaged)' : ''}`, R.color); notice(`${R.label} find — ${it.name}`, R.color, it); }
   if (p.damage > 0) { hits++; if (fx.has('tenth') && hits % 10 === 0) { hitFx(p.damage); log('The Tenth Bell rings — double hit.', '#7ff6ff'); } hitFx(p.damage); } $('boss').classList.add('hit'); setTimeout(() => $('boss').classList.remove('hit'), 120); render();
 }
 // Background tabs throttle timers: every tick measures real elapsed time (accrue = offline maths), and we catch up as soon as the tab is visible or focused.
@@ -189,34 +192,43 @@ function openTown() {
   $('restBtn').onclick = async () => { if (rest(save, f)) { save.sheath = true; log('You slept at the inn. HP restored · Well Rested (+15% gold & XP, 30 min).', '#5cff8a'); notice('Well Rested · +15% gold & XP'); await be.saveSave(save); render(); openTown(); } };
   const left = st.endsAt - now; $('shopTimer').textContent = `New stock in ${fmtDur(left / 1000)}`;
   $('shopList').innerHTML = st.items.map((it, i) => { const R = it.item ? rarityOf(it.item.rarity) : null, out = soldOut(save, st, i);
-    return `<div class="srow" ${R ? `style="--rc:${R.color}"` : ''}><div><b style="${R ? `color:${R.color}` : ''}">${esc(it.name)}</b><small>${R ? `${R.label} ${it.item.slot} · ${Object.entries(it.item.stats).map(([k, v]) => statLabel(k, v)).join(' · ')}` : esc(it.desc)}</small></div>
+    return `<div class="srow" ${R ? `style="--rc:${R.color}"` : ''}>${it.item ? ico(it.item) : ''}<div><b style="${R ? `color:${R.color}` : ''}">${esc(it.name)}</b><small>${R ? `${R.label} ${it.item.slot} · ${Object.entries(it.item.stats).map(([k, v]) => statLabel(k, v)).join(' · ')}` : esc(it.desc)}</small></div>
       <button data-i="${i}" ${out || save.gold < priceFor(save, it) ? 'disabled' : ''}>${out ? 'Sold' : `${fmt(priceFor(save, it))}g`}</button></div>`; }).join('');
   $('shopList').onclick = async e => { const btn = e.target.closest('button[data-i]'); if (!btn) return; const got = shopBuy(save, f, Date.now(), +btn.dataset.i);
     if (got) { log(`Bought ${got}.`); notice(`Bought · ${got}`); await be.saveSave(save); render(); } openTown(); };
+  const bp = bulkPreview(save), sl = save.inv.map((it, i) => [it, i]).filter(([it]) => sellable(it));
+  $('sellBox').innerHTML = `<button id="sellBulk" ${bp.count ? '' : 'disabled'}>Sell all Common/Uncommon · ${bp.count} items · ${fmt(bp.gold)}g</button><p class="sub">Locked items and Uniques are never sold in bulk.</p>` +
+    (sl.map(([it, i]) => `<div class="srow" style="--rc:${rarityOf(it.rarity).color}">${ico(it)}<div><b style="color:${rarityOf(it.rarity).color}">${esc(it.name)}</b><small>${rarityOf(it.rarity).label} ${it.slot}</small></div><button data-lock="${i}" title="${it.locked ? 'Unlock' : 'Lock'}">${it.locked ? '🔒' : '🔓'}</button><button data-sell="${i}" ${it.locked ? 'disabled' : ''}>${fmt(sellPrice(save, it))}g</button></div>`).join('') || '<p class="sub">Nothing to sell.</p>');
+  $('sellBox').onclick = async e => { const b = e.target.closest('button'); if (!b) return;
+    if (b.id === 'sellBulk') { const p = bulkPreview(save); if (!p.count || !confirm(`Sell ${p.count} Common/Uncommon items for ${fmt(p.gold)} gold?`)) return; const r = sellBulk(save); log(`Sold ${r.count} items to Quill for ${fmt(r.gold)} gold.`); notice(`Sold ${r.count} items · +${fmt(r.gold)}g`); }
+    else if (b.dataset.lock) toggleLock(save, +b.dataset.lock);
+    else if (b.dataset.sell) { const i = +b.dataset.sell, it = save.inv[i]; if (it.rarity === 'unique' && !confirm(`Sell ${it.name}? A Unique is one of a kind and can never drop again.`)) return; const g = sellItem(save, i, { confirmUnique: true }); if (g) log(`Sold ${it.name} for ${fmt(g)} gold.`); }
+    await be.saveSave(save); render(); openTown(); };
   $('townGold').textContent = `Gold ${fmt(save.gold)}`;
   if (!$('town').open) $('town').showModal();
 }
 
 // ---- Bag: inventory grid, compare panel, equip and salvage
 let bagSel = -1;
-const itemCard = (it, cls = '') => { const R = rarityOf(it.rarity); return `<div class="item ${cls}" style="--rc:${R.color}"><b class="${it.rarity === 'unique' ? 'uniq' : ''}" style="color:${R.color}">${esc(it.name)}</b><small>${R.label} · ${it.slot} · Floor ${it.floor} · ${it.element}</small>${Object.entries(it.stats).map(([k, v]) => `<div>${statLabel(k, v)}</div>`).join('')}${it.rarity === 'unique' ? `<div class="ab">✦ ${esc(it.ability.text)}</div><div class="db">▾ ${esc(it.drawback.text)}</div><div class="lore">${esc(it.lore)}</div><small>${esc(it.stamp)}</small>` : ''}</div>`; };
+const itemCard = (it, cls = '') => { const R = rarityOf(it.rarity); return `<div class="item ${cls}" style="--rc:${R.color}">${ico(it)}${it.locked ? '<span class="lock" title="Locked">🔒</span>' : ''}<b class="${it.rarity === 'unique' ? 'uniq' : ''}" style="color:${R.color}">${esc(it.name)}</b><small>${R.label} · ${it.slot} · Floor ${it.floor} · ${it.element}</small>${Object.entries(it.stats).map(([k, v]) => `<div>${statLabel(k, v)}</div>`).join('')}${it.rarity === 'unique' ? `<div class="ab">✦ ${esc(it.ability.text)}</div><div class="db">▾ ${esc(it.drawback.text)}</div><div class="lore">${esc(it.lore)}</div><small>${esc(it.stamp)}</small>` : ''}</div>`; };
 function openBag() {
   const h = save.heroes[0];
   $('bagCount').textContent = `· ${save.inv.length} / ${bagSize(save)}`;
   $('eqrow').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip[s]; return `<div class="eqslot" title="${s}">${it ? itemCard(it, 'mini') : `<div class="item mini empty">${s}: empty</div>`}</div>`; }).join('');
   $('bagGrid').innerHTML = Array.from({ length: Math.max(bagSize(save), save.inv.length) }, (_, i) => { const it = save.inv[i]; if (!it) return '<button class="cell" disabled aria-label="empty slot"></button>';
-    const R = rarityOf(it.rarity); return `<button class="cell ${i === bagSel ? 'sel' : ''} ${it.rarity === 'unique' ? 'ucell' : ''}" data-i="${i}" style="--rc:${R.color}" title="${esc(R.label + ' ' + it.name)}">${{ weapon: '⚔', armor: '⛨', trinket: '◈' }[it.slot]}</button>`; }).join('');
+    const R = rarityOf(it.rarity); return `<button class="cell ${i === bagSel ? 'sel' : ''} ${it.rarity === 'unique' ? 'ucell' : ''}" data-i="${i}" style="--rc:${R.color}" title="${esc(R.label + ' ' + it.name)}">${ico(it, 'ico big')}${it.locked ? '<span class="lock">🔒</span>' : ''}</button>`; }).join('');
   $('bagGrid').onclick = e => { const b = e.target.closest('button.cell[data-i]'); if (b) { bagSel = +b.dataset.i; openBag(); } };
   const it = save.inv[bagSel];
   if (it) {
     const cur = h.equip[it.slot], before = heroDps(h), trial = { ...h, equip: { ...h.equip, [it.slot]: it } }, delta = heroDps(trial) - before;
     $('bagDetail').innerHTML = `${itemCard(it)}<div class="vs">vs equipped</div>${cur ? itemCard(cur, 'mini') : '<div class="item mini empty">nothing equipped</div>'}
       <p class="delta" style="color:${delta >= 0 ? '#5cff8a' : '#ff3355'}">DPS ${delta >= 0 ? '+' : ''}${delta.toFixed(1)} (${before.toFixed(1)} → ${(before + delta).toFixed(1)})</p>${['goldPct', 'xpPct', 'capH'].map(k => { const d = (it.stats[k] || 0) - (cur?.stats[k] || 0); return d ? `<div style="color:${d > 0 ? '#5cff8a' : '#ff3355'}">${k === 'capH' ? 'Offline cap' : k === 'goldPct' ? 'Gold' : 'XP'} ${d > 0 ? '+' : ''}${d}${k === 'capH' ? 'h' : '%'}</div>` : ''; }).join('')}
-      <div class="bagbtns"><button id="bEquip" class="cta">Equip</button><button id="bSalv">Salvage · ${fmt(salvageValue(it))}g</button>${cx(h, 'cx-loom') && !it.gm ? '<button id="bLoom">Rename</button>' : ''}${cx(h, 'cx-plan') && !it.gm && it.rarity !== 'unique' ? `<button id="bPlan" ${save.planFloor === floor.floor ? 'disabled title="Used on this floor"' : ''}>Master Plan · reroll</button>` : ''}</div>`;
+      <div class="bagbtns"><button id="bEquip" class="cta">Equip</button>${sellable(it) ? `<button id="bLock">${it.locked ? 'Unlock' : 'Lock'}</button>` : ''}${cx(h, 'cx-loom') && !it.gm ? '<button id="bLoom">Rename</button>' : ''}${cx(h, 'cx-plan') && !it.gm && it.rarity !== 'unique' ? `<button id="bPlan" ${save.planFloor === floor.floor ? 'disabled title="Used on this floor"' : ''}>Master Plan · reroll</button>` : ''}</div>`;
     if ($('bLoom')) $('bLoom').onclick = async () => { const v = prompt('Loom of Names: new name (max 28)', it.customName || it.name); if (v == null) return; const c = cleanChat(v, 28); if (!c.ok || c.text !== v.replace(/\s+/g, ' ').trim()) { notice('That name is not allowed'); return; } it.customName = c.text; it.name = c.text; await be.saveSave(save); openBag(); };
     if ($('bPlan')) $('bPlan').onclick = async () => { const n = rerollItem(save, bagSel, floor.floor); if (n) { log(`Master Plan: ${n.name} redrawn.`, '#ffd76a'); await be.saveSave(save); openBag(); } };
     $('bEquip').onclick = async () => { if (!equipItem(save, bagSel)) { notice('Your Unique weapon refuses to share you with a trinket'); return; } log(`Equipped ${it.name}.`, rarityOf(it.rarity).color); bagSel = -1; await be.saveSave(save); render(); openBag(); };
-    $('bSalv').onclick = async () => { if (it.rarity === 'unique' && !confirm('Salvage a one-of-a-kind Unique? It can never drop again.')) return; const g = salvageItem(save, bagSel); log(`Salvaged ${it.name} for ${fmt(g)} gold.`); bagSel = -1; await be.saveSave(save); render(); openBag(); };
+    if ($('bLock')) $('bLock').onclick = async () => { toggleLock(save, bagSel); await be.saveSave(save); openBag(); };
+    $('bagDetail').insertAdjacentHTML('beforeend', `<p class="sub">${sellable(it) ? `Sell at Quill's in Town · ${fmt(sellPrice(save, it))}g` : 'Staff items cannot be sold.'}</p>`);
   } else $('bagDetail').innerHTML = '<p class="sub">Select an item to compare it with what you have equipped.</p>';
   if (!$('bag').open) $('bag').showModal();
 }

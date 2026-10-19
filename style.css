@@ -215,3 +215,11 @@ header{padding-top:max(14px,env(safe-area-inset-top))}main{padding-left:max(12px
 #talents.codex .tnode{border-color:#ffd76a55;background:linear-gradient(160deg,#160f26,#0b0812)}#talents.codex .tnode.cap{border-color:#ffd76a;box-shadow:0 0 10px #ffd76a66}
 #talents.codex .tnode.hiddennode{border-style:dashed;border-color:#9a5cff}
 @media(max-width:640px){#talents.codex .taltree{grid-template-columns:repeat(4,minmax(132px,1fr))}}
+/* ---- item icons + merchant sell */
+.ico{display:inline-block;width:32px;height:32px;flex:none;background-size:contain;background-repeat:no-repeat;image-rendering:pixelated;vertical-align:middle;margin-right:6px}
+.ico.big{width:36px;height:36px;margin:0}.cell .lock,.item .lock{position:absolute;right:2px;top:1px;font-size:10px}.cell,.item{position:relative}
+.ico.ushim{animation:ushim 3s linear infinite}@keyframes ushim{0%,100%{filter:drop-shadow(0 0 2px #7ff6ff) hue-rotate(0deg)}50%{filter:drop-shadow(0 0 4px #ffd76a) hue-rotate(40deg)}}
+@media (prefers-reduced-motion:reduce){.ico.ushim{animation:none}}
+.item>.ico{float:left}.notice .ico{width:24px;height:24px}
+#sellBox{max-height:260px;overflow-y:auto;-webkit-overflow-scrolling:touch}#sellBox .srow{display:flex;align-items:center;gap:6px}#sellBox .srow>div{flex:1;min-width:0}#sellBox button{min-height:44px;min-width:44px}
+.sellh{margin-top:12px}
