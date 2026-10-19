@@ -10,4 +10,4 @@ export const HOLDER_THRESHOLD = 0;    // minimum token balance (UI units) for th
 // online stays 'off' until supabase/schema.sql has been run on the project (see supabase/SETUP.md).
 export const FEATURES = { online: 'off', bindIdentity: 'gm', sandbox: 'gm' };
 // ---- Local-only staff unlock (used only while Supabase is off). SHA-256 hex of a passphrase; empty disables it.
-export const GM_PASS_HASH = '';
+export const GM_PASS_HASH = '374da5e28297c53b43468e29236c132652675fbf158573f24daaf9cfcbbed19b';
