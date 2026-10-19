@@ -75,7 +75,9 @@ async function startGame(fresh = false) {
   floor = await be.getFloor(); log(`${save.heroes[0].name} awoke on Floor ${floor.floor}. The guardian stirs.`); log('System notice: log out disabled.');
   if (fresh) { notice('Log out disabled'); setTimeout(() => notice(`Floor ${floor.floor} is open`), 900); } // no replayed notices on reload
   $('lvl').onclick = () => buy('level'); $('gear').onclick = () => buy('gear'); $('wardrobeBtn').onclick = openWardrobe;
+  $('helpBtn').onclick = () => tourShow(0); placeDock();
   setInterval(tick, 1000); setInterval(sync, 5000); render(); renderLb();
+  if (!save.tutorialSeen) setTimeout(startTour, fresh ? 1600 : 400);
 }
 function tick() {
   const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS);
@@ -109,7 +111,7 @@ function render() {
   const hp = 0.85 + 0.15 * Math.abs(Math.sin(Date.now() / 3000)); $('hhp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < hp ? '' : 'off'}"></i>`).join('');
   const xp = h.xp / xpToNext(h.level); $('hxp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < xp ? '' : 'off'}"></i>`).join('');
   $('stats').innerHTML = `${CLASSES[h.cls].icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${heroDps(h).toFixed(1)}</b> · Gold <b>${fmt(save.gold)}</b>`;
-  $('lvlL').textContent = `Train ${fmt(levelCost(h))}g`; $('lvl').disabled = save.gold < levelCost(h);
+  $('lvlL').textContent = `Train ${fmt(levelCost(h))}g`; $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`; $('lvl').disabled = save.gold < levelCost(h);
   $('gearL').textContent = `Forge ${fmt(gearCost(h))}g`; $('gear').disabled = save.gold < gearCost(h);
 }
 async function renderLb() {
@@ -119,4 +121,29 @@ async function renderLb() {
     return `<li class="${me ? 'me' : ''}" value="${r.rank}"><span style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span></li>`;
   }).join('');
 }
+// ---- intro walkthrough (System notice voice). Seen flag lives in the save; the ? button reopens it.
+const TOUR = [
+  { t: 'You fight on your own', x: 'Your hero attacks the floor guardian automatically, every second, even while you are offline. Close the tab; the tower keeps count.', el: () => $('arena') },
+  { t: 'Gold and XP', x: 'Every hit pays out: 10% of your damage becomes gold and 5% becomes XP. Fill the XP bar to level up and hit harder.', el: () => $('stats') },
+  { t: 'Train · Forge · Wardrobe', x: 'Train spends gold on a level. Forge tempers your gear for +15% damage per tier. Wardrobe changes your look; it is cosmetic only.', el: () => $('dock') },
+  { t: 'One guardian, whole server', x: 'Everyone in the tower shares this boss. Top damage when it falls earns titles, name colours and other rewards.', el: () => $('lb').closest('.panel') },
+  { t: 'Layers', x: 'The guardian\'s HP comes in layers: each diamond is one full HP bar. Break every layer to clear the floor and open the stair.', el: () => $('layers').closest('.gauge') },
+];
+let tourAt = -1;
+function tourShow(i) {
+  document.querySelectorAll('.tour-hi').forEach(e => e.classList.remove('tour-hi'));
+  if (i < 0 || i >= TOUR.length) { $('tour').classList.add('hidden'); tourAt = -1; if (!save.tutorialSeen) { save.tutorialSeen = true; be.saveSave(save); } return; }
+  tourAt = i; const s = TOUR[i], el = s.el();
+  $('tstep').textContent = `◈ System notice · ${i + 1} / ${TOUR.length}`; $('ttitle').textContent = s.t; $('ttext').textContent = s.x;
+  $('tback').disabled = i === 0; $('tnext').textContent = i === TOUR.length - 1 ? 'Done' : 'Next';
+  $('tour').classList.remove('hidden');
+  if (el) { el.classList.add('tour-hi'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+}
+function startTour() { if ($('away').open) return $('away').addEventListener('close', startTour, { once: true }); tourShow(0); }
+$('tnext').onclick = () => tourShow(tourAt + 1); $('tback').onclick = () => tourShow(Math.max(0, tourAt - 1)); $('tskip').onclick = () => tourShow(TOUR.length);
+
+// On phones the action bar becomes a fixed dock; it must live under <body> because the glass panel's backdrop-filter traps position:fixed.
+const dockMQ = matchMedia('(max-width: 640px)'), dockHome = document.createComment('dock');
+function placeDock() { const d = $('dock'); if (dockMQ.matches) { if (d.parentNode !== document.body) { d.replaceWith(dockHome); document.body.append(d); } } else if (dockHome.parentNode) dockHome.replaceWith(d); }
+dockMQ.addEventListener('change', placeDock);
 boot();
