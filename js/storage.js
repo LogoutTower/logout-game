@@ -3,7 +3,7 @@ import { floorBossHp } from './game.js';
 import { boardWithStaff } from './ranks.js';
 import { GUILD_CAP, checkGuild, guildBoard } from './guilds.js';
 import { localGuildV2 } from './guildlocal.js';
-import { slotsOf, levelOf } from './guildsv2.js';
+import { slotsOf, levelOf, ZERO_BANNER } from './guildsv2.js';
 import { cleanChat, CHAT_SLOW_MS, CHAT_KEEP } from './chatfilter.js';
 import { MAX_FLOOR, SUPABASE_URL, SUPABASE_ANON_KEY, FEATURES } from '../config.js';
 // Pre-restyle handles, renamed in older saved worlds so leaderboards stay in-theme.
@@ -52,7 +52,7 @@ Object.assign(LocalBackend.prototype, {
   async guildBoard(all = false) { const w = this._w(), st = w.staff || {}, g = this._g(); return guildBoard(Object.entries(w.dmg).map(([name, damage]) => ({ name, damage, staff: !!st[name] })), g.members, g.guilds); },
   async createGuild(name, tag, me) { const g = this._g(), c = checkGuild(name, tag, !!me?.staff); if (!c.ok) throw new Error(c.reason); if (me?.staff && g.guilds.some(x => x.is_staff)) throw new Error('a staff guild already exists');
     if (g.members.some(x => x.name === me?.name)) throw new Error('already in a guild'); if (g.guilds.some(x => x.name.toLowerCase() === c.name.toLowerCase() || x.tag === c.tag)) throw new Error('name or tag taken');
-    const gu = { id: g.next++, name: c.name, tag: c.tag, owner: me.name, ...(me?.staff ? { is_staff: true, open: false } : {}) }; g.guilds.push(gu); g.members.push({ name: me.name, guild_id: gu.id, ...(me?.staff ? { is_staff: true, role: 'leader' } : {}) }); g.me = me.name; this._sg(g); return gu; },
+    const gu = { id: g.next++, name: c.name, tag: c.tag, owner: me.name, ...(me?.staff ? { is_staff: true, open: false, banner: { ...ZERO_BANNER } } : {}) }; g.guilds.push(gu); g.members.push({ name: me.name, guild_id: gu.id, ...(me?.staff ? { is_staff: true, role: 'leader' } : {}) }); g.me = me.name; this._sg(g); return gu; },
   async joinGuild(tag, me) { const g = this._g(), gu = g.guilds.find(x => x.tag === String(tag).toUpperCase()); if (!gu) throw new Error('no such guild');
     if (g.members.some(x => x.name === me?.name)) throw new Error('already in a guild'); this._gx(g, gu); if (gu.is_staff && !gu.invites.includes(me?.name)) throw new Error('no such guild'); if (!gu.open && !gu.invites.includes(me?.name)) { if (!gu.requests.some(r => r.name === me?.name)) gu.requests.push({ name: me?.name, at: new Date().toISOString() }); this._sg(g); return { ...gu, joined: false, requested: true }; }
     if (g.members.filter(x => x.guild_id === gu.id).length >= slotsOf(levelOf(gu.xp))) throw new Error('guild is full'); gu.invites = gu.invites.filter(n => n !== me?.name);

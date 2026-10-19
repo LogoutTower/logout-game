@@ -32,7 +32,7 @@ await be.guildInvite('Ash'); { const g = be._g(); g.me = 'Ash'; be._sg(g); }
 const inv = (await be.guildInfo()).invites; assert.equal(inv[0].tag, 'ZERO'); assert.equal(inv[0].is_staff, true);
 await be.guildAcceptInvite(sg.id); I = await be.guildInfo(); assert.equal(I.me.role, 'member'); assert.equal(I.guild.bonus_pct, 0);
 // ---- no XP from damage, no bank, tags still show [ZERO] with a staff flag
-be._gv2Damage('Ash', 5000, false); I = await be.guildInfo(); assert.equal(I.guild.xp, 0); assert.equal(I.members.find(m => m.name === 'Ash').contrib, 0);
+be._gv2Damage('Ash', 5000, false); I = await be.guildInfo(); assert.equal(I.guild.xp, 5000, 'prestige xp (display only, see floorzero.test.mjs)'); assert.equal(I.guild.bonus_pct, 0); assert.deepEqual(I.quests, []);
 assert.match(await err(be.guildDonate(10, { gold: 100 })), /no bank/);
 const t = await be.guildTags(); assert.equal(t.Ash.tag, 'ZERO'); assert.equal(t.Ash.staff, true);
 // ---- leadership stays with staff; the leader leaving disbands it

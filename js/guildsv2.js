@@ -37,7 +37,16 @@ export function weekQuests(week) {
 }
 export const questText = (kind, t) => kind === 'damage' ? `Deal ${t.toLocaleString('en-US')} damage together` : kind === 'floors' ? `Be present when ${t} floor${t > 1 ? 's' : ''} fall${t > 1 ? '' : 's'}` : kind === 'active' ? `${t} members active this week` : `Donate ${t.toLocaleString('en-US')} gold to the bank`;
 export const isHex = c => PALETTE.includes(c);
-export function checkBanner(b, level, bannerUnlocks) {
+// Floor Zero: the exclusive "zero" sigil (staff guild only) with its fixed black/gold pair, outside PALETTE. Mirrors gv2_zero_banner() in SQL.
+export const STAFF_SIGIL = 'zero', ZERO_BANNER = { sigil: 'zero', c1: '#e8b923', c2: '#050505' };
+export const isZeroPair = b => !!b && [b.c1, b.c2].sort().join() === [ZERO_BANNER.c1, ZERO_BANNER.c2].sort().join();
+// Staff guild prestige: one cosmetic hall piece every 4 levels (max 5). Mirrors gv2_staff_hall(). No stat effect anywhere.
+export const staffHall = level => Math.min(5, Math.max(0, Math.floor((level - 1) / 4)));
+// What to draw for a guild: a staff guild still on the old default banner (SQL not run yet) shows the zero banner anyway.
+export const displayBanner = (b, staff = false) => staff && (!b || (b.sigil === DEFAULT_BANNER.sigil && b.c1 === DEFAULT_BANNER.c1 && b.c2 === DEFAULT_BANNER.c2)) ? ZERO_BANNER : (b || DEFAULT_BANNER);
+export function checkBanner(b, level, bannerUnlocks, staff = false) {
+  if (b?.sigil === STAFF_SIGIL) return staff ? { ok: true, banner: { ...ZERO_BANNER } } : { ok: false, reason: 'that sigil belongs to Floor Zero' };
+  if (isZeroPair(b)) return { ok: false, reason: 'that sigil belongs to Floor Zero' };
   const i = SIGILS.indexOf(b?.sigil); if (i < 0 || i >= sigilsAvailable(level, bannerUnlocks)) return { ok: false, reason: 'that sigil is locked' };
   if (!isHex(b.c1) || !isHex(b.c2) || b.c1 === b.c2) return { ok: false, reason: 'pick two different palette colours' };
   return { ok: true, banner: { sigil: b.sigil, c1: b.c1, c2: b.c2 } };

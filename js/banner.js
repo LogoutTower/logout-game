@@ -13,19 +13,39 @@ const SIG = {
   skull: ['.#####.', '#######', '#..#..#', '#######', '.#####.', '.#.#.#.', '.......'],
   wing: ['#......', '##.....', '###....', '####...', '#####..', '.####..', '..###..'],
   rune: ['#.....#', '.#...#.', '..#.#..', '...#...', '..#.#..', '.#...#.', '#.....#'],
+  // Floor Zero (staff guild only): a gold zero ring around a tiny inverted tower sinking into the black void.
+  zero: ['..###..', '.#...#.', '.#.#.#.', '.#.#.#.', '.#...#.', '.#...#.', '..###..'],
+};
+// 2x renders (14x14) for the large badge, banner picker and hall; drawn at half-pixel size in the same pennant.
+const SIG2 = {
+  zero: [
+    '....######....',
+    '...#......#...',
+    '..#........#..',
+    '.#..######..#.',
+    '.#...####...#.',
+    '.#...####...#.',
+    '.#...#..#...#.',
+    '.#...####...#.',
+    '.#...####...#.',
+    '.#...#..#...#.',
+    '.#..........#.',
+    '..#........#..',
+    '...#......#...',
+    '....######....'],
 };
 const enc = s => `url("data:image/svg+xml,${encodeURIComponent(s).replace(/'/g, '%27')}")`;
 const rects = (rows, col, ox = 0, oy = 0) => rows.flatMap((r, y) => [...r].map((c, x) => c === '#' ? `<rect x="${x + ox}" y="${y + oy}" width="1" height="1" fill="${col}"/>` : '')).join('');
 const cache = new Map();
 /** Pennant 9x12: field c2, border c1, sigil c1, swallow-tail bottom. */
-export function bannerIcon(b = DEFAULT_BANNER) {
-  b = { ...DEFAULT_BANNER, ...(b || {}) }; const key = `${b.sigil}|${b.c1}|${b.c2}`; if (cache.has(key)) return cache.get(key);
+export function bannerIcon(b = DEFAULT_BANNER, hi = false) {
+  b = { ...DEFAULT_BANNER, ...(b || {}) }; hi = hi && !!SIG2[b.sigil]; const key = `${b.sigil}|${b.c1}|${b.c2}|${hi}`; if (cache.has(key)) return cache.get(key);
   const sig = SIG[b.sigil] || SIG.tower;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 12" shape-rendering="crispEdges"><path d="M0 0h9v12l-4.5-2.5L0 12z" fill="${b.c1}"/><path d="M1 1h7v9.3l-3.5-2L1 10.3z" fill="${b.c2}"/>${rects(sig, b.c1, 1, 1)}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 12" shape-rendering="crispEdges"><path d="M0 0h9v12l-4.5-2.5L0 12z" fill="${b.c1}"/><path d="M1 1h7v9.3l-3.5-2L1 10.3z" fill="${b.c2}"/>${hi ? `<g transform="translate(1 1) scale(.5)">${rects(SIG2[b.sigil], b.c1)}</g>` : rects(sig, b.c1, 1, 1)}</svg>`;
   const u = enc(svg); cache.set(key, u); return u;
 }
-export const bannerBadge = (b, tag = '', cls = 'gbadge') => `<i class="${cls}" style='background-image:${bannerIcon(b)}' title="${tag ? `[${tag}]` : 'guild banner'}" aria-hidden="true"></i>`;
-export const SIGIL_ROWS = SIG;
+export const bannerBadge = (b, tag = '', cls = 'gbadge') => `<i class="${cls}" style='background-image:${bannerIcon(b, /big|huge/.test(cls))}' title="${tag ? `[${tag}]` : 'guild banner'}" aria-hidden="true"></i>`;
+export const SIGIL_ROWS = SIG, SIGIL_ROWS_2X = SIG2;
 // ---- Guild Hall (Town): 64x36 pixel room; grows with guild level (size cues) and hall upgrades (0-5 visible features)
 export function hallArt(level = 1, hall = 0, b = DEFAULT_BANNER) {
   b = { ...DEFAULT_BANNER, ...(b || {}) }; const key = `hall|${level}|${hall}|${b.sigil}|${b.c1}|${b.c2}`; if (cache.has(key)) return cache.get(key);

@@ -28,17 +28,20 @@ export const localGuildV2 = {
     for (const k of Object.keys(gu.quests)) if (+k < w - 1) delete gu.quests[k];
   },
   _gv2Damage(name, amount, staff) {
-    if (staff || amount <= 0) return; const g = this._g(), m = g.members.find(x => x.name === name); if (!m || m.is_staff) return;
-    const gu = this._gx(g, g.guilds.find(x => x.id === m.guild_id)); if (gu.is_staff) { m.last_active = iso(); this._sg(g); return; } m.contrib += amount; m.last_active = iso(); m.active_week = R.weekOf(now()); gu.xp += amount;
+    if (amount <= 0) return; const g = this._g(), m = g.members.find(x => x.name === name); if (!m) return;
+    const gu = this._gx(g, g.guilds.find(x => x.id === m.guild_id)); if (!gu) return;
+    // staff guild: prestige XP from every member's damage (staff included); no quests, bank or bonus
+    if (gu.is_staff) { m.contrib += amount; m.last_active = iso(); gu.xp += amount; this._sg(g); return; }
+    if (staff || m.is_staff) return; m.contrib += amount; m.last_active = iso(); m.active_week = R.weekOf(now()); gu.xp += amount;
     this._qbump(gu, 'damage', amount); this._qbump(gu, 'active', g.members.filter(x => x.guild_id === gu.id && !x.is_staff && x.active_week === R.weekOf(now())).length, true); this._sg(g);
   },
   _gv2Clear(floorDmg) { const g = this._g(); let ch = false; for (const gu of g.guilds) { if (g.members.some(m => m.guild_id === gu.id && !m.is_staff && (floorDmg[m.name] || 0) > 0)) { this._qbump(this._gx(g, gu), 'floors', 1); ch = true; } } if (ch) this._sg(g); },
   async guildInfo() {
     const g = this._g(), me = g.members.find(m => m.name === g.me);
     if (!me) return { guild: null, invites: g.guilds.filter(gu => (gu.invites || []).includes(g.me)).map(gu => ({ guild_id: gu.id, name: gu.name, tag: gu.tag, banner: gu.banner || R.DEFAULT_BANNER, is_staff: !!gu.is_staff })), requests: g.guilds.filter(gu => (gu.requests || []).some(r => r.name === g.me)).map(gu => ({ guild_id: gu.id, tag: gu.tag })) };
-    const gu = this._gx(g, g.guilds.find(x => x.id === me.guild_id)); this._sg(g); const lv = gu.is_staff ? 1 : R.levelOf(gu.xp), w = R.weekOf(now());
+    const gu = this._gx(g, g.guilds.find(x => x.id === me.guild_id)); this._sg(g); const lv = R.levelOf(gu.xp), w = R.weekOf(now());
     const { ledger, quests, requests, invites, msgs, msgNext, ...pub } = gu;
-    return { guild: { ...pub, level: lv, slots: R.slotsOf(lv), bonus_pct: gu.is_staff ? 0 : R.bonusPctOf(gu.bonus_tier), sigils: R.sigilsAvailable(lv, gu.banner_unlocks) }, me: { role: me.role, is_staff: !!me.is_staff, user_id: me.name },
+    return { guild: { ...pub, level: lv, slots: R.slotsOf(lv), bonus_pct: gu.is_staff ? 0 : R.bonusPctOf(gu.bonus_tier), prestige: !!gu.is_staff, hall_display: gu.is_staff ? R.staffHall(lv) : gu.hall, sigils: R.sigilsAvailable(lv, gu.banner_unlocks) }, me: { role: me.role, is_staff: !!me.is_staff, user_id: me.name },
       members: g.members.filter(m => m.guild_id === gu.id).map(m => ({ user_id: m.name, name: m.name, role: m.role, contrib: m.contrib, last_active: m.last_active, is_staff: !!m.is_staff })).sort((a, b) => R.ROLES.indexOf(a.role) - R.ROLES.indexOf(b.role) || b.contrib - a.contrib),
       requests: R.canManage(me.role) && !gu.is_staff ? requests.map(r => ({ user_id: r.name, name: r.name, at: r.at })) : [], ledger: ledger.slice(0, 30),
       quests: gu.is_staff ? [] : R.weekQuests(w).map(q => ({ ...q, progress: quests[w]?.[q.idx]?.progress || 0, done: !!quests[w]?.[q.idx]?.done })), week: w };
@@ -63,12 +66,12 @@ export const localGuildV2 = {
   async guildUpgrade(kind) { const { g, me, gu } = this._mine('officer'); if (gu.is_staff) throw new Error('a staff guild has no bank'); const u = R.UPGRADES[kind]; if (!u) throw new Error('unknown upgrade'); const n = R.nextUpgrade(gu, kind);
     if (!n) throw new Error('already at max'); if (R.levelOf(gu.xp) < n.level) throw new Error(`needs guild level ${n.level}`); if (gu.bank < n.cost) throw new Error(`the bank needs ${n.cost} gold`);
     gu.bank -= n.cost; gu[R.upgradeCol[kind]]++; gu.ledger.unshift({ id: now(), name: me.name, kind: 'spend', amount: n.cost, item: `${kind} ${n.step}`, at: iso() }); this._sg(g); },
-  async guildSetBanner(sigil, c1, c2) { const { g, gu } = this._mine('officer'); const c = R.checkBanner({ sigil, c1, c2 }, R.levelOf(gu.xp), gu.banner_unlocks); if (!c.ok) throw new Error(c.reason); gu.banner = c.banner; this._sg(g); },
+  async guildSetBanner(sigil, c1, c2) { const { g, gu } = this._mine('officer'); const c = R.checkBanner({ sigil, c1, c2 }, R.levelOf(gu.xp), gu.banner_unlocks, !!gu.is_staff); if (!c.ok) throw new Error(c.reason); gu.banner = c.banner; this._sg(g); },
   async guildChatFetch(after = 0) { const { g, gu } = this._mine(); const t = now(); if (!gu.chatSim) gu.chatSim = t - 60000;
     const mates = g.members.filter(m => m.guild_id === gu.id && m.name !== g.me);
     while (mates.length && gu.chatSim < t - 30000) { gu.chatSim += 30000 + Math.floor(Math.random() * 40000); const n = mates[Math.floor(Math.random() * mates.length)].name; gu.msgs.push({ id: gu.msgNext++, author: 'sim-' + n, name: n, is_staff: false, body: GCHAT[Math.floor(Math.random() * GCHAT.length)], at: new Date(gu.chatSim).toISOString() }); }
     gu.msgs = gu.msgs.slice(-100); this._sg(g); return gu.msgs.filter(m => m.id > after); },
   async guildChatPost(name, body) { const { g, gu } = this._mine(); const r = cleanChat(body); if (!r.ok) throw new Error(r.reason); if (now() - (gu.lastPost || 0) < 10000) throw new Error('slow mode: 1 message every 10 seconds');
     gu.lastPost = now(); const m = { id: gu.msgNext++, author: 'me', name, is_staff: false, body: r.text, at: iso() }; gu.msgs.push(m); gu.msgs = gu.msgs.slice(-100); this._sg(g); return m; },
-  async guildTags() { const g = this._g(), out = {}; for (const m of g.members) { const gu = g.guilds.find(x => x.id === m.guild_id); if (gu) out[m.name] = { tag: gu.tag, banner: gu.banner || R.DEFAULT_BANNER, staff: !!gu.is_staff }; } return out; },
+  async guildTags() { const g = this._g(), out = {}; for (const m of g.members) { const gu = g.guilds.find(x => x.id === m.guild_id); if (gu) out[m.name] = { tag: gu.tag, banner: R.displayBanner(gu.banner, !!gu.is_staff), staff: !!gu.is_staff }; } return out; },
 };
