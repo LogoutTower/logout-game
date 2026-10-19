@@ -200,3 +200,47 @@ begin
 end $$;
 revoke all on function public.gm_mark(text, int, text) from public;
 grant execute on function public.gm_mark(text, int, text) to authenticated;
+
+-- ============================== damage clamp (loosened) ==============================
+-- The old clamp (schema.sql) ignored weapon flat DPS, so a legit low-level hero carrying loot from a high shared floor was
+-- clipped hard. Bound = (best class base × level + best Unique weapon of the current floor + 5) × forge (1.15^gear, looser than
+-- the client's 1 + 0.15·gear) × 8 headroom + 50. The 8× covers, with margin, every talent, armor/trinket %, Uniques, Elixir,
+-- last-layer bonuses and The Unwritten Hour (+5%); Shaper's Decree and guild bonuses are XP/gold only, never damage.
+-- Never below the old bound. Same signature, so the client is unchanged.
+create or replace function public.gear_scale(f int) returns double precision language sql immutable as $$
+  select power(1 + (greatest(f, 1) - 1) / 10.0, 6 * ln(1.6))
+$$;
+create or replace function public.submit_damage(p_amount bigint, p_name text, p_level int, p_gear int)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := auth.uid(); prof public.profiles; fs public.floor_state;
+  elapsed double precision; max_dps double precision; allowed bigint; accepted bigint; staff boolean; over bigint; ranking text[]; dm jsonb;
+  lv double precision := greatest(least(p_level, 500), 1); forge double precision := power(1.15, greatest(least(p_gear, 200), 0));
+begin
+  if uid is null then raise exception 'not signed in'; end if;
+  select * into prof from public.profiles where id = uid for update;
+  staff := coalesce(prof.role = 'gm', false);
+  elapsed := least(extract(epoch from now() - coalesce(prof.last_submit, now() - interval '30 seconds')), 12 * 3600);
+  update public.profiles set last_submit = now() where id = uid;
+  select * into fs from public.floor_state where id = 1 for update;
+  max_dps := greatest(
+    6.5 * (1 + 0.25 * lv - 0.25) * forge * 4 + 50,
+    (6.5 * (1 + 0.25 * lv - 0.25) + 1.5 * public.gear_scale(least(fs.floor + 5, fs.max_floor)) * 3.6) * forge * 8 + 50);
+  allowed := floor(max_dps * greatest(elapsed, 0));
+  accepted := greatest(0, least(p_amount, allowed));
+  insert into public.damage (user_id, floor, name, damage, is_staff) values (uid, fs.floor, left(p_name, 20), accepted, staff)
+    on conflict (user_id, floor) do update set damage = public.damage.damage + excluded.damage, name = excluded.name, is_staff = excluded.is_staff;
+  if staff then fs.gm_present_until := now() + interval '90 seconds'; end if;
+  fs.hp := fs.hp - accepted;
+  while fs.hp <= 0 and fs.floor < fs.max_floor loop
+    over := -fs.hp;
+    select coalesce(array_agg(name order by damage desc), '{}') into ranking from public.damage where floor = fs.floor and not is_staff;
+    select coalesce(jsonb_object_agg(name, damage), '{}') into dm from public.damage where floor = fs.floor;
+    insert into public.floor_clears (floor, max_hp, ranking, dmg) values (fs.floor, fs.max_hp, ranking, dm);
+    fs.floor := fs.floor + 1; fs.max_hp := public.floor_hp(fs.floor); fs.hp := fs.max_hp - over;
+  end loop;
+  if fs.hp < 0 then fs.hp := 0; end if;
+  update public.floor_state set floor = fs.floor, hp = fs.hp, max_hp = fs.max_hp, gm_present_until = fs.gm_present_until, updated_at = now() where id = 1;
+  return jsonb_build_object('floor', fs.floor, 'hp', fs.hp, 'max_hp', fs.max_hp, 'accepted', accepted, 'gm_present_until', fs.gm_present_until, 'gm_announce', fs.gm_announce,
+    'gm_marks', fs.gm_marks);
+end $$;

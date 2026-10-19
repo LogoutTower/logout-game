@@ -91,3 +91,14 @@ console.log('gm tests passed');
   await be._push(s); await be.saveSave(s); await be.submitDamage(h.name, 5000, { ...h, staff: true });
   assert(!calls.some(c => c[0] === 'upsert' || c[1] === 'submit_damage'), 'no save push or damage submit'); assert(!JSON.stringify(calls).includes('Nick'), 'GM name never sent');
   console.log('ok local-unlock staff online: full HP, no penalty, nothing uploaded'); }
+// ---- staff items DISPLAY as Unique but are not generated Uniques
+{ const G2 = await import('../js/gm.js'), L2 = await import('../js/loot.js'), T2 = await import('../js/town.js'), GM2 = await import('../js/game.js');
+  const ev = G2.eventide(30, L2.legendaryWeaponDps(30)); assert.equal(ev.show, 'unique'); assert.equal(ev.rarity, 'legendary', 'internal rarity stays Legendary (parity, no Unique machinery)');
+  assert.equal(ev.stamp, 'Forged before Floor 1'); assert(!ev.serial && !ev.ability && !ev.drawback, 'no serial / ability / drawback'); assert.equal(ev.stats.dps, L2.legendaryWeaponDps(30));
+  assert(!T2.sellable(ev), 'never sellable');
+  const s = { heroes: [GM2.newHero('A', 'Blade')], inv: [L2.forgeUnique(10, 'fire', 'stillness', 'dull')], gold: 0 }; s.heroes[0].equip = { weapon: ev };
+  assert(L2.equipItem(s, 0)); assert.equal(s.heroes[0].equip.weapon, ev, 'Eventide is outside the one-Unique rule'); assert.equal(s.heroes[0].equip.armor.rarity, 'unique');
+  assert.deepEqual([...GM2.effectsOf(s.heroes[0])].sort(), ['dull', 'stillness']);
+  for (let i = 0; i < 2000; i++) { const it = L2.rollItem(rng(90000 + i), 1 + i % 100, 'void', i, [0, 0, 0, 0, 0, 1]); assert(!it.gm && it.stamp !== G2.STAFF_STAMP && it.name !== ev.name); } }
+console.log('gm display-as-Unique checks passed');
+

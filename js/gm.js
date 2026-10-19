@@ -29,7 +29,10 @@ export const VESPERVEIL = GM_ITEMS.find(i => i.id === 'gm-coat');
 export const GM_NAMES = ['GameMaster', 'Architect of the Cosmos', 'Shaper of Destiny', 'Eventide', 'Final Shape', "Shaper's Decree", 'Vesperveil', 'Mantle of the Unwritten', 'Galaxy of the Unwritten', 'Unsheathed', 'The Unwritten Hour', 'Unwritten Hour', ...CODEX_NAMES];
 export const isGmId = id => typeof id === 'string' && id.startsWith('gm-');
 /** Eventide: a Legendary-parity weapon of the given floor (base stat only, no Unique ability). */
-export const eventide = (floor, legendaryDps) => ({ id: EVENTIDE.id, gm: true, slot: 'weapon', rarity: 'legendary', floor, element: 'void', name: EVENTIDE.name, lore: EVENTIDE.lore, stats: { dps: legendaryDps }, affixes: [] });
+// Staff items DISPLAY as Unique (label, colour, shimmer) but stay rarity 'legendary' underneath: Legendary-parity stats, no generated
+// ability/drawback/serial, never in a pool or the Unique generator, outside the one-Unique rule and never sellable.
+export const STAFF_STAMP = 'Forged before Floor 1';
+export const eventide = (floor, legendaryDps) => ({ id: EVENTIDE.id, gm: true, slot: 'weapon', rarity: 'legendary', show: 'unique', stamp: STAFF_STAMP, floor, element: 'void', name: EVENTIDE.name, lore: EVENTIDE.lore, stats: { dps: legendaryDps }, affixes: [] });
 // ---- perks (active only while the staff flag/role is valid; save.ctx.gm is set at runtime, never trusted from storage)
 // ---- Who counts as staff right now. The ONE place to change policy:
 //  - drop the local passphrase unlock: set allowLocalUnlock to false (server role only)

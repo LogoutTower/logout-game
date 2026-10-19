@@ -66,4 +66,9 @@ assert.match(await err(as(GM, `select public.gm_mark('herald', 3, 'visit evil.co
 await as(GM, `select public.gm_mark('herald', 3, 'The shit has arrived')`); await as(GM, `select public.gm_mark('decree6', 3, 'final')`);
 const mk = (await db.query(`select gm_marks from public.floor_state`)).rows[0].gm_marks; assert.equal(mk.herald.text, 'The **** has arrived'); assert(Date.parse(mk.decree6.until) > Date.now() + 100e3);
 assert.match(await err(as(GM, `select public.gm_mark('bogus', 3)`)), /unknown/);
+// ---- loosened damage clamp: a Lv1 hero on Floor 50 with floor-50 loot is not clipped to the old level-only bound
+{ await db.exec(`update public.floor_state set floor = 50, max_floor = 100, max_hp = public.floor_hp(50), hp = public.floor_hp(50) * 1000 where id = 1; update public.profiles set last_submit = now() - interval '10 seconds' where id = '${ids[5]}'`);
+  const r = (await as(ids[5], `select public.submit_damage(100000000, 'Tess', 1, 0) r`)).rows[0].r, acc = Number(r.accepted), old = (6.5 * 4 + 50) * 10;
+  const sc = f => Math.pow(1 + (f - 1) / 10, 6 * Math.log(1.6)), want = ((6.5 + 1.5 * sc(55) * 3.6) * 8 + 50) * 10;
+  assert(acc > old * 50, `clamp loosened: ${acc} vs old ${old}`); assert(Math.abs(acc / want - 1) < 0.05, `clamp formula ${acc} vs ${want}`); assert(acc < 100000000, 'absurd amounts still clamped'); }
 console.log('schema addendum (guilds + chat + staff marks) tests passed, idempotent');
