@@ -1,11 +1,11 @@
 // Browser test for the UI v2 shell: node test/e2e.nav.mjs [url]. Runs in local mode (Supabase blocked, so nothing is written live).
 // Every feature must be reachable from the 5-tab nav; badges, toasts, the slim top bar and the no-scroll battle screen on a 390x844 phone.
-import assert from 'node:assert'; import { chromium } from 'playwright-core'; import { TEAM_PASS_HASH } from '../config.js';
+import assert from 'node:assert'; import { chromium } from 'playwright-core'; import { TEAM_PASS_HASH } from '../config.js'; import { offline } from './e2e-offline.mjs';
 const URL = process.argv[2] || 'http://127.0.0.1:8765/app.html';
 const b = await chromium.launch({ executablePath: process.env.CHROME || `${process.env.HOME}/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome` });
-const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }); await ctx.route(/supabase\.co/, r => r.abort());
+const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }); await offline(ctx);
 await ctx.addInitScript(h => localStorage.setItem('logout.v1.gate', h), TEAM_PASS_HASH);
-const p = await ctx.newPage(), errs = []; p.on('pageerror', e => errs.push(e.message));
+const p = await ctx.newPage(), errs = []; p.on('pageerror', e => errs.push(e.message)); p.on('console', m => m.type() === 'error' && errs.push(m.text()));
 await p.goto(URL + '?t=' + Date.now()); await p.waitForSelector('#create:not(.hidden)'); await p.fill('#hname', 'NavTest'); await p.click('#start');
 await p.waitForSelector('#tour:not(.hidden)'); const steps = []; for (;;) { steps.push(await p.textContent('#ttitle')); if ((await p.textContent('#tnext')) === 'Done') { await p.click('#tnext'); break; } await p.click('#tnext'); }
 assert.ok(steps.includes('Hero') && steps.includes('More') && steps.includes('Town: Train · Forge'), 'tour covers the new nav: ' + steps);
@@ -38,8 +38,8 @@ assert.ok(await p.isHidden('#sbBtn'), 'sandbox hidden for players');
 await p.evaluate(() => { const s = JSON.parse(localStorage.getItem('logout.v1.save')); s.heroes[0].level = 12; s.lastTick = Date.now(); localStorage.setItem('logout.v1.save', JSON.stringify(s)); }); await p.reload(); await p.waitForTimeout(2500);
 assert.ok(await p.isVisible('#dotHero'), 'Hero dot for talent points'); await p.click('#tabHero'); assert.ok(await p.isVisible('#gearSheet [data-sub="talents"] .sdot'), 'Talents sub-tab dot'); await closeAll();
 // staff: GM unlock (test passphrase swapped into config.js) shows Sandbox under More and Codex under Hero
-{ const { createHash } = await import('node:crypto'); const c2 = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true }); await c2.route(/supabase\.co/, r => r.abort());
-  await c2.route(/config\.js/, async r => { const res = await r.fetch(); r.fulfill({ response: res, body: (await res.text()).replace(/GM_PASS_HASH = '[0-9a-f]*'/, `GM_PASS_HASH = '${createHash('sha256').update('nav-gm-test').digest('hex')}'`) }); });
+{ const { createHash } = await import('node:crypto'); const c2 = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true }); await c2.route(/supabase\.co/, r => r.abort()); // config.js route below also forces online 'off'
+  await c2.route(/config\.js/, async r => { const res = await r.fetch(); r.fulfill({ response: res, body: (await res.text()).replace(/online:\s*'[a-z]+'/, "online: 'off'").replace(/GM_PASS_HASH = '[0-9a-f]*'/, `GM_PASS_HASH = '${createHash('sha256').update('nav-gm-test').digest('hex')}'`) }); });
   await c2.addInitScript(h => { localStorage.setItem('logout.v1.gate', h); localStorage.setItem('logout.v1.gm', 'nav-gm-test'); }, TEAM_PASS_HASH);
   const g = await c2.newPage(); g.on('pageerror', e => errs.push(e.message)); await g.goto(URL + '?t=' + Date.now()); await g.waitForSelector('#create:not(.hidden)'); await g.fill('#hname', 'NavGm'); await g.click('#start');
   await g.waitForTimeout(1500); if (await g.isVisible('#tskip')) await g.click('#tskip');

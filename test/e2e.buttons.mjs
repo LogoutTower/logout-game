@@ -1,8 +1,8 @@
 // Browser regression (needs playwright-core + Chromium): node test/e2e.buttons.mjs [url]. Tour auto-open, purchase clicks + instant HUD, stable buttons.
-import { chromium } from 'playwright-core'; import assert from 'node:assert'; import { TEAM_PASS_HASH } from '../config.js';
+import { chromium } from 'playwright-core'; import assert from 'node:assert'; import { TEAM_PASS_HASH } from '../config.js'; import { offline } from './e2e-offline.mjs';
 const URL = process.argv[2] || 'http://127.0.0.1:8765/app.html';
 const b = await chromium.launch({ executablePath: process.env.HOME + '/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome' });
-const bctx = await b.newContext({ viewport: { width: 900, height: 1000 } }); await bctx.addInitScript(h => localStorage.setItem('logout.v1.gate', h), TEAM_PASS_HASH); // past the pre-launch gate
+const bctx = await b.newContext({ viewport: { width: 900, height: 1000 } }); const supa = await offline(bctx); await bctx.addInitScript(h => localStorage.setItem('logout.v1.gate', h), TEAM_PASS_HASH); // past the pre-launch gate
 const p = await bctx.newPage(), errs = [];
 p.on('pageerror', e => errs.push(e.message)); p.on('console', m => m.type() === 'error' && errs.push(m.text()));
 // fresh profile: tour must auto-open right after creation
@@ -26,4 +26,4 @@ assert(await p.locator('#tour.hidden').count() === 1, 'not again'); console.log(
 await p.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close()));
 // leaderboard hint under own row
 console.log('climb hint:', await p.evaluate(() => document.querySelector('#lb li.me .climb')?.textContent || '(player in top 3)'));
-await b.close(); assert.deepEqual(errs, []); console.log('buttons/tour checks passed, no JS errors');
+await b.close(); assert.deepEqual(errs, []); assert.deepEqual(supa, [], 'no request reached the live backend'); console.log('buttons/tour checks passed, no JS errors');

@@ -2,12 +2,12 @@
 // (the real team code and GM passphrase are never in the repo), then checks: locked root shows only the gate and loads nothing else,
 // a wrong code fails, the team code and the GM pass both unlock (and are remembered), app.html bounces to the gate, and LAUNCH_AT auto-opens it.
 import assert from 'node:assert'; import { createHash } from 'node:crypto';
-import { chromium } from 'playwright-core'; import { LAUNCH_AT } from '../config.js';
+import { chromium } from 'playwright-core'; import { LAUNCH_AT } from '../config.js'; import { offline } from './e2e-offline.mjs';
 const BASE = process.argv[2] || 'http://127.0.0.1:8765/', sha = s => createHash('sha256').update(s).digest('hex');
 const TEAM = 'test-team-code-11', GM = 'test-gm-pass-22', G = { lock: true, at: LAUNCH_AT, h: [sha(TEAM), sha(GM)] }, launch = Date.parse(LAUNCH_AT);
 const b = await chromium.launch({ executablePath: process.env.CHROME || `${process.env.HOME}/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome` });
 async function page(now) {
-  const ctx = await b.newContext(), p = await ctx.newPage(), reqs = [];
+  const ctx = await b.newContext(), p = await ctx.newPage(), reqs = []; await offline(ctx);
   await ctx.route(/\/(index\.html|app\.html)?(\?.*)?$/, async r => { const res = await r.fetch(); r.fulfill({ response: res, body: (await res.text()).replace(/<!--gate-->[\s\S]*?<!--\/gate-->/, `<!--gate--><script>var G=${JSON.stringify(G)};</script><!--/gate-->`) }); });
   p.on('request', q => reqs.push(q.url())); if (now) await p.clock.install({ time: now });
   return { p, ctx, reqs };
