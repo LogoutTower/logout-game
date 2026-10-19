@@ -85,6 +85,21 @@ export class SupabaseBackend {
     const { data, error } = await this.sb.from('damage').select('name, damage, is_staff').eq('floor', f).order('damage', { ascending: false }).limit(50);
     return boardWithStaff((error ? [] : data || []).map(r => ({ name: r.name, damage: Number(r.damage), staff: !!r.is_staff })), me, 10, { truncated: (data || []).length >= 50 });
   }
+  // ---- guilds + floor chat (tables from supabase/schema-addendum-guilds-chat.sql; all writes are RPCs)
+  async _rpc(fn, args) { if (this.holdUploads) throw new Error('local staff unlock: nothing is sent until the server role is granted'); const { data, error } = await this.sb.rpc(fn, args); if (error) throw new Error(error.message || String(error)); return data; }
+  async myGuild() { const { data: m } = await this.sb.from('guild_members').select('guild_id').eq('user_id', this.user.id).maybeSingle(); if (!m) return null;
+    const { data: g } = await this.sb.from('guilds').select('*').eq('id', m.guild_id).maybeSingle(); if (!g) return null;
+    const board = (await this.guildBoard(true)).find(x => x.id === g.id); return { id: g.id, name: g.name, tag: g.tag, owner: g.owner === this.user.id, members: board?.members ?? 1 }; }
+  async guildBoard(all = false) { const f = all ? null : (await this.getFloor()).floor; const { data, error } = await this.sb.rpc('guild_board', { p_floor: f }); return error ? [] : (data || []).map((g, i) => ({ ...g, damage: Number(g.damage), members: Number(g.members), rank: i + 1 })); }
+  async createGuild(name, tag) { return this._rpc('guild_create', { p_name: name, p_tag: tag }); }
+  async joinGuild(tag) { return this._rpc('guild_join', { p_tag: tag }); }
+  async leaveGuild() { return this._rpc('guild_leave', {}); }
+  canChat() { return !this.isAnonymous() && !this.holdUploads; } // identity-bound accounts only (the server checks too)
+  async chatFetch(after = 0) { const f = (await this.getFloor()).floor;
+    const { data, error } = await this.sb.from('chat_messages').select('id, floor, author, name, guild_tag, is_staff, body, at').eq('floor', f).gt('id', after).order('id', { ascending: true }).limit(50);
+    return error ? [] : data || []; }
+  async chatPost(name, body) { return this._rpc('chat_post', { p_name: name, p_body: body }); }
+  async chatReport(id, reason = null) { return this._rpc('chat_report', { p_id: id, p_reason: reason }); }
   // ---- identity ("bind your identity"). Wallet = message signature only; never transactions, never keys, never funds.
   async bindWallet(wallet = globalThis.window?.phantom?.solana) {
     if (!wallet) throw new Error('Phantom not found');

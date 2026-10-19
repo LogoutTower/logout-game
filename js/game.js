@@ -1,3 +1,4 @@
+import { GUILD_BUFF } from './guilds.js';
 // Pure, deterministic game logic (no DOM) — importable in node for tests.
 export const CLASSES = {
   Vanguard: { icon: '🛡️', atk: 6, spd: 0.8, hp: 140 },
@@ -31,6 +32,7 @@ const talentDpsMul = h => { const t = talentBonus(h); return (1 + (t.dpsPct + t.
 const goldMul = heroes => 1 + (gearBonus(heroes[0]).goldPct + talentBonus(heroes[0]).goldPct) / 100, xpMul = heroes => 1 + (gearBonus(heroes[0]).xpPct + talentBonus(heroes[0]).xpPct) / 100;
 /** Shaper's Decree: +5% gold/XP for everyone on a floor while a staff hero is fighting there (ctx.decree, set live or from the server floor state). */
 const decreeMul = save => save.ctx?.decree ? 1.05 : 1;
+export const guildMul = save => save.ctx?.guild && !save.ctx?.gm ? 1 + GUILD_BUFF : 1; // guild members: XP and gold only (staff gets none)
 export const offlineCap = (heroes, base = 12) => base + gearBonus(heroes[0]).capH + talentBonus(heroes[0]).capH;
 export const xpToNext = lvl => Math.round(50 * Math.pow(1.4, lvl - 1));
 export const levelCost = h => Math.round(40 * Math.pow(1.5, h.level - 1));
@@ -75,7 +77,7 @@ export function simulate(save, secs) {
   const h = save.heroes[0], max = heroMaxHp(h), b = buffsOf(save), e = effectsOf(h), tb = talentBonus(h), raw = max / DRAIN_SECS * (e.has('lifesteal') ? FX.lifesteal : 1) * (e.has('drain') ? FX.drain : 1);
   const drain = save.ctx?.gm ? 0 : Math.max(raw * 0.1, raw * (1 - tb.drainPct / 100) - tb.regenPct / 100 * max / 60); // talents: slower drain + regen
   const base = totalDps(save.heroes) * layerMul(save), lowMul = lowMulOf(h), hearth = e.has('hearth');
-  const gM = goldMul(save.heroes) * decreeMul(save), xM = xpMul(save.heroes) * decreeMul(save);
+  const gM = goldMul(save.heroes) * decreeMul(save) * guildMul(save), xM = xpMul(save.heroes) * decreeMul(save) * guildMul(save);
   let hp = heroHp(h), t = Math.max(0, secs), dmg = 0, gold = 0, xp = 0, lowSecs = 0;
   for (let guard = 0; t > 1e-9 && guard < 16; guard++) {
     const low = hp <= LOW_HP * max + 1e-9; let seg = t;

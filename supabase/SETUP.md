@@ -20,3 +20,11 @@ Notes on the server logic (see `submit_damage` in schema.sql):
 - The floor advances atomically under a row lock, carrying overflow damage into the next floor, and writes a `floor_clears` row with the ranking. GM ("staff") damage counts toward the floor but is never ranked or rewarded.
 - `gm_present_until` and `gm_announce` on `floor_state` are only writable through `submit_damage` / `gm_presence` / `gm_announce`, which check `profiles.role = 'gm'` server-side. The announce is limited to once per floor per 10 min.
 - Logic tested locally with PGlite: `npm i @electric-sql/pglite && node test/schema.pglite.mjs`.
+
+## Addendum: guilds + floor chat
+
+1. SQL Editor → New query → paste all of `supabase/schema-addendum-guilds-chat.sql` → Run. It's idempotent, so running it again is fine. It needs `schema.sql` to have run first.
+2. Check: Table Editor shows `guilds`, `guild_members`, `chat_messages`, `chat_reports` and `chat_banned_words`, and each one has RLS enabled.
+3. Optional: add more filtered words with `insert into public.chat_banned_words (word) values ('...') on conflict do nothing;` (lowercase letters only, 3 or more). Also add each word to `BANNED` in `js/chatfilter.js` so the client gives instant feedback.
+4. Tell the dev that it ran. The client keeps `FEATURES.guilds` / `FEATURES.chat` at `'off'` until then, and they get switched on in `config.js` after that.
+Moderation: hide a message with `update public.chat_messages set hidden = true where id = <id>;` (3 player reports hide it automatically).

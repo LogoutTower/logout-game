@@ -185,3 +185,17 @@ header{padding-top:max(14px,env(safe-area-inset-top))}main{padding-left:max(12px
 #sbFloor{width:100%;min-height:44px}.sbbtns{display:flex;flex-wrap:wrap;gap:8px}.sbitems{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin:10px 0}
 @media(max-width:640px){.sbwrap{grid-template-columns:1fr}.sbboss{margin:auto}}
 @media (prefers-reduced-motion:reduce){#hero.gmaura::before{animation:none}}
+/* ---- guild + floor chat */
+#guildBody .grow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 6px 0; }
+#guildBody input { flex: 1 1 140px; min-height: 44px; }
+#guildBody table { width: 100%; border-collapse: collapse; font-size: .95em; }
+#guildBody td, #guildBody th { padding: 6px 4px; border-bottom: 1px solid rgba(160, 140, 255, .15); text-align: left; }
+#guildBody .mine { color: #7ff6ff; }
+#guildBody .tabs button[aria-pressed="true"] { border-color: #7ff6ff; }
+.chatlog { height: min(50vh, 360px); overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 6px; border: 1px solid rgba(160, 140, 255, .2); border-radius: 8px; background: rgba(10, 4, 24, .5); }
+.chatlog .msg { padding: 4px 0; line-height: 1.35; word-break: break-word; }
+.chatlog .msg b { color: #c9b8ff; } .chatlog .msg .tag { color: #7ff6ff; font-size: .8em; margin-right: 3px; } .chatlog .msg.me b { color: #7ff6ff; }
+.chatlog .msg.staff b { color: #f5c96b; } .chatlog .msg time { color: #8a7fb0; font-size: .75em; margin-left: 4px; }
+.chatlog .msg .mod { float: right; display: flex; gap: 4px; } .chatlog .msg .mod button { min-height: 32px; min-width: 32px; padding: 2px 6px; font-size: .75em; opacity: .7; }
+.chatform { display: flex; gap: 6px; margin-top: 8px; } .chatform input { flex: 1; min-height: 44px; } .chatform button { min-height: 44px; }
+@media (max-width: 600px) { #guild, #chat { width: calc(100vw - 16px); max-width: none; } .chatlog { height: 46vh; } }

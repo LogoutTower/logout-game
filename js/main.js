@@ -8,6 +8,8 @@ import { treeOf, nodeById, canLearn, learn, freePoints, totalPoints, spentIn, re
 import { TRICKLE, trickleDrops, grantDrops, equipItem, salvageItem, salvageValue, rarityOf, statLabel, INV_SIZE, bagSize, GEAR_SLOTS } from './loot.js';
 import { GM_PASS_HASH, OFFLINE_CAP_HOURS, MAX_FLOOR, FEATURES, SOLANA_RPC, TOKEN_MINT, HOLDER_THRESHOLD } from '../config.js';
 import { featureOn } from './features.js';
+import { checkGuild, GUILD_CAP, GUILD_BUFF } from './guilds.js';
+import { cleanChat, CHAT_MAX } from './chatfilter.js';
 import { boardWithStaff, wouldRankLabel } from './ranks.js';
 import { staffActive, GM_CLASS, GM_SIGIL, EVENTIDE, gmOn, checkPass, sanitizeSave, becomeGm, leaveGm, eventide, shouldAnnounce } from './gm.js';
 import { openSandbox, sandboxFloor, sandboxFight, sandboxLoot, closeSandbox } from './sandbox.js';
@@ -58,7 +60,7 @@ async function boot() {
   if (save && sanitizeSave(save, gmValid)) { save = migrateSave(save); await be.saveSave(save); } // pasted staff ids are stripped
   if (!save) return showCreate();
   if (gmValid) save.heroes[0].hp = null; // staff perk: always full HP
-  { const f0 = (await be.getFloor()).floor, bi = bossInfo(f0); save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid }; } // offline maths sees the same floor context
+  { const f0 = (await be.getFloor()).floor, bi = bossInfo(f0); myGuild = featureOn(FEATURES, 'guilds', gmValid) && !localStaffOnly() ? await be.myGuild?.().catch(() => null) : null; save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid, guild: !!myGuild }; } // offline maths sees the same floor context
   const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
   save.gold += p.gold; const ups = applyXp(save.heroes, p.xp); pending += p.damage;
   const offFloor = (await be.getFloor()).floor, trickled = trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
@@ -106,12 +108,12 @@ async function startGame(fresh = false) {
   floor = await be.getFloor(); log(`${save.heroes[0].name} awoke on Floor ${floor.floor}. The guardian stirs.`); log('System notice: log out disabled.');
   if (fresh) { notice('Log out disabled'); setTimeout(() => notice(`Floor ${floor.floor} is open`), 900); } // no replayed notices on reload
   $('lvl').onclick = () => buy('level'); $('gear').onclick = () => buy('gear'); $('wardrobeBtn').onclick = openWardrobe;
-  $('townBtn').onclick = openTown; $('helpBtn').onclick = () => tourShow(0); $('bagBtn').onclick = openBag; $('sysBtn').onclick = openSystem; $('talBtn').onclick = () => { talSel = null; openTalents(); }; placeDock();
+  $('townBtn').onclick = openTown; $('helpBtn').onclick = () => tourShow(0); $('bagBtn').onclick = openBag; $('sysBtn').onclick = openSystem; $('guildBtn').onclick = openGuild; $('chatBtn').onclick = openChat; $('guildAct').hidden = !featureOn(FEATURES, 'guilds', gmValid); $('chatAct').hidden = !featureOn(FEATURES, 'chat', gmValid); $('talBtn').onclick = () => { talSel = null; openTalents(); }; placeDock();
   setInterval(tick, 1000); setInterval(sync, 5000); render(); renderLb();
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
 function tick() {
-  save.ctx = { gm: gmValid, decree: gmValid || (floor.gmUntil || 0) > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, sessionSecs: (Date.now() - sessionStart) / 1000 };
+  save.ctx = { gm: gmValid, guild: !!myGuild, decree: gmValid || (floor.gmUntil || 0) > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, sessionSecs: (Date.now() - sessionStart) / 1000 };
   const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS), fx = effectsOf(save.heroes[0]);
   if (fx.has('whisper') && Date.now() - lastWhisper > 120000) { lastWhisper = Date.now(); log(WHISPERS[Math.floor(Math.random() * WHISPERS.length)], '#b9a8ff'); }
   save.gold += p.gold; recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp; pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage);
@@ -345,4 +347,50 @@ const localStaffOnly = () => gmValid && be.name === 'supabase' && !be.isGm();
 async function submitDmg(name, amount, hero) {
   if (localStaffOnly()) { localStaffDmg += amount; const f = await be.getFloor(); return { ...f, advanced: false, accepted: 0, clears: [] }; }
   return be.submitDamage(name, amount, hero);
+}
+
+// ---- Guilds (flag: FEATURES.guilds). +2% XP/gold for members; staff never owns one and adds nothing to a guild total.
+let myGuild = null, guildAll = false;
+const meArg = () => ({ name: save.heroes[0].name, staff: gmValid });
+async function openGuild() {
+  const blocked = localStaffOnly() ? '<p class="sub">Local staff unlock: guilds need the server role (nothing is sent from this device).</p>' : '';
+  let board = []; try { board = await be.guildBoard(guildAll); } catch {}
+  const rows = board.map(g => `<tr class="${myGuild?.id === g.id ? 'mine' : ''}"><td>${g.rank}</td><td>[${esc(g.tag)}] ${esc(g.name)}</td><td>${g.members}/${GUILD_CAP}</td><td>${fmt(g.damage)}</td>${!myGuild && !blocked ? `<td><button data-join="${esc(g.tag)}">Join</button></td>` : '<td></td>'}</tr>`).join('');
+  $('guildSub').textContent = myGuild ? `· [${myGuild.tag}] ${myGuild.name}` : '· none';
+  $('guildBody').innerHTML = `${blocked}${myGuild ? `<p>You are in <b>[${esc(myGuild.tag)}] ${esc(myGuild.name)}</b>${myGuild.owner ? ' (founder)' : ''} · ${myGuild.members}/${GUILD_CAP} members.</p>
+    <p class="sub">${gmValid ? 'Staff: no guild bonus, and your damage never counts toward the guild.' : `Guild bonus: +${GUILD_BUFF * 100}% XP and gold. It never changes damage, ranks or rewards.`}</p><button id="gLeave">Leave guild</button>`
+    : blocked ? '' : `<div class="grow"><input id="gName" maxlength="24" placeholder="Guild name"><input id="gTag" maxlength="4" placeholder="TAG" style="max-width:90px;text-transform:uppercase"><button id="gCreate" class="cta" ${gmValid ? 'disabled title="Staff cannot own a guild"' : ''}>Found guild</button></div><p class="sub" id="gMsg">Up to ${GUILD_CAP} members. Members get +${GUILD_BUFF * 100}% XP and gold.</p>`}
+    <div class="grow tabs"><button id="gFloor" aria-pressed="${!guildAll}">This floor</button><button id="gAll" aria-pressed="${guildAll}">All floors</button></div>
+    <table><tr><th>#</th><th>Guild</th><th>Members</th><th>Damage</th><th></th></tr>${rows || '<tr><td colspan="5" class="sub">No guilds yet.</td></tr>'}</table>`;
+  const done = async (f, m) => { try { await f(); myGuild = await be.myGuild(); if (save.ctx) save.ctx.guild = !!myGuild; log(`System notice: ${m}`); openGuild(); } catch (e) { const el = $('gMsg'); if (el) el.textContent = e.message; else notice(e.message); } };
+  if ($('gCreate')) $('gCreate').onclick = () => { const c = checkGuild($('gName').value, $('gTag').value); if (!c.ok) { $('gMsg').textContent = c.reason; return; } done(() => be.createGuild(c.name, c.tag, meArg()), `guild [${c.tag}] founded.`); };
+  if ($('gLeave')) $('gLeave').onclick = () => done(() => be.leaveGuild(), 'you left the guild.');
+  $('guildBody').querySelectorAll('[data-join]').forEach(b => b.onclick = () => done(() => be.joinGuild(b.dataset.join, meArg()), `joined [${b.dataset.join}].`));
+  $('gFloor').onclick = () => { guildAll = false; openGuild(); }; $('gAll').onclick = () => { guildAll = true; openGuild(); };
+  if (!$('guild').open) $('guild').showModal();
+}
+// ---- Floor chat (flag: FEATURES.chat). Polled every 4s only while open and visible; the server filters, the client mirrors it.
+let chatLast = 0, chatFloor = null, chatTimer = null; const chatMsgs = [];
+const muted = () => JSON.parse(localStorage.getItem('logout.v1.muted') || '[]');
+function renderChat() {
+  const mu = muted(), el = $('chatLog'), atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  el.innerHTML = chatMsgs.filter(m => !mu.includes(m.author)).map(m => `<div class="msg ${m.author === 'me' || m.name === save.heroes[0].name ? 'me' : ''} ${m.is_staff ? 'staff' : ''}"><span class="mod"><button data-mute="${esc(m.author)}" title="Mute">Mute</button><button data-rep="${m.id}" title="Report">Report</button></span>${m.guild_tag ? `<span class="tag">[${esc(m.guild_tag)}]</span>` : ''}<b>${m.is_staff ? GM_SIGIL + ' ' : ''}${esc(m.name)}</b><time>${new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time><br>${esc(m.body)}</div>`).join('') || '<p class="sub">Quiet on this floor.</p>';
+  if (atEnd) el.scrollTop = el.scrollHeight;
+  el.querySelectorAll('[data-mute]').forEach(b => b.onclick = () => { localStorage.setItem('logout.v1.muted', JSON.stringify([...new Set([...muted(), b.dataset.mute])])); renderChat(); });
+  el.querySelectorAll('[data-rep]').forEach(b => b.onclick = async () => { const id = +b.dataset.rep; try { await be.chatReport(id, 'player report'); } catch {} const i = chatMsgs.findIndex(m => m.id === id); if (i >= 0) chatMsgs.splice(i, 1); renderChat(); $('chatNote').textContent = 'Reported. Thanks: it is hidden for you, and for everyone after a few reports.'; });
+}
+async function pollChat() {
+  if (!$('chat').open || document.hidden) return;
+  if (chatFloor !== floor.floor) { chatFloor = floor.floor; chatLast = 0; chatMsgs.length = 0; }
+  try { const n = await be.chatFetch(chatLast); for (const m of n) { chatMsgs.push(m); chatLast = Math.max(chatLast, m.id); } if (chatMsgs.length > 100) chatMsgs.splice(0, chatMsgs.length - 100); if (n.length) renderChat(); } catch {}
+}
+async function openChat() {
+  $('chatSub').textContent = `· Floor ${floor.floor}`;
+  const can = be.canChat() && !localStaffOnly();
+  $('chatIn').disabled = $('chatSend').disabled = !can;
+  $('chatNote').textContent = can ? `Max ${CHAT_MAX} characters, 1 message every 10 s. Links and addresses are blocked.` : localStaffOnly() ? 'Local staff unlock: chat needs the server role.' : 'Bind your identity (System) to post. You can still read.';
+  $('chatForm').onsubmit = async e => { e.preventDefault(); const r = cleanChat($('chatIn').value); if (!r.ok) { $('chatNote').textContent = 'Not sent: ' + r.reason; return; }
+    try { await be.chatPost(save.heroes[0].name, $('chatIn').value, meArg()); $('chatIn').value = ''; $('chatNote').textContent = ''; await pollChat(); } catch (err) { $('chatNote').textContent = 'Not sent: ' + err.message; } };
+  if (!$('chat').open) $('chat').showModal(); renderChat(); await pollChat();
+  clearInterval(chatTimer); chatTimer = setInterval(() => { if (!$('chat').open) clearInterval(chatTimer); else pollChat(); }, 4000);
 }
