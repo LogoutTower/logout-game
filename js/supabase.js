@@ -99,6 +99,22 @@ export class SupabaseBackend {
   async createGuild(name, tag) { return this._rpc('guild_create', { p_name: name, p_tag: tag }); }
   async joinGuild(tag) { return this._rpc('guild_join', { p_tag: tag }); }
   async leaveGuild() { return this._rpc('guild_leave', {}); }
+  // ---- Guilds v2 (FEATURES.guildsV2; needs supabase/schema-addendum-guilds-v2.sql). All writes are RPCs; the server decides.
+  async guildInfo() { return this._rpc('guild_info', {}); }
+  async guildSetOpen(open) { return this._rpc('guild_set_open', { p_open: !!open }); }
+  async guildInvite(user) { return this._rpc('guild_invite', { p_user: String(user || '').trim() || null }); }
+  async guildAcceptInvite(gid) { return this._rpc('guild_accept_invite', { p_gid: gid }); }
+  async guildDeclineInvite(gid) { return this._rpc('guild_decline_invite', { p_gid: gid }); }
+  async guildAnswer(user, accept) { return this._rpc('guild_answer', { p_user: user, p_accept: !!accept }); }
+  async guildKick(user) { return this._rpc('guild_kick', { p_user: user }); }
+  async guildSetRole(user, role) { return this._rpc('guild_set_role', { p_user: user, p_role: role }); }
+  /** The server checks and deducts the gold from the cloud save, so push the current save first, then mirror the deduction locally. */
+  async guildDonate(amount, save) { if (this.holdUploads) throw new Error('local staff unlock: nothing is sent'); await this._push(save); const r = await this._rpc('guild_donate', { p_amount: Math.floor(+amount) }); save.gold -= Math.floor(+amount); save.updatedAt = this.now(); await this._push(save); return r; }
+  async guildUpgrade(kind) { return this._rpc('guild_upgrade', { p_kind: kind }); }
+  async guildSetBanner(sigil, c1, c2) { return this._rpc('guild_set_banner', { p_sigil: sigil, p_c1: c1, p_c2: c2 }); }
+  async guildChatFetch(after = 0) { const { data, error } = await this.sb.from('guild_messages').select('id, author, name, is_staff, body, at').gt('id', after).order('id', { ascending: true }).limit(50); return error ? [] : data || []; }
+  async guildChatPost(name, body) { return this._rpc('guild_chat_post', { p_name: name, p_body: body }); }
+  async guildTags(floor) { try { const { data, error } = await this.sb.rpc('guild_tags', { p_floor: floor }); return error ? {} : data || {}; } catch { return {}; } }
   canChat() { return !this.isAnonymous() && !this.holdUploads; } // identity-bound accounts only (the server checks too)
   async chatFetch(after = 0) { const f = (await this.getFloor()).floor;
     const { data, error } = await this.sb.from('chat_messages').select('id, floor, author, name, guild_tag, is_staff, body, at').eq('floor', f).gt('id', after).order('id', { ascending: true }).limit(50);

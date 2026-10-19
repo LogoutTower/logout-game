@@ -2,6 +2,8 @@
 import { floorBossHp } from './game.js';
 import { boardWithStaff } from './ranks.js';
 import { GUILD_CAP, checkGuild, guildBoard } from './guilds.js';
+import { localGuildV2 } from './guildlocal.js';
+import { slotsOf, levelOf } from './guildsv2.js';
 import { cleanChat, CHAT_SLOW_MS, CHAT_KEEP } from './chatfilter.js';
 import { MAX_FLOOR, SUPABASE_URL, SUPABASE_ANON_KEY, FEATURES } from '../config.js';
 // Pre-restyle handles, renamed in older saved worlds so leaderboards stay in-theme.
@@ -26,12 +28,12 @@ export class LocalBackend {
     for (const n of FAKE) { const d = Math.floor(secs * (5 + (n.length * 7) % 40) * Math.random() * 2 * (this.decree ? 1 + (this.decreePct || 5) / 100 : 1)); /* Shaper's Decree lifts everyone on the floor */ w.dmg[n] = (w.dmg[n] || 0) + d; w.hp -= d; }
     this._adv(w);
   }
-  _adv(w) { let adv = 0; w.clears = w.clears || []; while (w.hp <= 0 && w.floor < MAX_FLOOR) { const over = -w.hp; (w.hist = w.hist || []).push({ floor: w.floor, at: new Date().toISOString(), top: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).filter(e => !(w.staff || {})[e[0]])[0]?.[0] || null }); if (w.hist.length > 120) w.hist = w.hist.slice(-120); w.clears.push({ floor: w.floor, ranking: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).filter(e => !(w.staff || {})[e[0]]).map(e => e[0]), dmg: { ...w.dmg }, maxHp: floorBossHp(w.floor) }); w.floor++; adv++; w.hp = floorBossHp(w.floor) - over; w.dmg = {}; headStart(w); } if (w.hp < 0) w.hp = 0; if (w.floor >= MAX_FLOOR && w.hp <= 0 && !w.final) { w.final = 1; w.clears.push({ floor: MAX_FLOOR, ranking: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).map(e => e[0]), dmg: { ...w.dmg }, maxHp: floorBossHp(w.floor) }); } return adv; }
+  _adv(w) { let adv = 0; w.clears = w.clears || []; while (w.hp <= 0 && w.floor < MAX_FLOOR) { const over = -w.hp; this._gv2Clear?.(w.dmg); (w.hist = w.hist || []).push({ floor: w.floor, at: new Date().toISOString(), top: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).filter(e => !(w.staff || {})[e[0]])[0]?.[0] || null }); if (w.hist.length > 120) w.hist = w.hist.slice(-120); w.clears.push({ floor: w.floor, ranking: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).filter(e => !(w.staff || {})[e[0]]).map(e => e[0]), dmg: { ...w.dmg }, maxHp: floorBossHp(w.floor) }); w.floor++; adv++; w.hp = floorBossHp(w.floor) - over; w.dmg = {}; headStart(w); } if (w.hp < 0) w.hp = 0; if (w.floor >= MAX_FLOOR && w.hp <= 0 && !w.final) { w.final = 1; w.clears.push({ floor: MAX_FLOOR, ranking: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).map(e => e[0]), dmg: { ...w.dmg }, maxHp: floorBossHp(w.floor) }); } return adv; }
   async getFloor() { const w = this._w(); this._sim(w); this._sw(w); return { floor: w.floor, hp: w.hp, maxHp: floorBossHp(w.floor), marks: w.marks || {} }; }
   async gmMark(kind, floor, text = null) { const w = this._w(), m = w.marks || (w.marks = {}), p = m[kind]; if (kind !== 'decree6' && kind !== 'echo' && p && p.floor === floor && Date.now() - Date.parse(p.at) < 10 * 60e3) return false;
     m[kind] = { floor, at: new Date().toISOString(), text, until: kind === 'decree6' ? new Date(Date.now() + (text === 'final' ? 120e3 : 10e3)).toISOString() : undefined }; this._sw(w); return true; } // local: this browser only
   async submitDamage(playerName, amount, hero = {}) {
-    const w = this._w(); w.dmg[playerName] = (w.dmg[playerName] || 0) + amount; w.hp -= amount; w.staff = w.staff || {}; if (hero.staff) w.staff[playerName] = true; else delete w.staff[playerName];
+    const w = this._w(); w.dmg[playerName] = (w.dmg[playerName] || 0) + amount; w.hp -= amount; this._gv2Damage?.(playerName, amount, !!hero.staff); w.staff = w.staff || {}; if (hero.staff) w.staff[playerName] = true; else delete w.staff[playerName];
     const advanced = this._adv(w); const clears = w.clears; w.clears = []; this._sw(w); return { floor: w.floor, hp: w.hp, maxHp: floorBossHp(w.floor), advanced, accepted: amount, clears };
   }
   async floorHistory() { return this._w().hist || []; } // [{ floor, at, top }]
@@ -52,7 +54,8 @@ Object.assign(LocalBackend.prototype, {
     if (g.members.some(x => x.name === me?.name)) throw new Error('already in a guild'); if (g.guilds.some(x => x.name.toLowerCase() === c.name.toLowerCase() || x.tag === c.tag)) throw new Error('name or tag taken');
     const gu = { id: g.next++, name: c.name, tag: c.tag, owner: me.name }; g.guilds.push(gu); g.members.push({ name: me.name, guild_id: gu.id }); g.me = me.name; this._sg(g); return gu; },
   async joinGuild(tag, me) { const g = this._g(), gu = g.guilds.find(x => x.tag === String(tag).toUpperCase()); if (!gu) throw new Error('no such guild');
-    if (g.members.some(x => x.name === me?.name)) throw new Error('already in a guild'); if (g.members.filter(x => x.guild_id === gu.id).length >= GUILD_CAP) throw new Error('guild is full');
+    if (g.members.some(x => x.name === me?.name)) throw new Error('already in a guild'); this._gx(g, gu); if (!gu.open && !gu.invites.includes(me?.name)) { if (!gu.requests.some(r => r.name === me?.name)) gu.requests.push({ name: me?.name, at: new Date().toISOString() }); this._sg(g); return { ...gu, joined: false, requested: true }; }
+    if (g.members.filter(x => x.guild_id === gu.id).length >= slotsOf(levelOf(gu.xp))) throw new Error('guild is full'); gu.invites = gu.invites.filter(n => n !== me?.name);
     g.members.push({ name: me.name, guild_id: gu.id, is_staff: !!me.staff }); g.me = me.name; this._sg(g); return gu; },
   async leaveGuild() { const g = this._g(), m = g.members.find(x => x.name === g.me); if (!m) return; g.members = g.members.filter(x => x !== m); const gu = g.guilds.find(x => x.id === m.guild_id);
     if (gu && gu.owner === g.me) { const heir = g.members.find(x => x.guild_id === gu.id && !x.is_staff); if (heir) gu.owner = heir.name; } if (!g.members.some(x => x.guild_id === m.guild_id)) g.guilds = g.guilds.filter(x => x.id !== m.guild_id); g.me = null; this._sg(g); },
@@ -95,3 +98,5 @@ export async function makeBackend() {
   } else reason = fallbackReason(null, { storageOk });
   const b = new LocalBackend(); b.fallback = reason; await b.init(); return b;
 }
+
+Object.assign(LocalBackend.prototype, localGuildV2);

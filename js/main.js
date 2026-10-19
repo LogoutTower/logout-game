@@ -18,6 +18,9 @@ import { cx, CODEX, isCodex } from './codex.js';
 import { galaxyTier, mountGalaxy } from './galaxy.js';
 import { unwrittenHour } from './game.js';
 import { towerRows, towerProgress, TOWER_TOP } from './towermap.js';
+import { renderGuildV2, invitesHtml } from './guildpanel.js';
+import { bannerBadge, hallArt } from './banner.js';
+import { slotsOf } from './guildsv2.js';
 import { itemIcon } from './icons.js';
 import { sellPrice, sellable, toggleLock, sellItem, bulkPreview, sellBulk } from './town.js';
 const shownRarity = it => it?.gm ? 'unique' : it?.rarity; // staff items display as Unique (see gm.js)
@@ -70,7 +73,7 @@ async function boot() {
   if (save && sanitizeSave(save, gmValid)) { save = migrateSave(save); await be.saveSave(save); } // pasted staff ids are stripped
   if (!save) return showCreate();
   if (gmValid) save.heroes[0].hp = null; if (gmValid && save.heroes[0].cls === GM_CLASS) { const f = (await be.getFloor()).floor; gmGear(save, f, legendaryWeaponDps(f), legendaryArmorPct(f)); } // migrate older GM saves: Vesperveil lands in the armor slot // staff perk: always full HP
-  { const fl0 = await be.getFloor(), f0 = fl0.floor, bi = bossInfo(f0); myGuild = featureOn(FEATURES, 'guilds', gmValid) && !localStaffOnly() ? await be.myGuild?.().catch(() => null) : null; save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid, guild: !!myGuild, bossPct: fl0.maxHp ? fl0.hp / fl0.maxHp : 1, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (fl0.gmUntil || 0) > Date.now() }; } // offline maths sees the same floor context
+  { const fl0 = await be.getFloor(), f0 = fl0.floor, bi = bossInfo(f0); myGuild = featureOn(FEATURES, 'guilds', gmValid) && !localStaffOnly() ? await be.myGuild?.().catch(() => null) : null; if (myGuild && gv2On()) gv2Info = await be.guildInfo().catch(() => null); save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid, guild: !!myGuild, bossPct: fl0.maxHp ? fl0.hp / fl0.maxHp : 1, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (fl0.gmUntil || 0) > Date.now() }; } // offline maths sees the same floor context
   const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
   save.gold += p.gold; const ups = applyXp(save.heroes, p.xp); pending += p.damage;
   const offFloor = (await be.getFloor()).floor, trickled = trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
@@ -123,7 +126,7 @@ async function startGame(fresh = false) {
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
 function tick() {
-  save.ctx = { gm: gmValid, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (floor.gmUntil || 0) > Date.now(), guild: !!myGuild, decreePct: decreePctNow(), decree: gmValid || (floor.gmUntil || 0) > Date.now() || echoUntil > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, sessionSecs: (Date.now() - sessionStart) / 1000 };
+  save.ctx = { gm: gmValid, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (floor.gmUntil || 0) > Date.now(), guild: !!myGuild, guildPct: gv2Info?.guild?.bonus_pct ?? null, decreePct: decreePctNow(), decree: gmValid || (floor.gmUntil || 0) > Date.now() || echoUntil > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, sessionSecs: (Date.now() - sessionStart) / 1000 };
   { const uh = unwrittenHour(save.ctx), ar = $('arena'); if (ar.classList.contains('unwritten') !== uh) { ar.classList.toggle('unwritten', uh); ar.title = uh ? 'The Unwritten Hour: +5% damage until the guardian falls' : ''; } }
   const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS), fx = effectsOf(save.heroes[0]);
   if (fx.has('whisper') && Date.now() - lastWhisper > 120000) { lastWhisper = Date.now(); log(WHISPERS[Math.floor(Math.random() * WHISPERS.length)], '#b9a8ff'); }
@@ -180,16 +183,17 @@ function render() {
 async function renderLb() {
   const h = save.heroes[0];
   let rows = await be.leaderboard(h.name); if (localStaffOnly()) rows = boardWithStaff([{ name: h.name, damage: localStaffDmg, staff: true }, ...(rows.players || rows).filter(r => r.name !== h.name && !r.staff)], null, 10); // local-only staff: shown, never sent
+  await refreshTags(); const badge = n => gv2On() && gTags[n] ? bannerBadge(gTags[n].banner, gTags[n].tag) : '';
   $('lb').innerHTML = rows.map(r => {
     const me = r.name === h.name, pr = me ? { title: titleOf(h), color: nameColorOf(h) } : fakeProfile(r.name);
     if (r.staff) return `<li class="staff" value="0"><small>${esc(wouldRankLabel(r))}</small><span class="gmname">${GM_SIGIL} ${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(me ? titleOf(h) : 'Tower Staff')}</span></li>`;
-    return `<li class="${me ? 'me' : ''}" value="${r.rank}"><span style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span>${me && r.rank > 3 ? '<div class="climb">Climb: Train, Forge and equip loot to raise DPS. Top 3 on a kill earns rare rewards.</div>' : ''}</li>`;
+    return `<li class="${me ? 'me' : ''}" value="${r.rank}">${badge(r.name)}<span style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span>${me && r.rank > 3 ? '<div class="climb">Climb: Train, Forge and equip loot to raise DPS. Top 3 on a kill earns rare rewards.</div>' : ''}</li>`;
   }).join('');
 }
 // ---- Town (safe zone of the current floor): inn + rotating shop
 function openTown() {
   const f = floor.floor, now = Date.now(), st = shopStock(f, now), h = save.heroes[0], c = innCost(f, save);
-  $('townTitle').textContent = `Town of Floor ${f}`;
+  $('townTitle').textContent = `Town of Floor ${f}`; renderHall();
   $('innkeeper').style.backgroundImage = sprite(npcGrid('innkeeper').rows, npcGrid('innkeeper').pal); $('merchant').style.backgroundImage = sprite(npcGrid('merchant').rows, npcGrid('merchant').pal);
   $('innInfo').innerHTML = `HP <b>${Math.round(heroHp(h))} / ${heroMaxHp(h)}</b>${isWorn(h) ? ' · <span class="bad">worn down</span>' : ''}`;
   $('restBtn').textContent = `Rest · ${fmt(c)}g`; $('restBtn').disabled = save.gold < c;
@@ -382,10 +386,15 @@ async function submitDmg(name, amount, hero) {
 // ---- Guilds (flag: FEATURES.guilds). +2% XP/gold for members; staff never owns one and adds nothing to a guild total.
 let myGuild = null, guildAll = false;
 const meArg = () => ({ name: save.heroes[0].name, staff: gmValid });
+let gv2Info = null; const gv2On = () => featureOn(FEATURES, 'guildsV2', gmValid) && !!be?.guildInfo;
+let gTags = {}, gTagsAt = 0; const tagBanner = tag => Object.values(gTags).find(x => x.tag === tag)?.banner;
+async function refreshTags() { if (!gv2On() || Date.now() - gTagsAt < 30000) return; gTagsAt = Date.now(); try { gTags = await be.guildTags(floor.floor) || {}; } catch {} }
 async function openGuild() {
+  if (gv2On() && !localStaffOnly()) { try { gv2Info = await be.guildInfo(); } catch (e) { gv2Info = null; } }
+  if (gv2Info?.guild) { $('guildSub').textContent = `· [${gv2Info.guild.tag}] ${gv2Info.guild.name}`; renderGuildV2(gv2Info, { be, save, el: $('guildBody'), name: save.heroes[0].name, canPost: (be.canChat?.() ?? true) && !localStaffOnly(), staff: gmValid, log: m => log(`System notice: ${m}`), refresh: async () => { myGuild = await be.myGuild(); if (save.ctx) save.ctx.guild = !!myGuild; render(); await openGuild(); } }); if (!$('guild').open) $('guild').showModal(); return; }
   const blocked = localStaffOnly() ? '<p class="sub">Local staff unlock: guilds need the server role (nothing is sent from this device).</p>' : '';
   let board = []; try { board = await be.guildBoard(guildAll); } catch {}
-  const rows = board.map(g => `<tr class="${myGuild?.id === g.id ? 'mine' : ''}"><td>${g.rank}</td><td>[${esc(g.tag)}] ${esc(g.name)}</td><td>${g.members}/${GUILD_CAP}</td><td>${fmt(g.damage)}</td>${!myGuild && !blocked ? `<td><button data-join="${esc(g.tag)}">Join</button></td>` : '<td></td>'}</tr>`).join('');
+  const rows = board.map(g => `<tr class="${myGuild?.id === g.id ? 'mine' : ''}"><td>${g.rank}</td><td>${gv2On() ? bannerBadge(g.banner, g.tag) : ''}[${esc(g.tag)}] ${esc(g.name)}${gv2On() && g.level ? ` <small class="sub">Lv ${g.level}${g.open === false ? ' · invite-only' : ''}</small>` : ''}</td><td>${g.members}/${gv2On() && g.level ? slotsOf(g.level) : GUILD_CAP}</td><td>${fmt(g.damage)}</td>${!myGuild && !blocked ? `<td><button data-join="${esc(g.tag)}">Join</button></td>` : '<td></td>'}</tr>`).join('');
   $('guildSub').textContent = myGuild ? `· [${myGuild.tag}] ${myGuild.name}` : '· none';
   $('guildBody').innerHTML = `${blocked}${myGuild ? `<p>You are in <b>[${esc(myGuild.tag)}] ${esc(myGuild.name)}</b>${myGuild.owner ? ' (founder)' : ''} · ${myGuild.members}/${GUILD_CAP} members.</p>
     <p class="sub">${gmValid ? 'Staff: no guild bonus, and your damage never counts toward the guild.' : `Guild bonus: +${GUILD_BUFF * 100}% XP and gold. It never changes damage, ranks or rewards.`}</p><button id="gLeave">Leave guild</button>`
@@ -395,7 +404,8 @@ async function openGuild() {
   const done = async (f, m) => { try { await f(); myGuild = await be.myGuild(); if (save.ctx) save.ctx.guild = !!myGuild; log(`System notice: ${m}`); openGuild(); } catch (e) { const el = $('gMsg'); if (el) el.textContent = e.message; else notice(e.message); } };
   if ($('gCreate')) $('gCreate').onclick = () => { const c = checkGuild($('gName').value, $('gTag').value); if (!c.ok) { $('gMsg').textContent = c.reason; return; } done(() => be.createGuild(c.name, c.tag, meArg()), `guild [${c.tag}] founded.`); };
   if ($('gLeave')) $('gLeave').onclick = () => done(() => be.leaveGuild(), 'you left the guild.');
-  $('guildBody').querySelectorAll('[data-join]').forEach(b => b.onclick = () => done(() => be.joinGuild(b.dataset.join, meArg()), `joined [${b.dataset.join}].`));
+  $('guildBody').querySelectorAll('[data-join]').forEach(b => b.onclick = () => done(async () => { const r = await be.joinGuild(b.dataset.join, meArg()); if (r?.requested) throw new Error(`[${b.dataset.join}] is invite-only: your request was sent to its officers.`); }, `joined [${b.dataset.join}].`));
+  if (gv2On() && gv2Info && !blocked) { $('guildBody').insertAdjacentHTML('afterbegin', invitesHtml(gv2Info)); $('guildBody').querySelectorAll('[data-ainv]').forEach(b => b.onclick = () => done(() => be.guildAcceptInvite(+b.dataset.ainv), 'invite accepted.')); $('guildBody').querySelectorAll('[data-dinv]').forEach(b => b.onclick = () => done(() => be.guildDeclineInvite(+b.dataset.dinv), 'invite declined.')); }
   $('gFloor').onclick = () => { guildAll = false; openGuild(); }; $('gAll').onclick = () => { guildAll = true; openGuild(); };
   if (!$('guild').open) $('guild').showModal();
 }
@@ -404,7 +414,7 @@ let chatLast = 0, chatFloor = null, chatTimer = null; const chatMsgs = [];
 const muted = () => JSON.parse(localStorage.getItem('logout.v1.muted') || '[]');
 function renderChat() {
   const mu = muted(), el = $('chatLog'), atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-  el.innerHTML = chatMsgs.filter(m => !mu.includes(m.author)).map(m => `<div class="msg ${m.author === 'me' || m.name === save.heroes[0].name ? 'me' : ''} ${m.is_staff ? 'staff' : ''}"><span class="mod"><button data-mute="${esc(m.author)}" title="Mute">Mute</button><button data-rep="${m.id}" title="Report">Report</button></span>${m.guild_tag ? `<span class="tag">[${esc(m.guild_tag)}]</span>` : ''}<b>${m.is_staff ? GM_SIGIL + ' ' : ''}${esc(m.name)}</b><time>${new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time><br>${esc(m.body)}</div>`).join('') || '<p class="sub">Quiet on this floor.</p>';
+  el.innerHTML = chatMsgs.filter(m => !mu.includes(m.author)).map(m => `<div class="msg ${m.author === 'me' || m.name === save.heroes[0].name ? 'me' : ''} ${m.is_staff ? 'staff' : ''}"><span class="mod"><button data-mute="${esc(m.author)}" title="Mute">Mute</button><button data-rep="${m.id}" title="Report">Report</button></span>${m.guild_tag ? `${gv2On() && tagBanner(m.guild_tag) ? bannerBadge(tagBanner(m.guild_tag), m.guild_tag) : ''}<span class="tag">[${esc(m.guild_tag)}]</span>` : ''}<b>${m.is_staff ? GM_SIGIL + ' ' : ''}${esc(m.name)}</b><time>${new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time><br>${esc(m.body)}</div>`).join('') || '<p class="sub">Quiet on this floor.</p>';
   if (atEnd) el.scrollTop = el.scrollHeight;
   el.querySelectorAll('[data-mute]').forEach(b => b.onclick = () => { localStorage.setItem('logout.v1.muted', JSON.stringify([...new Set([...muted(), b.dataset.mute])])); renderChat(); });
   el.querySelectorAll('[data-rep]').forEach(b => b.onclick = async () => { const id = +b.dataset.rep; try { await be.chatReport(id, 'player report'); } catch {} const i = chatMsgs.findIndex(m => m.id === id); if (i >= 0) chatMsgs.splice(i, 1); renderChat(); $('chatNote').textContent = 'Reported. Thanks: it is hidden for you, and for everyone after a few reports.'; });
@@ -485,4 +495,12 @@ async function openMap() {
     d.hidden = false; d.innerHTML = `<i class="mthumb" style='background-image:${bossSprite(r.f).replace(/'/g, '%27')}'></i><div><b>Floor ${r.f} · ${esc(r.name)}</b><br>${r.at ? `Fell ${esc(when(r.at))}` : 'Cleared (time not recorded)'}<br>${r.top ? `Top damage: ${esc(r.top)}` : 'Top damage: not recorded'}</div>`; };
   $('mapDetail').hidden = true; if (!$('map').open) $('map').showModal();
   requestAnimationFrame(() => { const t = $('mapTower'), c = t.querySelector('.fl.current'); if (c) t.scrollTop = c.offsetTop - t.offsetTop - t.clientHeight / 2; $('map').scrollTop = 0; }); // scroll the tower only, keep the progress panel in view
+}
+
+// ---- Guild Hall (Town room, guildsV2): cosmetic, grows with guild level and hall upgrades
+async function renderHall() {
+  const card = $('hallCard'); if (!gv2On() || !myGuild || localStaffOnly()) { card.hidden = true; return; }
+  try { gv2Info = await be.guildInfo(); } catch { gv2Info = null; } const g = gv2Info?.guild; if (!g) { card.hidden = true; return; }
+  card.hidden = false; $('hallTitle').textContent = `[${g.tag}] ${g.name} · Guild Hall`; $('hallArt').style.backgroundImage = hallArt(g.level, g.hall, g.banner);
+  $('hallInfo').textContent = `Guild level ${g.level} · hall upgrade ${g.hall}/5 · bonus +${g.bonus_pct}% XP & gold. Upgrades are bought with bank gold in the Guild panel.`;
 }

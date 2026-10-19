@@ -243,3 +243,19 @@ header{padding-top:max(14px,env(safe-area-inset-top))}main{padding-left:max(12px
 .mapdetail{display:flex;gap:10px;align-items:center;padding:8px;margin-bottom:8px;border:1px solid #a8822e;border-radius:4px;background:#2a1f0c;font-size:12px}
 .mthumb{width:56px;height:56px;flex:none;background-size:contain;background-repeat:no-repeat;background-position:center;image-rendering:pixelated}
 @media(max-width:640px){#dock{gap:0;padding-left:max(4px,env(safe-area-inset-left));padding-right:max(4px,env(safe-area-inset-right))}#dock .act{min-width:0;flex:1 1 0}#dock .rb{width:min(40px,8.6vw);height:min(40px,8.6vw);font-size:15px}#dock .act span{font-size:9px;max-width:100%;overflow:hidden;text-overflow:ellipsis}}
+/* Guilds v2 */
+.gbadge{display:inline-block;width:12px;height:16px;vertical-align:-3px;margin-right:4px;background-size:contain;background-repeat:no-repeat;image-rendering:pixelated}
+.gbadge.big{width:36px;height:48px;margin:0}.gbadge.huge{width:72px;height:96px;margin:0;flex:none}
+.ghead{display:flex;gap:10px;align-items:center;margin-bottom:6px}.ghead>div{flex:1}.gxp{height:8px;border:1px solid var(--line);border-radius:3px;background:#0b0620;overflow:hidden;margin-top:4px}.gxp i{display:block;height:100%;background:linear-gradient(90deg,#7ff6ff,#b98cff)}
+.role{font-size:10px;padding:1px 5px;border-radius:3px;border:1px solid #4b3a7a;color:#c9b8ff;text-transform:uppercase;letter-spacing:.06em}.role.r-leader{border-color:#ffd76a;color:#ffd76a}.role.r-officer{border-color:#7ff6ff;color:#7ff6ff}
+.gtabs{flex-wrap:wrap}.gtabs button{min-height:36px;padding:4px 10px}
+.gmem{width:100%;font-size:12px}.gmem td,.gmem th{padding:3px 4px}.gmem tr.mine{background:#ffffff0d}.gacts{display:flex;gap:4px;flex-wrap:wrap}.gacts button{min-height:30px;padding:2px 6px;font-size:11px}
+.greq,.gup{align-items:center;justify-content:space-between}.greq span,.gup span{flex:1}
+.gledger{max-height:180px;overflow-y:auto;font-size:12px;display:grid;gap:3px}.gledger .l-donate{color:#5cff8a}.gledger .l-spend{color:#ff9b3d}.gledger .l-quest{color:#7ff6ff}
+.gquest{border:1px solid var(--line);border-radius:4px;padding:6px 8px;margin:6px 0}.gquest.done{border-color:#5cff8a}.gquest.done b{color:#5cff8a}
+.gbanner{display:flex;gap:14px;align-items:flex-start}.sigils{display:grid;grid-template-columns:repeat(6,40px);gap:4px;margin-bottom:8px}
+.sig{position:relative;width:40px;height:46px;padding:3px;min-height:0}.sig i{display:block;width:100%;height:100%;background-size:contain;background-repeat:no-repeat;background-position:center;image-rendering:pixelated}.sig.on{border-color:#ffd76a;box-shadow:0 0 6px #ffd76a88}.sig .lk{position:absolute;right:1px;bottom:0;font-size:10px}.sig:disabled i{opacity:.35}
+.pal{display:flex;gap:4px;align-items:center;margin:4px 0;font-size:12px;flex-wrap:wrap}.sw{width:24px;height:24px;min-height:0;padding:0;border:2px solid #0006;border-radius:2px}.sw.on{border-color:#fff;box-shadow:0 0 0 1px #000}
+.ghall{width:100%;aspect-ratio:64/36;background-size:100% 100%;image-rendering:pixelated;border:1px solid var(--line);border-radius:4px;margin:6px 0}
+.ghallcard{grid-column:1/-1;margin-top:10px}.gchatlog{max-height:240px;min-height:140px}
+@media(max-width:640px){.gbanner{flex-direction:column}.sigils{grid-template-columns:repeat(6,1fr)}.sig{width:auto}}

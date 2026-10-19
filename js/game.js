@@ -32,7 +32,7 @@ const talentDpsMul = h => { const t = talentBonus(h), high = t.highHpDpsPct && h
 const goldMul = heroes => 1 + (gearBonus(heroes[0]).goldPct + talentBonus(heroes[0]).goldPct) / 100, xpMul = heroes => 1 + (gearBonus(heroes[0]).xpPct + talentBonus(heroes[0]).xpPct) / 100;
 /** Shaper's Decree: +5% gold/XP for everyone on a floor while a staff hero is fighting there (ctx.decree, set live or from the server floor state). */
 const decreeMul = save => save.ctx?.decree ? 1 + (save.ctx.decreePct || 5) / 100 : 1; // Final Decree / Collapse of Stars: 6%
-export const guildMul = save => save.ctx?.guild && !save.ctx?.gm ? 1 + GUILD_BUFF : 1; // guild members: XP and gold only (staff gets none)
+export const guildMul = save => save.ctx?.guild && !save.ctx?.gm ? 1 + (save.ctx.guildPct != null ? Math.min(5, save.ctx.guildPct) / 100 : GUILD_BUFF) : 1; // guild members: XP and gold only (staff gets none)
 export const offlineCap = (heroes, base = 12) => base + gearBonus(heroes[0]).capH + talentBonus(heroes[0]).capH;
 export const xpToNext = lvl => Math.round(50 * Math.pow(1.4, lvl - 1));
 export const levelCost = h => Math.round(40 * Math.pow(1.5, h.level - 1));
