@@ -1,15 +1,16 @@
 // 100-floor plan: hand-made bosses, reserved special slots, and a deterministic seeded generator. Pure (no DOM, no Math.random).
+import { RIVAL_NAME, RIVAL_TITLE } from './cutscenes.js';
 import { BOSSES, ARC2, ARC2_KEYS, SHAPES, ELEMENTS, ADDONS, composeShape, shadeShape } from './bosses.js';
 export const PLAN_FLOORS = 100;
 /** Milestones (10, 20, ... 100) and every floor 91-100 are reserved for special (hand-designed) bosses and are never generated. */
-// Floor 15 is the mid-arc special of the Clockspire (MID_SPECIALS); add more mid-arc specials here.
+// Floor 15 is the mid-arc special of Rimegear Ascent (MID_SPECIALS); add more mid-arc specials here.
 export const MID_SPECIALS = [15];
 export const isSpecialSlot = f => f % 10 === 0 || MID_SPECIALS.includes(f) || (f >= 91 && f <= PLAN_FLOORS);
 export const isMilestone = f => f % 10 === 0;
 // Floors 1-9 keep the original hand-made bosses; special slots use hand-made placeholders until real designs drop in.
 function fixedSlot(f) {
   if (f <= 9) return { kind: 'handmade', idx: f - 1 };
-  if (f >= 11 && f <= 20) return { kind: 'handmade', arc2: f - 11 }; // arc 2: The Frozen Clockspire (bosses.js ARC2)
+  if (f >= 11 && f <= 20) return { kind: 'handmade', arc2: f - 11 }; // arc 2: Rimegear Ascent (bosses.js ARC2)
   if (!isSpecialSlot(f)) return null;
   const idx = f === 10 || f === PLAN_FLOORS ? 9 : f > 90 ? f - 91 : f / 10 - 1; // 10 & 100: Last Warden; 20-90: bosses 2-9; 91-99: bosses 1-9
   return { kind: 'placeholder_special', idx };
@@ -52,6 +53,7 @@ function makeInfo(f) {
     while (addons.length < count) { const a = pick(r, allowed.filter(x => !addons.includes(x))); addons.push(a); }
     info = { floor: f, kind: 'generated', placeholder_special: false, base, element, addons, name: `${ADDONS[addons[0]]} ${ELEMENTS[element].adj} ${SHAPES[base].noun}`, big: !!SHAPES[base].big };
   }
+  if (f === PLAN_FLOORS) info = { ...info, name: RIVAL_NAME, rival: true, sealed: true, bossTitle: RIVAL_TITLE, element: 'native', native: 'void' }; // final guardian placeholder: design still sealed
   return { mech: null, lore: null, sig: [], finale: false, ...info, lootElement: info.element === 'native' ? (info.native || NATIVE_ELEMENT[info.base]) : info.element, title: info.bossTitle || `Guardian of Floor ${f}`, hp: floorBossHp(f), milestone: isMilestone(f) };
 }
 export const bossName = f => bossInfo(f).name;

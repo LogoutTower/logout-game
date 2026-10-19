@@ -10,8 +10,8 @@ export function towerRows({ current, maxFloor, history = [] }) {
     const state = f > maxFloor ? 'undiscovered' : f < current ? 'cleared' : f === current ? 'current' : 'fog';
     const known = state === 'cleared' || state === 'current', h = by.get(f);
     const arc = arcOf(f), known0 = f <= maxFloor;
-    rows.push({ f, state, special: isSpecialSlot(f), milestone: isMilestone(f), crown: f >= CROWN_FROM, arc: arc.n, arcName: known0 ? arc.name : 'Sealed', band: arc.pal.band, finale: known0 && !!bossInfo(f).finale,
-      name: known ? bossInfo(f).name : state === 'fog' ? '???' : 'Not yet discovered', at: state === 'cleared' ? h?.at || null : null, top: state === 'cleared' ? h?.top || null : null });
+    rows.push({ f, state, special: isSpecialSlot(f), milestone: isMilestone(f), crown: f >= CROWN_FROM, arc: arc.n, arcName: known0 ? arc.name : 'Sealed', band: arc.pal.band, finale: known0 && !!bossInfo(f).finale, rival: !!bossInfo(f).rival,
+      name: known ? bossInfo(f).name : bossInfo(f).rival ? 'Sealed · a shadow waits' : state === 'fog' ? '???' : 'Not yet discovered', at: state === 'cleared' ? h?.at || null : null, top: state === 'cleared' ? h?.top || null : null });
   }
   return rows;
 }

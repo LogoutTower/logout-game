@@ -15,11 +15,11 @@ for (const f of ALL) {
   else if (f > 9) assert.equal(i.kind, 'generated');
 }
 for (const f of [10, 20, 30, 40, 50, 60, 70, 80, 90, ...Array.from({ length: 10 }, (_, i) => 91 + i)]) assert(isSpecialSlot(f));
-assert.equal(bossInfo(100).name, 'The Last Warden');
+assert.equal(bossInfo(100).name, (await import('../js/cutscenes.js')).RIVAL_NAME); assert.ok(bossInfo(100).sealed); // final guardian placeholder (sprite still the Last Warden shape)
 // no adjacent repeats of base or element (generated neighbours)
 for (let f = 2; f <= PLAN_FLOORS; f++) { const a = bossInfo(f - 1), b = bossInfo(f); assert.notEqual(a.base, b.base, `floors ${f - 1}/${f} share base`); if (a.kind === 'generated' || b.kind === 'generated') assert.notEqual(a.element, b.element); }
 // generated names and titles
-for (const f of ALL) { const i = bossInfo(f); assert(i.name.length > 3); if (f < 11 || f > 20) assert.equal(i.title, `Guardian of Floor ${f}`); }
+for (const f of ALL) { const i = bossInfo(f); assert(i.name.length > 3); if ((f < 11 || f > 20) && f !== 100) assert.equal(i.title, `Guardian of Floor ${f}`); }
 // arc 2: unique bosses with title, element, lore, a signature mechanic and 1-2 signature drops; 15 special, 20 the big finale
 assert.equal(new Set(ARC2.map(b => b.name)).size, 10); assert.deepEqual(MID_SPECIALS, [15]); assert(isSpecialSlot(15) && isSpecialSlot(20) && !isSpecialSlot(16));
 for (let f = 11; f <= 20; f++) { const i = bossInfo(f); assert(i.title && !/Guardian of Floor/.test(i.title)); assert(/^System notice: /.test(i.lore)); assert(mechText(i.mech).length > 10, `mechanic ${f}`); assert(i.sig.length >= 1 && i.sig.length <= 2); assert(i.lootElement); }

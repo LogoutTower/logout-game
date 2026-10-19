@@ -19,6 +19,8 @@ import { enforceOneUnique, legendaryArmorPct, legendaryWeaponDps, rerollItem, ch
 import { cx, CODEX, isCodex } from './codex.js';
 import { galaxyTier, mountGalaxy } from './galaxy.js';
 import { unwrittenHour } from './game.js';
+import { playCutscene } from './cutscene-player.js';
+import { pendingCutscene, CUTSCENES } from './cutscenes.js';
 import { towerRows, towerProgress, TOWER_TOP } from './towermap.js';
 import { renderGuildV2, invitesHtml } from './guildpanel.js';
 import { bannerBadge, hallArt } from './banner.js';
@@ -120,7 +122,7 @@ function openWardrobe() {
 }
 async function startGame(fresh = false) {
   $('game').classList.remove('hidden');
-  floor = await be.getFloor(); arcCheck(); log(`${save.heroes[0].name} awoke on Floor ${floor.floor}. The guardian stirs.`); log('System notice: log out disabled.');
+  floor = await be.getFloor(); arcCheck(); csCheck(fresh); log(`${save.heroes[0].name} awoke on Floor ${floor.floor}. The guardian stirs.`); log('System notice: log out disabled.');
   if (fresh) { notice('Log out disabled'); setTimeout(() => notice(`Floor ${floor.floor} is open`), 900); } // no replayed notices on reload
   $('lvl').onclick = () => buy('level'); $('gear').onclick = () => buy('gear');
   initUI({ gear: () => $('gearSheet').showModal(), bag: openBag, talents: () => { talSel = null; openTalents(); }, wardrobe: openWardrobe, town: openTown, guild: openGuild });
@@ -155,7 +157,7 @@ async function sync() {
   const quiet = quietSync; quietSync = false; // clears that happened before this session are logged, not re-toasted
   if (r.advanced) { const f = r.floor - 1; log(`${bossName(f)} fell beneath many blades. The stair to Floor ${r.floor} lies open.`); log(`System notice: Floor ${r.floor} is open.`); floorCleared(f); setTimeout(() => notice(`Floor ${r.floor} is open`), 2400); codexFloorFell(f, r.floor); }
   handleClears(r.clears, quiet);
-  floor = await be.getFloor(); arcCheck(); gmFloorChecks(); await be.saveSave(save); render(); renderLb();
+  floor = await be.getFloor(); arcCheck(); csCheck(); gmFloorChecks(); await be.saveSave(save); render(); renderLb();
 }
 // ---- Arc scenes (js/arcs.js): one scene per 10 floors, per-floor tint toward the guardian's element.
 let sceneFor = 0;
@@ -168,6 +170,11 @@ function applyScene(f) {
 }
 const ELEMENT_GLOW = { fire: '#ff8a2e', frost: '#9fd8ff', void: '#9a5cff', storm: '#8aa8e8', venom: '#8ae04a', holy: '#f4e2a8', blood: '#e04a5a', shadow: '#5a5078' };
 // "Entering <arc>": once per device when the shared floor first reaches a new arc (silent on the very first visit).
+// Cutscenes: shown once per player (save.cutscenes), driven by the shared server floor; intro only for brand-new heroes.
+let csBusy = false;
+async function csCheck(fresh = false) { if (csBusy || !save || (navigator.webdriver && !localStorage.getItem('logout.v1.csTest'))) return; save.cutscenes = save.cutscenes || []; // automated runs opt in via logout.v1.csTest
+  const k = pendingCutscene(floor, MAX_FLOOR, save.cutscenes, { fresh }); if (!k) return;
+  csBusy = true; save.cutscenes.push(k); be.saveSave(save).catch(() => {}); await playCutscene(k); csBusy = false; csCheck(); }
 function arcCheck() { const a = arcIndex(floor.floor), k = 'logout.v1.arcSeen', seen = +localStorage.getItem(k) || 0;
   if (seen && a > seen) { const n = arcOf(floor.floor).name; log(`System notice: Entering ${n}.`, '#9fd8ff'); setTimeout(() => notice(`Entering ${n}`, '#9fd8ff'), 3200); }
   if (a > seen) localStorage.setItem(k, String(a)); }
@@ -277,7 +284,7 @@ const TOUR = [
   { t: 'Hero', x: 'Gear, Bag (boss loot), Talents and Wardrobe (cosmetic only). A dot means unspent talent points or a nearly full bag.', el: () => $('tabHero') },
   { t: 'One guardian, whole server', x: 'Everyone in the tower shares this boss. Top damage when it falls earns titles, name colours and other rewards. Tap the strip for the full board.', el: () => matchMedia('(min-width: 1000px)').matches ? $('side') : $('top3') },
   { t: 'Layers', x: 'The guardian\'s HP comes in layers: each diamond is one full HP bar. Break every layer to clear the floor and open the stair.', el: () => $('layers').closest('.gauge') },
-  { t: 'Arcs', x: `Every ten floors is an arc with its own scene: Floors 1–10 are ${arcOf(1).name}, 11–${MAX_FLOOR} climb ${arcOf(11).name}. Clockspire guardians each have a signature mechanic (the chip under your buffs) and 1–2 signature drops. Floor 15 is special; Floor 20 is the finale.`, el: () => $('floorBtn') },
+  { t: 'Arcs', x: `Every ten floors is an arc with its own scene: Floors 1–10 are ${arcOf(1).name}, 11–${MAX_FLOOR} climb ${arcOf(11).name}. Rimegear guardians each have a signature mechanic (the chip under your buffs) and 1–2 signature drops. Floor 15 is special; Floor 20 is the finale.`, el: () => $('floorBtn') },
   { t: 'More', x: 'Tower Map (or tap the floor up top), leaderboard, floor chat, your chronicle, System for sign-in and settings, and this guide.', el: () => $('tabMore') },
 ];
 let tourAt = -1;
@@ -395,6 +402,7 @@ function openSandboxUi() {
     $('sbBoss').style.backgroundImage = bossSprite(sbx.floor); $('sbName').textContent = `Floor ${sbx.floor} · ${bossInfoName(sbx.floor)}`;
     $('sbHp').textContent = `${fmt(sbx.hp)} HP`; $('sbItems').innerHTML = sbx.items.map(it => itemCard(it)).join('') || '<p class="sub">No test loot yet.</p>'; $('sbLog').textContent = sbx.log.slice(-3).join(' · '); };
   $('sbFloor').value = sbx.floor; $('sbFloor').oninput = () => { sandboxFloor(sbx, +$('sbFloor').value); $('sbNum').textContent = sbx.floor; draw(); }; $('sbNum').textContent = sbx.floor;
+  if ($('sbCs')) { $('sbCsSel').innerHTML = Object.keys(CUTSCENES).map(k => `<option value="${k}">${k === 'intro' ? 'Intro' : 'After arc ' + k}</option>`).join(''); $('sbCs').onclick = () => playCutscene($('sbCsSel').value); }
   $('sbFight').onclick = () => { sandboxFight(sbx, 10); draw(); }; $('sbLoot').onclick = () => { sandboxLoot(sbx, 3); draw(); }; $('sbUnique').onclick = () => { sandboxLoot(sbx, 1, [0, 0, 0, 0, 0, 1]); draw(); };
   let ed = $('sbEdit'); if (cx(save.heroes[0], 'cx-floorplan') && !ed) { ed = document.createElement('div'); ed.id = 'sbEdit'; ed.className = 'staffbox'; ed.innerHTML = `<b>Floorplan</b><label>HP × <input id="sbHpMul" type="number" min="0.1" max="10" step="0.1" value="1" style="max-width:80px"></label><select id="sbEl"><option value="">native element</option>${ELEMENTS.map(e => `<option>${e}</option>`).join('')}</select><button id="sbApply">Apply</button>`; $('sbLog').after(ed); }
   if ($('sbApply')) $('sbApply').onclick = () => { sandboxEdit(sbx, { hpMul: $('sbHpMul').value, element: $('sbEl').value || null }); sbx.log.push(`Floorplan: HP ×${sbx.edit.hpMul}${sbx.edit.element ? ', ' + sbx.edit.element : ''}`); draw(); };
@@ -539,10 +547,10 @@ async function openMap() {
   $('mapProg').innerHTML = `<div class="mprog"><b>Floor ${pr.floor} / ${pr.top}</b><span>${pr.cleared} cleared${heroes != null ? ` · ${heroes} hero${heroes === 1 ? '' : 'es'} on this floor` : ''}</span>
     <div class="bar"><i style="width:${pr.pct.toFixed(1)}%"></i></div><small>Tower ${pr.pct.toFixed(0)}% · guardian HP ${fmt(floor.hp)} / ${fmt(floor.maxHp)}</small>
     <div class="bar hp"><i style="width:${(pr.bossPct * 100).toFixed(1)}%"></i></div><p class="sub">Logout returns when Floor ${TOWER_TOP} falls.</p></div>`;
-  $('mapTower').innerHTML = rows.map(r => `${r.f === TOWER_TOP ? '<div class="crown" aria-hidden="true">♛</div>' : ''}${r.f % 10 === 0 ? `<div class="band" style="--band:${r.band}"><span>${r.f - 9}–${r.f}</span> ${esc(r.arcName)}</div>` : ''}<button class="fl ${r.state}${r.crown ? ' top' : ''}${r.special ? ' sp' : ''}${r.finale ? ' fin' : ''}" style="--band:${r.band}" data-f="${r.f}" ${r.state === 'cleared' ? '' : 'aria-disabled="true"'}>
-    <span class="fn">${r.f}</span><span class="fname">${esc(r.name)}${r.milestone && r.state !== 'undiscovered' ? ' <em>★</em>' : r.special && r.state !== 'undiscovered' ? ' <em>✦</em>' : ''}</span>
+  $('mapTower').innerHTML = rows.map(r => `${r.f === TOWER_TOP ? '<div class="crown" aria-hidden="true">♛</div>' : ''}${r.f % 10 === 0 ? `<div class="band" style="--band:${r.band}"><span>${r.f - 9}–${r.f}</span> ${esc(r.arcName)}${CUTSCENES[r.arc] && (save.cutscenes || []).includes(String(r.arc)) ? ` <button class="replay" data-cs="${r.arc}" title="Replay the ${esc(r.arcName)} cutscene">▶ Replay</button>` : ''}</div>` : ''}<button class="fl ${r.state}${r.crown ? ' top' : ''}${r.special ? ' sp' : ''}${r.finale ? ' fin' : ''}" style="--band:${r.band}" data-f="${r.f}" ${r.state === 'cleared' ? '' : 'aria-disabled="true"'}>
+    <span class="fn">${r.f}</span>${r.rival ? '<i class="shade" aria-hidden="true"></i>' : ''}<span class="fname">${esc(r.name)}${r.milestone && r.state !== 'undiscovered' ? ' <em>★</em>' : r.special && r.state !== 'undiscovered' ? ' <em>✦</em>' : ''}</span>
     <span class="fmeta">${r.state === 'cleared' ? (r.at ? `fell ${esc(when(r.at))}` : 'cleared') : r.state === 'current' ? `<b class="you">◆ You</b> ${Math.round(pr.bossPct * 100)}% HP` : ''}</span></button>`).join('');
-  $('mapTower').onclick = e => { const b = e.target.closest('button.fl.cleared'); if (!b) return; const r = rows.find(x => x.f === +b.dataset.f), d = $('mapDetail');
+  $('mapTower').onclick = e => { const rp = e.target.closest('button.replay'); if (rp) { $('map').close(); playCutscene(rp.dataset.cs).then(() => openMap()); return; } const b = e.target.closest('button.fl.cleared'); if (!b) return; const r = rows.find(x => x.f === +b.dataset.f), d = $('mapDetail');
     d.hidden = false; d.innerHTML = `<i class="mthumb" style='background-image:${bossSprite(r.f).replace(/'/g, '%27')}'></i><div><b>Floor ${r.f} · ${esc(r.name)}</b><br>${r.at ? `Fell ${esc(when(r.at))}` : 'Cleared (time not recorded)'}<br>${r.top ? `Top damage: ${esc(r.top)}` : 'Top damage: not recorded'}</div>`; };
   $('mapDetail').hidden = true; if (!$('map').open) $('map').showModal();
   requestAnimationFrame(() => { const t = $('mapTower'), c = t.querySelector('.fl.current'); if (c) t.scrollTop = c.offsetTop - t.offsetTop - t.clientHeight / 2; $('map').scrollTop = 0; }); // scroll the tower only, keep the progress panel in view

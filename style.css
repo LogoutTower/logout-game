@@ -338,3 +338,21 @@ nav.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:35;display:flex;justif
 #mapTower .fl{border-left:3px solid var(--band,transparent)}
 #mapTower .fl.fin .fname em{color:#ff4fd8}
 @media (prefers-reduced-motion:reduce){#arena .gear,#amb,#arena.finale::before{animation:none}}
+/* ---- cutscenes */
+#cutscene{position:fixed;inset:0;z-index:9999;background:#05030a;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;outline:none}
+#cutscene .cs-art{width:min(100vw,140vh);aspect-ratio:160/96;image-rendering:pixelated;max-height:70vh}
+#cutscene .cs-box{width:min(92vw,720px);margin-top:14px;border:1px solid #6a5aff88;background:#0c0818e6;padding:12px 16px;min-height:6.5em;font-family:monospace}
+#cutscene .cs-h{color:#9fd8ff;letter-spacing:.12em;text-transform:uppercase;font-size:11px}
+#cutscene .cs-t{color:#efeaff;font-size:16px;line-height:1.45;margin:.4em 0}
+#cutscene .cs-n{color:#8a80b0;font-size:11px}
+#cutscene .cs-skip{position:absolute;top:12px;right:12px;font:12px monospace;padding:6px 10px;background:#1a1030;color:#cfc6ff;border:1px solid #6a5aff}
+#cutscene.glitch .cs-art{animation:csg .32s steps(4)}
+@keyframes csg{0%{filter:hue-rotate(90deg) contrast(1.6);transform:translateX(3px)}50%{clip-path:inset(30% 0 40% 0);transform:translateX(-4px)}100%{filter:none;transform:none;clip-path:none}}
+@media (prefers-reduced-motion:reduce){#cutscene.glitch .cs-art{animation:none}}
+.band .replay{float:right;font-size:10px;padding:1px 6px;margin-left:6px}
+.fl .shade{display:inline-block;width:12px;height:16px;margin-right:6px;vertical-align:middle;background:#000;border-radius:6px 6px 2px 2px;box-shadow:0 0 6px #8a7aff}
+#cutscene.near .cs-h{color:#c79bff;text-shadow:2px 0 #ff4a6a,-2px 0 #5fc8ff}
+#cutscene.near:not(.rm) .cs-h{animation:csh 1.2s steps(2) infinite}@keyframes csh{50%{opacity:.6;transform:translateX(1px)}}
+@media (prefers-reduced-motion:reduce){#cutscene.near .cs-h{animation:none}}
+.fl .shade{width:12px;height:18px;background:radial-gradient(circle at 35% 38%,#c79bff 0 1px,transparent 2px),radial-gradient(circle at 65% 38%,#c79bff 0 1px,transparent 2px),linear-gradient(#2c1a4a,#07040c);border-radius:7px 7px 2px 2px;box-shadow:0 0 6px #8a5aff}
+#cutscene{width:100vw;height:100vh;max-width:none;max-height:none;margin:0;padding:0;border:0}#cutscene:not([open]){display:none}#cutscene::backdrop{background:#05030a}
