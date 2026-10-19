@@ -5,11 +5,10 @@
 import assert from 'node:assert'; import fs from 'node:fs';
 import { floorBossHp } from '../js/floors.js'; import { clearedArcs } from '../js/cutscenes.js';
 import { newHero, heroDps, xpToNext, levelCost, gearCost, computeProgress, levelCap, forgeCap, applyXp } from '../js/game.js';
-import { TONICS, tonicPrice } from '../js/sinks.js'; import { dailyGold } from '../js/daily.js';
+import { TONICS, tonicPrice } from '../js/sinks.js'; import { SHOP, memorialPrice } from '../js/prestige.js'; import { dailyGold } from '../js/daily.js';
 let PGlite; try { ({ PGlite } = await import('@electric-sql/pglite')); } catch { console.log('pglite not installed, rehearsal skipped'); process.exit(0); }
 const N = +(process.argv[2] || 100), HOURS = +(process.argv[3] || 20), STEP = 1800; // 30-minute rounds
-export const ADDENDA = ['schema.sql', 'schema-addendum-guilds-chat.sql', 'schema-addendum-guilds-v2.sql', 'schema-addendum-staff-guild.sql', 'schema-addendum-floor-zero.sql',
-  'schema-addendum-floors-11-20.sql', 'schema-addendum-arc1-pacing.sql', 'schema-addendum-turnout-scaling.sql', 'waitlist.sql', 'waitlist-count.sql', 'schema-addendum-open-chat.sql', 'schema-addendum-egress.sql', 'schema-addendum-caps.sql', 'schema-addendum-daily.sql'];
+import { ADDENDA } from './addenda.mjs'; export { ADDENDA };
 const db = new PGlite();
 await db.exec(`create schema auth; create table auth.users (id uuid primary key, is_anonymous boolean default true, email text);
   create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
@@ -31,10 +30,23 @@ const st = async () => (await db.query(`select floor, hp::bigint hp, max_hp::big
 // Hero model (same as docs/BALANCE-FLOORS-11-20.md): fresh Lv 1, spends gold greedily, loot ×1.25, efficiency 0.7, realism 0.6.
 const heroes = []; const EFF = 0.7 * 1.25 * 0.6;
 const sinks = { tonic: 0, spent: 0 }, daily = { claims: 0, maxDay: 0, gold: 0 };
-const grow = (h, cap, f) => { const ins = h.ins > 0 ? 1.1 : 1; h.ins = Math.max(0, (h.ins || 0) - STEP); const d = heroDps(h.h) * EFF * STEP; h.gold += d * 0.1 / 0.6; applyXp([h.h], Math.floor(d * 0.05 / 0.6 * ins), cap); // level cap: floor + 10
+const grow = (h, cap, f) => { const ins = h.ins > 0 ? 1.1 : 1, pk = h.perk || {}; h.ins = Math.max(0, (h.ins || 0) - STEP); const d = heroDps(h.h) * EFF * STEP * (1 + (pk.dpsPct || 0) / 100); h.gold += d * 0.1 / 0.6 * (1 + (pk.goldPct || 0) / 100); applyXp([h.h], Math.floor(d * 0.05 / 0.6 * ins * (1 + (pk.xpPct || 0) / 100)), cap); // pet perks (best owned pet) // level cap: floor + 10
   const fc = forgeCap(f); // forge cap: floor + 8. Spare gold at both caps buys a Tonic of Insight (a gold sink with no combat power)
   for (;;) { const lc = h.h.level < cap ? levelCost(h.h) : Infinity, gc = h.h.gear < fc ? gearCost(h.h) : Infinity; const tp = tonicPrice(TONICS[0], f);
-    if (lc === Infinity && gc === Infinity && h.gold >= tp && !(h.ins > 0)) { h.gold -= tp; h.ins = 1800; sinks.tonic++; sinks.spent += tp; continue; } if (Math.min(lc, gc) > h.gold) break; if (lc <= gc) { h.gold -= lc; h.h.level++; } else { h.gold -= gc; h.h.gear++; } } return Math.floor(d); };
+    if (lc === Infinity && gc === Infinity && h.gold >= tp && !(h.ins > 0)) { h.gold -= tp; h.ins = 1800; sinks.tonic++; sinks.spent += tp; continue; } if (Math.min(lc, gc) > h.gold) { h.next = Math.min(lc, gc); break; } if (lc <= gc) { h.gold -= lc; h.h.level++; } else { h.gold -= gc; h.h.gear++; } } h.atCaps = h.h.level >= cap && h.h.gear >= fc; if (h.atCaps) h.next = 0; return Math.floor(d); };
+// Late-game shop (server RPCs, gold from the saved game): one purchase per hero per round. Collectors (COLLECTORS share, default 25%) spend
+// anything above two tonics; everyone else only gold beyond twice their next level/forge step.
+const shop = { spent: 0, n: 0, byKind: {}, pets: 0, refused: 0 }; const WANT = ['tok-reroll', 'mem', 'egg-arc1', 'tr-arc1', 'egg-arc2', 'pt-patron', 'sk-stonekeep', 'tr-arc2', 'tok-rename', 'pt-benefactor', 'sk-clockfrost', 'pt-lantern'];
+const COLLECT = +(process.env.COLLECTORS ?? 0.25); // share of heroes who buy cosmetics before their next forge step (the rest only buy from true surplus)
+const shopRound = async (h, f) => { const collector = (+h.name.slice(4) % 100) < COLLECT * 100, keep = Math.max(2 * tonicPrice(TONICS[0], f), collector ? 0 : 2 * (h.next === Infinity ? 0 : h.next || 0)); h.bought ||= {}; h.carved ||= {};
+  for (const w of WANT) { const it = SHOP.find(i => i.id === w), mf = f - 1, price = w === 'mem' ? memorialPrice(mf) : it.price; if (w === 'mem' ? (mf < 1 || h.carved[mf]) : (it.kind === 'egg' ? (h.bought[w] || 0) >= 3 : it.kind !== 'token' && h.bought[w]) || (it.kind === 'token' && h.bought[w] >= 1)) continue;
+    if (w !== 'mem' && (it.kind === 'trophy' ? f <= it.arc * 10 : f < (it.arc - 1) * 10 + 1)) continue; if (h.gold - keep < price * (it?.step ? 1.6 : 1)) return; // a prestige price may have climbed
+    await db.exec(`insert into public.saves (user_id, data) values ('${h.uid}', jsonb_build_object('gold', ${Math.floor(h.gold)})) on conflict (user_id) do update set data = jsonb_set(saves.data, '{gold}', to_jsonb(${Math.floor(h.gold)}::bigint))`);
+    const r = w === 'mem' ? await as(h.uid, `select public.memorial_carve($1, $2) r`, [mf, h.name], 'memorial_carve') : await as(h.uid, `select public.shop_buy($1) r`, [w], 'shop_buy'); if (!r) { shop.refused++; return; }
+    const g = Number(r[0].r.gold), paid = Math.floor(h.gold) - g; h.gold = g; shop.spent += paid; shop.n++; const k = w === 'mem' ? 'memorial' : it.kind; shop.byKind[k] = (shop.byKind[k] || 0) + paid; if (w === 'mem') h.carved[mf] = 1; else h.bought[w] = (h.bought[w] || 0) + 1; if (r[0].r.pet) shop.pets++; return; } };
+const perkRound = async () => { const rows = (await db.query(`select user_id, perk_k, max(perk_v)::float8 v from public.pets group by 1, 2`)).rows, best = {}; // one active pet: the hero follows its best gold/XP/DPS pet
+  for (const r of rows) { const sc = r.perk_k === 'goldPct' || r.perk_k === 'xpPct' ? r.v : r.perk_k === 'dpsPct' ? r.v * 2 : 0; if (sc > (best[r.user_id]?.sc || 0)) best[r.user_id] = { sc, [r.perk_k]: r.v }; }
+  for (const h of heroes) h.perk = best[h.uid] || null; };
 // waitlist signups before launch (the landing page counter)
 for (let i = 0; i < 40; i++) await as(null, `select public.join_waitlist($1)`, [`p${i}@example.test`], 'join_waitlist');
 const wl = await as(null, `select public.waitlist_count() c`, [], 'waitlist_count');
@@ -47,6 +59,7 @@ for (let step = 0; t < HOURS * 3600; step++, t += STEP) {
   await shift(STEP);
   const fNow = (await st()).floor, cap = levelCap(fNow); for (const h of heroes) { const dmg = grow(h, cap, fNow); const r = await as(h.uid, `select public.tick($1, $2, $3, $4, $5) r`, [dmg, h.name, h.h.level, h.h.gear, h.seen || 0], 'tick'); // the client's one call per flush
     if (r) { const s = r[0].r; if (s.dl) { daily.claims++; daily.maxDay = Math.max(daily.maxDay, s.dl.d); const g = dailyGold(s.dl.d, fNow); h.gold += g; daily.gold += g; } for (const c of s.cl || []) h.seen = Math.max(h.seen || 0, c[0]); const row = await st(); assert.equal(Number(s.mx), Number(row.max_hp), 'tick returns the stored (scaled) max_hp'); } }
+  for (const h of heroes) await shopRound(h, fNow); await perkRound();
   // social: guilds early, chat each round, reads
   if (step === 1 || step === 4) for (const h of heroes) { if (h.g) continue; const k = +h.name.slice(4);
     if (k % 25 === 1) { h.g = await as(h.uid, `select public.guild_create($1, $2) r`, [`Guild ${k}`, `G${k}`], 'guild_create'); h.tag = `G${k}`; }
@@ -116,9 +129,10 @@ console.error('clears', JSON.stringify(clears));
   assert.equal(ds.open, false); assert.equal(ds.saves, 1);
   assert.equal(await as(u, `select public.daily_claim($1)`, [u], 'daily_probe'), null, 'clients cannot call daily_claim directly'); stats.errors--; }
 const fin = await st(); const probe = Object.entries(stats.errByMsg).filter(([k]) => k.startsWith('chat_gate_probe')).reduce((s, [, v]) => s + v, 0);
-const out = { daily, sinks, gear: heroes.slice(0, 3).map(h => [h.h.level, h.h.gear]), heroes: N, clears, turnout, arcEvents, surge, waitlist: wl?.[0]?.c, final: fin, calls: stats.calls, errors: stats.errors - probe, expectedProbeErrors: probe,
+const spare = heroes.reduce((a, h) => a + h.gold, 0) / heroes.length; shop.spareAvg = Math.round(spare); shop.nextStepAvg = Math.round(heroes.reduce((a, h) => a + (h.next || 0), 0) / heroes.length); shop.petsOwned = (await db.query(`select count(*)::int c from public.pets`)).rows[0].c;
+const out = { daily, sinks, shop, gear: heroes.slice(0, 3).map(h => [h.h.level, h.h.gear]), heroes: N, clears, turnout, arcEvents, surge, waitlist: wl?.[0]?.c, final: fin, calls: stats.calls, errors: stats.errors - probe, expectedProbeErrors: probe,
   errorRate: +((stats.errors - probe) / stats.calls * 100).toFixed(2), errByMsg: stats.errByMsg, bytes: stats.bytes };
 if (process.env.REHEARSAL_JSON) fs.writeFileSync(process.env.REHEARSAL_JSON, JSON.stringify(out, null, 1));
-console.log(JSON.stringify({ daily, sinks, gear: out.gear, heroes: N, floor10At: clears.find(c => c.floor === 10)?.h, clears: clears.map(c => `${c.floor}@${c.h}h`).join(' '), errorRate: out.errorRate, errByMsg: out.errByMsg, arcEvents, surge }));
+console.log(JSON.stringify({ daily, sinks, shop, gear: out.gear, heroes: N, floor10At: clears.find(c => c.floor === 10)?.h, clears: clears.map(c => `${c.floor}@${c.h}h`).join(' '), errorRate: out.errorRate, errByMsg: out.errByMsg, arcEvents, surge }));
 assert(fin.floor >= 11 || HOURS < 18, 'reached floor 11'); assert(out.errorRate < 1, 'RPC error rate under 1%');
 console.log('rehearsal ok');

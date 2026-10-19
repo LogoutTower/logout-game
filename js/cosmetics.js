@@ -1,4 +1,5 @@
 // Cosmetics: catalog, unlock rules, save migration, layered sprite grids. Pure (no DOM). No stat effects.
+import { SHOP } from './prestige.js';
 export const SAVE_VERSION = 5;
 const I = (id, type, label, value, unlock = null, extra = {}) => ({ id, type, label, value, unlock, ...extra });
 export const CATALOG = [
@@ -116,7 +117,7 @@ export function migrateSave(s) {
   for (const h of s.heroes || []) h.look = { ...defaultLook(h.cls), ...(h.look || {}) }; // repair partial looks on any version
   return s;
 }
-export const titleOf = h => byId(h.look.title).value;
+export const titleOf = h => (h.look.ptitle && SHOP.find(i => i.id === h.look.ptitle && i.kind === 'prestige')?.label) || byId(h.look.title).value; // bought prestige title wins
 export const nameColorOf = h => byId(h.look.nameColor).value;
 // Deterministic fake profiles for simulated players.
 export function fakeProfile(name) {
@@ -149,6 +150,11 @@ const GM_GRID = [ // hooded long coat, face in full shadow with two faint cyan g
 const GM_KATANA = [[14,0,'K'],[14,1,'K'],[15,1,'y'],[14,2,'K'],[14,3,'K'],[15,3,'y'],[14,4,'K'],[14,5,'K'],[15,5,'y'],[14,6,'K'],[14,7,'K'],[13,8,'y'],[14,8,'y'],[15,8,'y'],[14,9,'b'],[14,10,'b']]; // single void katana, gold spine + guard
 /** Returns {rows: 32 strings of 32 chars, pal: char->colour} for a look + class. */
 export const heroGrid = (look, cls) => { const g = heroGrid16(look, cls); return shade(g.rows, g.pal, { flat: cls === GM_CLASS ? 'fmvcy' : 'fm' }); };
+// Shop hero skins (owned server-side, see js/prestige.js): a palette plus a few arc-themed details over any look.
+export const SKINS = {
+  'sk-stonekeep': { pal: { O: '#8d8798', T: '#d9c48a', H: '#6d6878', W: '#cfd3dc', g: '#4b4656' }, draw: (set, fill) => { fill(3, 12, 2, 3, 'H'); fill(4, 11, 1, 1, 'H'); [5, 7, 8, 10].forEach(x => set(x, 4, 'H')); set(7, 3, 'T'); set(8, 3, 'T'); [5, 10].forEach(x => set(x, 11, 'g')); set(7, 12, 'g'); set(8, 13, 'g'); } }, // stone helm with gold crest, cracked plate
+  'sk-clockfrost': { pal: { O: '#7fd6ff', T: '#c9a25a', H: '#e8fbff', W: '#bff3ff', g: '#5d4a2b' }, draw: (set, fill) => { [[7, 11], [8, 11], [7, 12], [8, 12]].forEach(([x, y]) => set(x, y, 'T')); set(6, 11, 'g'); set(9, 12, 'g'); [4, 6, 9, 11].forEach(x => set(x, 1, 'H')); set(3, 10, 'T'); set(12, 10, 'T'); } }, // frost suit, brass gear on the chest, ice spikes
+};
 export function heroGrid16(look, cls) {
   if (cls === GM_CLASS) { const g = GM_GRID.map(r => [...r]); for (const [x, y, c] of GM_KATANA) g[y][x] = c;
     return { rows: g.map(r => r.join('')), pal: { k: '#05030a', O: '#17131f', T: '#d9a93f', v: '#030106', c: '#5ff6ff', K: '#0a0710', y: '#ffd76a', b: '#241c30' } }; }
@@ -169,7 +175,9 @@ export function heroGrid16(look, cls) {
   if (cls === 'Blade') { [[4, 9], [3, 9], [2, 10], [1, 10], [1, 11], [0, 12]].forEach(([x, y]) => set(x, y, 'r')); } // trailing scarf
   if (cls === 'Arcanist' && hair !== 'hood' && hair !== 'crown') { set(10, 0, 'O'); set(11, 0, 'O'); fill(7, 9, 1, 1, 'O'); fill(5, 10, 2, 2, 'T'); fill(2, 13, 3, 3, 'O'); } // soft pointed hat
   for (const [x, y, c] of WEAPONS[byId(look.weapon).value] || []) set(x, y + HAND_DY, c);
+  const sk = SKINS[look.skinSet]; if (sk) sk.draw(set, fill);
   const pal = { k: '#12062a', e: '#12062a', f: '#2a1d45', m: '#ff8fa8', r: '#ff3355', b: '#3a2a55', y: '#ffd84f', p: '#ff4fd8', S: byId(look.skin).value, H: byId(look.hairColor).value,
     O: byId(look.outfitColor).value, T: byId(look.trim).value, W: byId(look.weaponColor).value, w: '#6b4a2b' };
+  if (sk) Object.assign(pal, sk.pal);
   return { rows: g.map(r => r.join('')), pal };
 }

@@ -3,6 +3,7 @@ import { floorBossHp } from './game.js';
 import { boardWithStaff } from './ranks.js';
 import { GUILD_CAP, checkGuild, guildBoard } from './guilds.js';
 import { localGuildV2 } from './guildlocal.js';
+import { localShop } from './shoplocal.js';
 import { slotsOf, levelOf, ZERO_BANNER } from './guildsv2.js';
 import { cleanChat, CHAT_SLOW_MS, CHAT_KEEP } from './chatfilter.js';
 import { MAX_FLOOR, SUPABASE_URL, SUPABASE_ANON_KEY, FEATURES } from '../config.js';
@@ -100,4 +101,4 @@ export async function makeBackend() {
   const b = new LocalBackend(); b.fallback = reason; await b.init(); return b;
 }
 
-Object.assign(LocalBackend.prototype, localGuildV2);
+Object.assign(LocalBackend.prototype, localGuildV2, localShop);

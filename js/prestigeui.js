@@ -1,0 +1,45 @@
+// Late-game shop UI pieces (Goods tab sections, pet sprites, hall decor, memorial wall). Pure string builders; main.js wires them.
+import { SHOP, DECOR, PETS, PET_GRIDS, PERK_LABEL, PET_RARITY, memorialPrice, prestigePrice, EQUINOX, ECLIPSE, MEMORIAL_SHOW } from './prestige.js';
+import { sprite } from './sprites.js';
+import { rarityOf } from './loot.js';
+const cache = new Map();
+export const petSprite = sp => { if (!cache.has(sp)) { const p = PETS.find(x => x.sp === sp); cache.set(sp, sprite(PET_GRIDS[sp], { a: p.c[0], b: p.c[1], c: '#3a2a55', e: '#12062a' })); } return cache.get(sp); };
+const HALF = { light: ['...aa...', '..abba..', '.abbbba.', 'abbebbba', 'abbbbbba', '.abbbba.', '..abba..', '...aa...'] };
+export const equinoxHalves = () => { if (!cache.has('eq')) cache.set('eq', [sprite(HALF.light, { a: '#ffe9a8', b: '#fff8e0', e: '#d9a93f' }), sprite(HALF.light, { a: '#7a3cff', b: '#1a0f2e', e: '#c9a0ff' })]); return cache.get('eq'); };
+/** Arena pet element HTML: the active pet bobbing at the hero's heel, or (staff only) Equinox's two orbiting halves. */
+export function petHtml(save, gm) {
+  if (gm && save.equinox) { const [l, d] = equinoxHalves(); return `<div class="eqx" title="${EQUINOX.label}"><i class="eqh lt" style="background-image:${l.replace(/"/g, '&quot;')}"></i><i class="eqh dk" style="background-image:${d.replace(/"/g, '&quot;')}"></i><i class="mote m1"></i><i class="mote m2"></i><i class="mote m3"></i></div>`; }
+  const p = (save.pets || []).find(x => x.id === save.activePet); if (!p || !PET_GRIDS[p.sp]) return '';
+  return `<div class="petbob r-${p.rarity}" style="background-image:${petSprite(p.sp).replace(/"/g, '&quot;')};--rc:${rarityOf(p.rarity).color}" title="${p.uname || PETS.find(x => x.sp === p.sp).label}"></div>`;
+}
+export const eclipseOn = (t = Date.now()) => t % ECLIPSE.everyMs < ECLIPSE.forMs;
+const petName = p => p.uname || PETS.find(x => x.sp === p.sp)?.label || p.sp;
+/** Goods tab: condensed late-game sections. st = server shop_state (or null while loading). */
+export function shopHtml(st, save, f, { fmt, esc, gm }) {
+  const row = (l, s, btn) => `<div class="srow"><div><b>${l}</b><small>${s}</small></div>${btn}</div>`;
+  if (!st) return `<h3>Collector's Wing</h3><p class="sub">Loading the collector's stock…</p>`;
+  const owned = new Set(st.owned || []), arcF = st.arc || f, reached = a => arcF >= (a - 1) * 10 + 1, fell = a => arcF > a * 10, b = (attr, p, dis) => `<button ${attr} ${dis || save.gold < p ? 'disabled' : ''}>${fmt(p)}g</button>`;
+  const item = it => { const p = it.kind === 'prestige' ? Number(st.prices?.[it.id] ?? prestigePrice(it)) : it.price, has = owned.has(it.id);
+    const lock = it.kind === 'trophy' ? (!fell(it.arc) ? `after arc ${it.arc} falls` : '') : !reached(it.arc) ? `reach arc ${it.arc}` : '';
+    const tag = it.kind === 'token' ? ` · have ${st.tokens?.[it.id] || 0}` : it.kind === 'prestige' ? ' · price rises with every sale (all players)' : '';
+    const tokBtn = it.kind === 'token' && (st.tokens?.[it.id] || 0) > 0 ? `<button data-tok="${it.id}">Use</button>` : '';
+    const btn = tokBtn + (has ? (it.kind === 'prestige' ? `<button data-ptitle="${it.id}">${save.heroes[0].look.ptitle === it.id ? 'Remove' : 'Wear'}</button>` : it.kind === 'skin' ? `<button data-skin="${it.id}">${save.heroes[0].look.skinSet === it.id ? 'Remove' : 'Wear'}</button>` : '<button disabled>Owned</button>') : lock ? `<button disabled>${lock}</button>` : b(`data-shop="${it.id}"`, p));
+    return row(`${it.icon ? it.icon + ' ' : ''}${esc(it.label)}`, `${esc(it.desc || it.kind)}${tag}`, btn); };
+  const sec = (title, kinds, note = '') => `<details class="cwing"><summary>${title}</summary>${note}` + SHOP.filter(i => kinds.includes(i.kind)).map(item).join('') + '</details>';
+  const pets = (st.pets || []), act = save.activePet;
+  const petRows = pets.map(p => { const R = rarityOf(p.rarity); return `<div class="petcell ${p.id === act ? 'on' : ''}" style="--rc:${R.color}"><i style="background-image:${petSprite(p.sp).replace(/"/g, '&quot;')}"></i><b>${esc(petName(p))}</b><small style="color:${R.color}">${R.label}</small><small>${PERK_LABEL[p.perk.k](p.perk.v)}</small><button data-pet="${p.id}">${p.id === act ? 'Active' : 'Follow'}</button></div>`; }).join('');
+  const eq = gm ? `<div class="petcell staff ${save.equinox ? 'on' : ''}" style="--rc:#d9a93f"><i class="eqmini"></i><b>${EQUINOX.label}</b><small style="color:#d9a93f">Staff</small><small>${EQUINOX.abilities.map(esc).join('<br>')}</small><button data-equinox>${save.equinox ? 'Active' : 'Follow'}</button></div>` : '';
+  const carvable = Array.from({ length: Math.max(0, arcF) }, (_, i) => i + 1);
+  return `<h3>Collector's Wing <small>· cosmetic and prestige only</small></h3>`
+    + sec('Arc trophies', ['trophy']) + sec('Hero skins', ['skin'])
+    + `<details class="cwing" open><summary>Pets <small>· ${pets.length} owned · one follows you</small></summary><p class="sub">One passive perk each, by rarity (${PET_RARITY.map(r => `<span style="color:${rarityOf(r).color}">${rarityOf(r).label}</span>`).join(' · ')}). Found in eggs, the day-7 chest and rare floor-clear drops. Perks never pass the level or forge cap.</p>`
+    + `<div class="petgrid">${eq}${petRows || '<p class="sub">No pets yet.</p>'}</div></details>` + sec('Pet eggs', ['egg'])
+    + sec('Tokens', ['token']) + sec('Prestige titles', ['prestige'])
+    + `<details class="cwing"><summary>Floor memorials</summary><p class="sub">Carve a name on a floor's wall (once per floor, chat filters apply). The newest ${MEMORIAL_SHOW} show on the Tower Map.</p><div class="carve"><select id="carveF">${carvable.map(n => `<option value="${n}">Floor ${n} · ${fmt(memorialPrice(n))}g</option>`).join('')}</select><input id="carveN" maxlength="20" placeholder="Name to carve" value="${esc(save.heroes[0].name)}"><button data-carve>Carve</button></div></details>`;
+}
+export function decorHtml(list, { canBuy, staff, fmt, bank }) {
+  const have = new Set(list); const shown = DECOR.filter(d => have.has(d.id));
+  return `<div class="decor">${shown.map(d => `<span class="dc" title="${d.label}">${d.icon}</span>`).join('') || '<small>No decor yet.</small>'}</div>`
+    + (canBuy ? `<div class="decorbuy">${DECOR.filter(d => !have.has(d.id)).map(d => `<button data-decor="${d.id}" ${!staff && bank < d.price ? 'disabled' : ''}>${d.icon} ${d.label} · ${fmt(d.price)}g</button>`).join('')}</div><p class="sub">${staff ? 'Staff guild: paid from your own gold; prestige only.' : 'Paid from the guild bank (leader/officers). Prestige only.'}</p>` : '');
+}
+export const wallHtml = (names, esc) => `<div class="mwall"><b>Memorial wall</b>${names.length ? names.map(n => `<span>${esc(n)}</span>`).join('') : '<small>No names carved yet.</small>'}</div>`;

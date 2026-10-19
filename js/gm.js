@@ -70,6 +70,8 @@ export function sanitizeSave(save, valid) {
     for (const [k, it] of Object.entries(h.equip || {})) if (it && (it.gm || isGmId(it.id))) { h.equip[k] = null; changed = true; }
     for (const id of Object.keys(h.talents || {})) if (isCodexId(id)) { delete h.talents[id]; changed = true; } // Codex ranks are staff-only
   }
+  if (save.equinox) { delete save.equinox; changed = true; } // the staff pet (Equinox) is staff-only
+  if ((save.pets || []).some(p => p?.sp === 'equinox')) { save.pets = save.pets.filter(p => p?.sp !== 'equinox'); changed = true; }
   const n = (save.inv || []).length; save.inv = (save.inv || []).filter(it => !(it?.gm || isGmId(it?.id))); if (save.inv.length !== n) changed = true;
   return changed;
 }

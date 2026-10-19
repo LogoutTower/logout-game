@@ -142,6 +142,17 @@ export class SupabaseBackend {
   async guildSetRole(user, role) { return this._rpc('guild_set_role', { p_user: user, p_role: role }); }
   /** The server checks and deducts the gold from the cloud save, so push the current save first, then mirror the deduction locally. */
   async guildDonate(amount, save) { if (this.holdUploads) throw new Error('local staff unlock: nothing is sent'); await this._push(save); const r = await this._rpc('guild_donate', { p_amount: Math.floor(+amount) }); save.gold -= Math.floor(+amount); save.updatedAt = this.now(); await this._push(save); return r; }
+  // ---- Late-game shop (supabase/schema-addendum-shop.sql). The server prices, gates and takes the gold from the cloud save, so push first, then adopt its gold.
+  async shopState() { try { return await this._rpc('shop_state', {}); } catch { return null; } } // only when Goods / the pet panel opens
+  async _spendRpc(fn, args, save) { if (this.holdUploads) throw new Error('local staff unlock: nothing is sent'); await this._push(save); const r = await this._rpc(fn, args);
+    if (r && r.gold != null) { save.gold = Number(r.gold); save.updatedAt = this.now(); this.store.setItem(this.k + '.save', JSON.stringify(save)); } return r; }
+  async shopBuy(id, save) { return this._spendRpc('shop_buy', { p_id: id }, save); }
+  async memorialCarve(floor, name, save) { return this._spendRpc('memorial_carve', { p_floor: floor, p_name: name }, save); }
+  async tokenUse(kind, name, save) { const r = await this._rpc('token_use', { p_kind: kind, p_name: name || null }); if (kind === 'tok-rename' && r?.name) { save.heroes[0].name = r.name; save.updatedAt = this.now(); } return r; }
+  async petEquip(id) { return this._rpc('pet_equip', { p_pet: id }); }
+  async memorialWall(floor) { const sn = await this.snapshot(); if (sn?.mw) return sn.mw[floor] || []; try { const { data } = await this.sb.rpc('memorial_wall', { p_floor: floor }); return data || []; } catch { return []; } }
+  async decorList() { try { return (await this._rpc('guild_decor_list', {})) || []; } catch { return []; } }
+  async decorBuy(id, save) { return this._spendRpc('guild_decor_buy', { p_id: id }, save); }
   async guildUpgrade(kind) { return this._rpc('guild_upgrade', { p_kind: kind }); }
   async guildSetBanner(sigil, c1, c2) { return this._rpc('guild_set_banner', { p_sigil: sigil, p_c1: c1, p_c2: c2 }); }
   async guildChatFetch(after = 0) { const { data, error } = await this.sb.from('guild_messages').select('id, author, name, is_staff, body, at').gt('id', after).order('id', { ascending: true }).limit(50); return error ? [] : data || []; }

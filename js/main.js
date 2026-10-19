@@ -28,6 +28,8 @@ import { renderGuildV2, invitesHtml } from './guildpanel.js';
 import { bannerBadge, hallArt } from './banner.js';
 import { slotsOf, displayBanner, ZERO_BANNER, staffHall } from './guildsv2.js';
 import { itemIcon } from './icons.js';
+import { shopHtml, petHtml, decorHtml, wallHtml, eclipseOn } from './prestigeui.js';
+import { SHOP } from './prestige.js';
 import { sellPrice, sellable, toggleLock, sellItem, bulkPreview, sellBulk } from './town.js';
 const shownRarity = it => it?.gm ? 'unique' : it?.rarity; // staff items display as Unique (see gm.js)
 const ico = (it, cls = 'ico') => `<i class="${cls}${shownRarity(it) === 'unique' ? ' ushim' : ''}" style='background-image:${itemIcon(it).replace(/'/g, '%27')}' aria-hidden="true"></i>`;
@@ -133,11 +135,13 @@ async function startGame(fresh = false) {
   $('tabGuild').hidden = !featureOn(FEATURES, 'guilds', gmValid); $('chatBtn').hidden = !featureOn(FEATURES, 'chat', gmValid);
   $('topbar').classList.remove('hidden'); $('tabbar').classList.remove('hidden'); setInterval(badgePoll, 60000); setTimeout(badgePoll, 4000);
   ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => addEventListener(ev, () => be?.touch?.(), { passive: true })); addEventListener('pagehide', () => { try { if (be?._dirty) be._push(be._dirty); } catch {} });
+  if (gmValid && save.equinox === undefined) save.equinox = true; loadShop();
   setInterval(tick, 1000); setInterval(sync, 5000); render(); renderLb();
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
 function tick() {
   save.ctx = { gm: gmValid, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (floor.gmUntil || 0) > Date.now(), guild: !!myGuild && !myGuild.is_staff, guildPct: myGuild?.is_staff || gv2Info?.guild?.is_staff ? 0 : gv2Info?.guild?.bonus_pct ?? null, decreePct: decreePctNow(), decree: gmValid || (floor.gmUntil || 0) > Date.now() || echoUntil > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, mech: bossInfo(floor.floor).mech, sessionSecs: (Date.now() - sessionStart) / 1000 };
+  save.ctx.eclipse = gmValid && !!save.equinox && eclipseOn(); { const ec = save.ctx.eclipse, ar0 = $('arena'); if (ar0.classList.contains('eclipse') !== ec) ar0.classList.toggle('eclipse', ec); }
   { const uh = unwrittenHour(save.ctx), ar = $('arena'); if (ar.classList.contains('unwritten') !== uh) { ar.classList.toggle('unwritten', uh); ar.title = uh ? 'The Unwritten Hour: +5% damage until the guardian falls' : ''; } }
   const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS), fx = effectsOf(save.heroes[0]);
   if (fx.has('whisper') && Date.now() - lastWhisper > 120000) { lastWhisper = Date.now(); log(WHISPERS[Math.floor(Math.random() * WHISPERS.length)], '#b9a8ff'); }
@@ -160,7 +164,7 @@ async function sync() {
   const quiet = quietSync; quietSync = false; // clears that happened before this session are logged, not re-toasted
   if (r.advanced) { const f = r.floor - 1; log(`${bossName(f)} fell beneath many blades. The stair to Floor ${r.floor} lies open.`); log(`System notice: Floor ${r.floor} is open.`); floorCleared(f); setTimeout(() => notice(`Floor ${r.floor} is open`), 2400); codexFloorFell(f, r.floor); }
   handleClears(r.clears, quiet);
-  { const dl = r.daily || (be.name === 'local' ? localDaily(save) : null); if (dl) { const s = claimReward(save, dl.d, floor?.floor || r.floor || 1, { gm: gmValid, seq: save.lootSeq++ });
+  { const dl = r.daily || (be.name === 'local' ? localDaily(save) : null); if (dl) { const s = claimReward(save, dl.d, floor?.floor || r.floor || 1, { gm: gmValid, seq: save.lootSeq++ }); if (dl.d === 7) { if (be.name === 'local' && Math.random() < 0.5) be.petGrantLocal(Math.ceil((floor?.floor || 1) / 10), 'chest').then(loadShop); else setTimeout(loadShop, 3000); } // day-7 chest: 50% pet (server-rolled online)
       if (dl.sv && !dl.local) save.daily.saveMonth = new Date().toISOString().slice(0, 7);
       log(`System notice: daily reward, day ${dl.d} of 7 · ${s}.${dl.sv ? ' Streak save used.' : ''}`, '#ffd76a'); notice(`Day ${dl.d} reward · ${s}`, '#ffd76a'); setDot('dotMore', true, 'Daily reward claimed'); } }
   floor = await be.getFloor(); arcCheck(); csCheck(); gmFloorChecks(); await be.saveSave(save); render(); renderLb();
@@ -191,8 +195,15 @@ function buy(kind) {
   save.gold -= c; kind === 'level' ? h.level++ : h.gear++; log(kind === 'level' ? `${h.name} trained through the night and rose to level ${h.level}.` : `The forge rang out; ${h.name}'s gear was tempered to +${h.gear}.`);
   render(); be.saveSave(save);
 }
+// ---- Late-game shop state (server truth: shop_state); pets/perks are cached in the save, skins/titles only if owned.
+let shopSt = null, lastPet = null;
+async function loadShop() { const st = await be.shopState?.().catch(() => null); if (!st) return null; shopSt = st;
+  save.pets = (st.pets || []).map(p => ({ ...p, id: Number(p.id), perk: { k: p.perk.k, v: Number(p.perk.v) } })); save.activePet = st.active != null ? Number(st.active) : null;
+  const own = new Set(st.owned || []), lk = save.heroes[0].look; if (lk.skinSet && !own.has(lk.skinSet)) delete lk.skinSet; if (lk.ptitle && !own.has(lk.ptitle)) delete lk.ptitle;
+  render(); return st; }
 function render() {
   const h = save.heroes[0];
+  { const ph = petHtml(save, gmValid); if (ph !== lastPet) { $('pet').innerHTML = ph; lastPet = ph; } }
   $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; $('boss').style.backgroundImage = bossSprite(floor.floor); $('boss').classList.toggle('big', bossIsBig(floor.floor));
   const won = floor.floor >= MAX_FLOOR && floor.hp <= 0, waiting = !won && floor.hp <= 0, bi = bossInfo(floor.floor), arc = arcOf(floor.floor); applyScene(floor.floor);
   // end of content after the last open floor; 'waiting' = the server has not opened the next floor yet (e.g. its floor cap is still lower)
@@ -263,6 +274,19 @@ function openTown() {
 }
 
 // ---- Goods: gold sinks with no combat power (js/sinks.js): tonics, Tailor cosmetics, guild bank.
+async function shopClick(t, f) { const d = t.dataset, lk = save.heroes[0].look, done = async msg => { if (msg) notice(msg); await loadShop(); await be.saveSave(save); render(); openTown(); townPane?.('goods'); return true; };
+  try {
+    if (d.shop) { const it = SHOP.find(i => i.id === d.shop); const r = await be.shopBuy(d.shop, save); return done(r.pet ? `The egg hatched: ${r.pet.uname || r.pet.sp} (${r.pet.rarity})` : `Bought ${it.label} for ${fmt(r.price)}g`); }
+    if (d.skin) { lk.skinSet = lk.skinSet === d.skin ? undefined : d.skin; return done(); }
+    if (d.ptitle) { lk.ptitle = lk.ptitle === d.ptitle ? undefined : d.ptitle; return done(); }
+    if (d.pet) { const id = +d.pet, on = save.activePet === id ? null : id; await be.petEquip(on); save.equinox = false; return done(on ? 'Your pet follows you' : 'Pet sent home'); }
+    if (d.tok === 'tok-rename') { const n = prompt('New hero name (2-20 characters, chat filters apply):', save.heroes[0].name); if (!n) return true; const r = await be.tokenUse('tok-rename', n.trim(), save); return done(`Your hero is now ${r.name}`); }
+    if (d.tok === 'tok-reroll') { await be.tokenUse('tok-reroll', null, save); const h = save.heroes[0];
+      for (const slot of ['outfitColor', 'trim', 'hairColor', 'weaponColor']) { const opts = itemsFor(slot, h.cls).filter(i => isUnlocked(i, save.progress) && !/^gm|vesper/i.test(i.id)); if (opts.length) h.look[slot] = opts[Math.floor(Math.random() * opts.length)].id; } return done('Look re-rolled from your unlocked colours'); }
+    if (d.equinox !== undefined) { save.equinox = !save.equinox; return done(); }
+    if (d.carve !== undefined) { const fl = +$('carveF').value, n = $('carveN').value; const r = await be.memorialCarve(fl, n, save); return done(`Carved “${r.name}” on Floor ${fl}'s wall`); }
+  } catch (err) { notice(String(err.message || err)); return true; }
+  return false; }
 function renderGoods(f) {
   const own = save.progress?.drops || [], g = gv2Info?.guild;
   const row = (l, s, btn) => `<div class="srow"><div><b>${l}</b><small>${s}</small></div>${btn}</div>`;
@@ -271,7 +295,10 @@ function renderGoods(f) {
     TONICS.map(t => { const left = (save.buffs?.[t.id] || 0), p = gmValid ? 0 : tonicPrice(t, f); return row(esc(t.name), `${t.desc}${left ? ` · ${fmtDur(left)} left` : ''}`, `<button data-tonic="${t.id}" ${save.gold < p || left + 1800 > TONIC_MAX ? 'disabled' : ''}>${fmt(p)}g</button>`); }).join('') +
     `<h3>Tailor</h3>` + TAILOR.map(c => { const it = byId(c.id), has = own.includes(c.id); return row(esc(it.label), `${it.type === 'nameColor' ? 'Name tint' : it.type === 'title' ? 'Title' : 'Aura'}${has ? ' · owned (Wardrobe)' : ''}`, `<button data-tailor="${c.id}" ${has || save.gold < c.price ? 'disabled' : ''}>${has ? 'Owned' : `${fmt(c.price)}g`}</button>`); }).join('') +
     `<h3>Guild bank</h3>` + (g && !g.is_staff ? `<p class="sub">Gold for guild upgrades and banner unlocks (Guild → Bank).</p><div class="gdon">${DONATE_STEPS.map(s => `<button data-don="${s}" ${save.gold < 100 ? 'disabled' : ''}>${Math.round(s * 100)}% · ${fmt(Math.floor(save.gold * s))}g</button>`).join('')}</div>` : '<p class="sub">Join a guild to fund its bank and banner upgrades.</p>');
+  $('goodsBody').insertAdjacentHTML('beforeend', `<div id="shopWing">${shopHtml(shopSt, save, f, { fmt, esc, gm: gmValid })}</div>`);
+  if (!renderGoods.loading) { renderGoods.loading = true; loadShop().then(st => { renderGoods.loading = false; const w = $('shopWing'); if (st && w) w.innerHTML = shopHtml(st, save, f, { fmt, esc, gm: gmValid }); }); }
   $('goodsBody').onclick = async e => { const t = e.target.closest('button'); if (!t) return;
+    if (await shopClick(t, f)) return;
     if (t.dataset.tonic && buyTonic(save, f, t.dataset.tonic)) notice('Tonic active');
     else if (t.dataset.tailor && buyCosmetic(save, t.dataset.tailor)) notice(`Tailor · ${byId(t.dataset.tailor).label} added to your Wardrobe`);
     else if (t.dataset.don) { const n = Math.floor(save.gold * +t.dataset.don); if (n > 0 && confirm(`Donate ${fmt(n)} gold to the guild bank?`)) { try { await be.guildDonate(n, save); notice(`Donated ${fmt(n)}g to the guild bank`); } catch (err) { notice(`Not donated: ${err.message}`); } } }
@@ -580,15 +607,18 @@ async function openMap() {
     <span class="fn">${r.f}</span>${r.rival ? '<i class="shade" aria-hidden="true"></i>' : ''}<span class="fname">${esc(r.name)}${r.milestone && r.state !== 'undiscovered' ? ' <em>★</em>' : r.special && r.state !== 'undiscovered' ? ' <em>✦</em>' : ''}</span>
     <span class="fmeta">${r.state === 'cleared' ? (r.at ? `fell ${esc(when(r.at))}` : 'cleared') : r.state === 'current' ? `<b class="you">◆ You</b> ${Math.round(pr.bossPct * 100)}% HP` : ''}</span></button>`).join('');
   $('mapTower').onclick = e => { const rp = e.target.closest('button.replay'); if (rp) { $('map').close(); playCutscene(rp.dataset.cs).then(() => openMap()); return; } const b = e.target.closest('button.fl.cleared'); if (!b) return; const r = rows.find(x => x.f === +b.dataset.f), d = $('mapDetail');
-    d.hidden = false; d.innerHTML = `<i class="mthumb" style='background-image:${bossSprite(r.f).replace(/'/g, '%27')}'></i><div><b>Floor ${r.f} · ${esc(r.name)}</b><br>${r.at ? `Fell ${esc(when(r.at))}` : 'Cleared (time not recorded)'}<br>${r.top ? `Top damage: ${esc(r.top)}` : 'Top damage: not recorded'}</div>`; };
+    d.hidden = false; d.innerHTML = `<i class="mthumb" style='background-image:${bossSprite(r.f).replace(/'/g, '%27')}'></i><div><b>Floor ${r.f} · ${esc(r.name)}</b><br>${r.at ? `Fell ${esc(when(r.at))}` : 'Cleared (time not recorded)'}<br>${r.top ? `Top damage: ${esc(r.top)}` : 'Top damage: not recorded'}</div><div class="mwslot"></div>`; be.memorialWall?.(r.f).then(n => { const w = d.querySelector('.mwslot'); if (w) w.innerHTML = wallHtml(n || [], esc); }).catch(() => {}); };
   $('mapDetail').hidden = true; if (!$('map').open) $('map').showModal();
   requestAnimationFrame(() => { const t = $('mapTower'), c = t.querySelector('.fl.current'); if (c) t.scrollTop = c.offsetTop - t.offsetTop - t.clientHeight / 2; $('map').scrollTop = 0; }); // scroll the tower only, keep the progress panel in view
 }
 
 // ---- Guild Hall (Town room, guildsV2): cosmetic, grows with guild level and hall upgrades
+async function renderDecor(g) { const el = $('hallDecor'); if (!el) return; const list = await be.decorList?.().catch(() => []) || [], role = gv2Info?.me?.role;
+  el.innerHTML = decorHtml(list, { canBuy: role === 'leader' || role === 'officer', staff: !!g.is_staff, fmt, bank: Number(g.bank || 0) });
+  el.onclick = async e => { const b = e.target.closest('button[data-decor]'); if (!b) return; try { await be.decorBuy(b.dataset.decor, save); await be.saveSave(save); notice('Decor added to the hall'); renderHall(); } catch (err) { notice(String(err.message || err)); } }; }
 async function renderHall() {
   const card = $('hallCard'); if (!gv2On() || !myGuild || localStaffOnly()) { card.hidden = true; syncHall(); return; }
   try { gv2Info = await be.guildInfo(); } catch { gv2Info = null; } const g = gv2Info?.guild; if (!g) { card.hidden = true; syncHall(); return; }
   card.hidden = false; $('hallTitle').textContent = `[${g.tag}] ${g.name} · Guild Hall`; const hv = g.is_staff ? (g.hall_display ?? staffHall(g.level)) : g.hall; $('hallArt').style.backgroundImage = hallArt(g.level, hv, displayBanner(g.banner, g.is_staff));
-  syncHall(); $('hallInfo').textContent = g.is_staff ? `Prestige level ${g.level} · ${hv}/5 cosmetic hall pieces · Prestige only, no rewards.` : `Guild level ${g.level} · hall upgrade ${g.hall}/5 · bonus +${g.bonus_pct}% XP & gold. Upgrades are bought with bank gold in the Guild panel.`;
+  syncHall(); renderDecor(g); $('hallInfo').textContent = g.is_staff ? `Prestige level ${g.level} · ${hv}/5 cosmetic hall pieces · Prestige only, no rewards.` : `Guild level ${g.level} · hall upgrade ${g.hall}/5 · bonus +${g.bonus_pct}% XP & gold. Upgrades are bought with bank gold in the Guild panel.`;
 }
