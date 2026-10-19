@@ -50,15 +50,16 @@ Object.assign(LocalBackend.prototype, {
   _sg(g) { localStorage.setItem(this.k + '.guilds', JSON.stringify(g)); },
   async myGuild() { const g = this._g(), m = g.me && g.members.find(x => x.name === g.me); const gu = m && g.guilds.find(x => x.id === m.guild_id); return gu ? { ...gu, owner: gu.owner === g.me, members: g.members.filter(x => x.guild_id === gu.id).length } : null; },
   async guildBoard(all = false) { const w = this._w(), st = w.staff || {}, g = this._g(); return guildBoard(Object.entries(w.dmg).map(([name, damage]) => ({ name, damage, staff: !!st[name] })), g.members, g.guilds); },
-  async createGuild(name, tag, me) { const g = this._g(), c = checkGuild(name, tag); if (!c.ok) throw new Error(c.reason); if (me?.staff) throw new Error('staff cannot own a guild');
+  async createGuild(name, tag, me) { const g = this._g(), c = checkGuild(name, tag, !!me?.staff); if (!c.ok) throw new Error(c.reason); if (me?.staff && g.guilds.some(x => x.is_staff)) throw new Error('a staff guild already exists');
     if (g.members.some(x => x.name === me?.name)) throw new Error('already in a guild'); if (g.guilds.some(x => x.name.toLowerCase() === c.name.toLowerCase() || x.tag === c.tag)) throw new Error('name or tag taken');
-    const gu = { id: g.next++, name: c.name, tag: c.tag, owner: me.name }; g.guilds.push(gu); g.members.push({ name: me.name, guild_id: gu.id }); g.me = me.name; this._sg(g); return gu; },
+    const gu = { id: g.next++, name: c.name, tag: c.tag, owner: me.name, ...(me?.staff ? { is_staff: true, open: false } : {}) }; g.guilds.push(gu); g.members.push({ name: me.name, guild_id: gu.id, ...(me?.staff ? { is_staff: true, role: 'leader' } : {}) }); g.me = me.name; this._sg(g); return gu; },
   async joinGuild(tag, me) { const g = this._g(), gu = g.guilds.find(x => x.tag === String(tag).toUpperCase()); if (!gu) throw new Error('no such guild');
-    if (g.members.some(x => x.name === me?.name)) throw new Error('already in a guild'); this._gx(g, gu); if (!gu.open && !gu.invites.includes(me?.name)) { if (!gu.requests.some(r => r.name === me?.name)) gu.requests.push({ name: me?.name, at: new Date().toISOString() }); this._sg(g); return { ...gu, joined: false, requested: true }; }
+    if (g.members.some(x => x.name === me?.name)) throw new Error('already in a guild'); this._gx(g, gu); if (gu.is_staff && !gu.invites.includes(me?.name)) throw new Error('no such guild'); if (!gu.open && !gu.invites.includes(me?.name)) { if (!gu.requests.some(r => r.name === me?.name)) gu.requests.push({ name: me?.name, at: new Date().toISOString() }); this._sg(g); return { ...gu, joined: false, requested: true }; }
     if (g.members.filter(x => x.guild_id === gu.id).length >= slotsOf(levelOf(gu.xp))) throw new Error('guild is full'); gu.invites = gu.invites.filter(n => n !== me?.name);
     g.members.push({ name: me.name, guild_id: gu.id, is_staff: !!me.staff }); g.me = me.name; this._sg(g); return gu; },
   async leaveGuild() { const g = this._g(), m = g.members.find(x => x.name === g.me); if (!m) return; g.members = g.members.filter(x => x !== m); const gu = g.guilds.find(x => x.id === m.guild_id);
-    if (gu && gu.owner === g.me) { const heir = g.members.find(x => x.guild_id === gu.id && !x.is_staff); if (heir) gu.owner = heir.name; } if (!g.members.some(x => x.guild_id === m.guild_id)) g.guilds = g.guilds.filter(x => x.id !== m.guild_id); g.me = null; this._sg(g); },
+    if (gu?.is_staff && gu.owner === g.me) { g.members = g.members.filter(x => x.guild_id !== gu.id); }
+    else if (gu && gu.owner === g.me) { const heir = g.members.find(x => x.guild_id === gu.id && !x.is_staff); if (heir) gu.owner = heir.name; } if (!g.members.some(x => x.guild_id === m.guild_id)) g.guilds = g.guilds.filter(x => x.id !== m.guild_id); g.me = null; this._sg(g); },
   canChat() { return true; },
   _c() { return JSON.parse(localStorage.getItem(this.k + '.chat') || 'null') || { next: 1, msgs: [], last: 0, sim: 0 }; },
   async chatFetch(after = 0) { const f = this._w().floor, c = this._c(), now = Date.now(), g = this._g();

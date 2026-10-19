@@ -312,3 +312,4 @@ nav.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:35;display:flex;justif
  main{padding-bottom:110px}
 }
 @media (prefers-reduced-motion:reduce){dialog,.notice,.notice.bigsys{animation:none!important}.ftick b{transition:none}}
+.smark{color:#7fd4ff;margin:0 2px;font-weight:700;text-shadow:0 0 4px #2a8cc0}

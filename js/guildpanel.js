@@ -1,6 +1,7 @@
 // Guilds v2 panel (FEATURES.guildsV2): ranks, bank, quests, banner picker, guild chat. All actions go through the backend;
 // the server (or LocalBackend) re-checks every rule, the client only hides buttons the player can't use.
 import * as R from './guildsv2.js';
+import { STAFF_MARK } from './guilds.js';
 import { bannerIcon, bannerBadge, hallArt } from './banner.js';
 import { cleanChat } from './chatfilter.js';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
@@ -11,18 +12,19 @@ let tab = 'overview', draft = null, gchat = [], gchatLast = 0, gchatTimer = null
 export const setGuildTab = t => { if (TABS.includes(t)) tab = t; };
 /** Render the v2 panel for a member. ctx: { be, save, el, name, canPost, staff, refresh, log } */
 export function renderGuildV2(info, ctx) {
-  const g = info.guild, me = info.me, mgr = R.canManage(me.role), lead = me.role === 'leader', el = ctx.el;
+  const g = info.guild, me = info.me, sg = !!g.is_staff, tabs = sg ? TABS.filter(t => t !== 'bank' && t !== 'quests') : TABS, mgr = R.canManage(me.role), lead = me.role === 'leader', el = ctx.el;
+  if (!tabs.includes(tab)) tab = 'overview';
   if (gchatGuild !== g.id) { gchatGuild = g.id; gchat = []; gchatLast = 0; }
   const next = R.xpForLevel(g.level + 1), cur = R.xpForLevel(g.level), pct = g.level >= R.LEVEL_CAP ? 100 : Math.min(100, ((g.xp - cur) / (next - cur)) * 100);
-  const head = `<div class="ghead">${bannerBadge(g.banner, g.tag, 'gbadge big')}<div><b>[${esc(g.tag)}] ${esc(g.name)}</b> <small class="role r-${me.role}">${me.role}</small>
-    <div class="sub">Level ${g.level}${g.level >= R.LEVEL_CAP ? ' (max)' : ''} · ${info.members.length}/${g.slots} members · bank ${fmtN(g.bank)}g · ${g.open ? 'open' : 'invite-only'}</div>
-    <div class="gxp" title="${fmtN(g.xp)} guild XP"><i style="width:${pct.toFixed(1)}%"></i></div></div></div>
-    <div class="grow tabs gtabs">${TABS.map(t => `<button data-tab="${t}" aria-pressed="${tab === t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div><p class="sub" id="gMsg"></p>`;
+  const head = `<div class="ghead">${bannerBadge(g.banner, g.tag, 'gbadge big')}<div><b>[${esc(g.tag)}]${sg ? ` <span class="smark" title="Staff guild">${STAFF_MARK}</span>` : ''} ${esc(g.name)}</b> <small class="role r-${me.role}">${me.role}</small>
+    <div class="sub">${sg ? `Staff guild · ${info.members.length}/${g.slots} members · invite-only · private` : `Level ${g.level}${g.level >= R.LEVEL_CAP ? ' (max)' : ''} · ${info.members.length}/${g.slots} members · bank ${fmtN(g.bank)}g · ${g.open ? 'open' : 'invite-only'}`}</div>
+    ${sg ? '' : `<div class="gxp" title="${fmtN(g.xp)} guild XP"><i style="width:${pct.toFixed(1)}%"></i></div>`}</div></div>
+    <div class="grow tabs gtabs">${tabs.map(t => `<button data-tab="${t}" aria-pressed="${tab === t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div><p class="sub" id="gMsg"></p>`;
   let body = '';
-  if (tab === 'overview') body = `<p>${ctx.staff ? 'Staff: no guild bonus, and your damage, donations and quests never count for the guild.' : `Guild bonus: <b>+${g.bonus_pct}% XP and gold</b> (max ${R.MAX_BONUS}%). It never changes damage, ranks or rewards.`}</p>
-    <p class="sub">Guild XP comes from members' boss damage, counted by the server. Levels add member slots (up to ${R.MAX_SLOTS}) and banner sigils.</p>
+  if (tab === 'overview') body = `<p>${sg ? `${STAFF_MARK} Staff guild: no bonus · invite only. No guild XP, levels, quests or bank; hidden from the guild board.` : ctx.staff ? 'Staff: no guild bonus, and your damage, donations and quests never count for the guild.' : `Guild bonus: <b>+${g.bonus_pct}% XP and gold</b> (max ${R.MAX_BONUS}%). It never changes damage, ranks or rewards.`}</p>
+    ${sg ? '' : `<p class="sub">Guild XP comes from members' boss damage, counted by the server. Levels add member slots (up to ${R.MAX_SLOTS}) and banner sigils.</p>`}
     <div class="ghall" style='background-image:${hallArt(g.level, g.hall, g.banner)}' role="img" aria-label="Guild hall, upgrade ${g.hall} of 5"></div>
-    ${mgr ? `<div class="grow"><button id="gOpen">${g.open ? 'Make invite-only' : 'Open to everyone'}</button><input id="gInv" placeholder="Tower ID to invite" maxlength="40"><button id="gInvB">Invite</button></div>` : ''}
+    ${mgr ? `<div class="grow">${sg ? '' : `<button id="gOpen">${g.open ? 'Make invite-only' : 'Open to everyone'}</button>`}<input id="gInv" placeholder="Tower ID to invite" maxlength="40"><button id="gInvB">Invite</button></div>` : ''}
     ${mgr && info.requests.length ? `<h3>Join requests</h3>${info.requests.map(r => `<div class="grow greq"><span>${esc(r.name)} <small class="sub">${ago(r.at)}</small></span><button data-acc="${esc(r.user_id)}" class="cta">Accept</button><button data-deny="${esc(r.user_id)}">Deny</button></div>`).join('')}` : ''}
     <button id="gLeave">Leave guild</button>`;
   else if (tab === 'members') body = `<table class="gmem"><tr><th>Name</th><th>Rank</th><th>Damage</th><th>Seen</th><th></th></tr>${info.members.map(m => {
@@ -71,5 +73,5 @@ export function renderGuildV2(info, ctx) {
       try { const m = await ctx.be.guildChatPost(ctx.name, v); $q('#gChatIn').value = ''; if (m && !gchat.some(x => x.id === m.id)) { gchat.push(m); gchatLast = Math.max(gchatLast, m.id); } draw(); } catch (er) { $q('#gChatNote').textContent = er.message; } }; }
 }
 /** Invites for a player outside any guild. */
-export function invitesHtml(info) { return (info?.invites || []).map(i => `<div class="grow greq">${bannerBadge(i.banner, i.tag)}<span>Invite from <b>[${esc(i.tag)}] ${esc(i.name)}</b></span><button class="cta" data-ainv="${i.guild_id}">Accept</button><button data-dinv="${i.guild_id}">Decline</button></div>`).join('')
+export function invitesHtml(info) { return (info?.invites || []).map(i => `<div class="grow greq">${bannerBadge(i.banner, i.tag)}<span>Invite from <b>[${esc(i.tag)}] ${esc(i.name)}</b>${i.is_staff ? ` <small class="sub">${STAFF_MARK} Staff guild: no bonus · invite only</small>` : ''}</span><button class="cta" data-ainv="${i.guild_id}">Accept</button><button data-dinv="${i.guild_id}">Decline</button></div>`).join('')
   + (info?.requests || []).map(r => `<p class="sub">Request pending at [${esc(r.tag)}].</p>`).join(''); }

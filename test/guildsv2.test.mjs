@@ -43,7 +43,7 @@ await be.guildSetRole('Wren', 'leader'); I = await be.guildInfo(); assert.equal(
 // invite-only join → request; staff cannot create
 const be2 = new LocalBackend(); const gs = be2._g(); gs.me = null; gs.members = gs.members.filter(m => m.name !== 'Tess'); be2._sg(gs);
 const r = await be2.joinGuild('LW', { name: 'Tess', staff: false }); assert.equal(r.requested, true, 'invite-only: request');
-assert.match(await err(be2.createGuild('Staff Hall', 'SH', { name: 'Architect', staff: true })), /staff cannot own/);
+// staff founding (one private staff guild): test/staffguild.test.mjs
 // ---- Supabase wiring (mock): donate pushes the save first, then the RPC; the gold is mirrored locally
 { const { SupabaseBackend } = await import('../js/supabase.js'); const calls = []; const b = Object.create(SupabaseBackend.prototype);
   b.sb = { rpc: async (fn, args) => { calls.push([fn, args]); return { data: fn === 'guild_info' ? { guild: null, invites: [], requests: [] } : fn === 'guild_tags' ? { Tess: { tag: 'LW', banner: R.DEFAULT_BANNER } } : { ok: true }, error: null }; } };

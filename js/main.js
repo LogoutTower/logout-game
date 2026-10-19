@@ -8,7 +8,7 @@ import { treeOf, nodeById, canLearn, learn, freePoints, totalPoints, spentIn, re
 import { TRICKLE, trickleDrops, grantDrops, equipItem, salvageItem, salvageValue, rarityOf, statLabel, INV_SIZE, bagSize, GEAR_SLOTS } from './loot.js';
 import { GM_PASS_HASH, OFFLINE_CAP_HOURS, MAX_FLOOR, FEATURES, SOLANA_RPC, TOKEN_MINT, HOLDER_THRESHOLD } from '../config.js';
 import { featureOn } from './features.js';
-import { checkGuild, GUILD_CAP, GUILD_BUFF } from './guilds.js';
+import { checkGuild, GUILD_CAP, GUILD_BUFF, STAFF_GUILD, STAFF_MARK, guildError } from './guilds.js';
 import { cleanChat, CHAT_MAX } from './chatfilter.js';
 import { boardWithStaff, wouldRankLabel } from './ranks.js';
 import { gmGear, wearsVesperveil, STAFF_STAMP, VESPERVEIL, staffActive, GM_CLASS, GM_SIGIL, EVENTIDE, gmOn, checkPass, sanitizeSave, becomeGm, leaveGm, eventide, shouldAnnounce } from './gm.js';
@@ -74,7 +74,7 @@ async function boot() {
   if (save && sanitizeSave(save, gmValid)) { save = migrateSave(save); await be.saveSave(save); } // pasted staff ids are stripped
   if (!save) return showCreate();
   if (gmValid) save.heroes[0].hp = null; if (gmValid && save.heroes[0].cls === GM_CLASS) { const f = (await be.getFloor()).floor; gmGear(save, f, legendaryWeaponDps(f), legendaryArmorPct(f)); } // migrate older GM saves: Vesperveil lands in the armor slot // staff perk: always full HP
-  { const fl0 = await be.getFloor(), f0 = fl0.floor, bi = bossInfo(f0); myGuild = featureOn(FEATURES, 'guilds', gmValid) && !localStaffOnly() ? await be.myGuild?.().catch(() => null) : null; if (myGuild && gv2On()) gv2Info = await be.guildInfo().catch(() => null); save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid, guild: !!myGuild, bossPct: fl0.maxHp ? fl0.hp / fl0.maxHp : 1, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (fl0.gmUntil || 0) > Date.now() }; } // offline maths sees the same floor context
+  { const fl0 = await be.getFloor(), f0 = fl0.floor, bi = bossInfo(f0); myGuild = featureOn(FEATURES, 'guilds', gmValid) && !localStaffOnly() ? await be.myGuild?.().catch(() => null) : null; if (myGuild && gv2On()) gv2Info = await be.guildInfo().catch(() => null); save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid, guild: !!myGuild && !myGuild.is_staff, bossPct: fl0.maxHp ? fl0.hp / fl0.maxHp : 1, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (fl0.gmUntil || 0) > Date.now() }; } // offline maths sees the same floor context
   const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
   save.gold += p.gold; const ups = applyXp(save.heroes, p.xp); pending += p.damage;
   const offFloor = (await be.getFloor()).floor, trickled = trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
@@ -131,7 +131,7 @@ async function startGame(fresh = false) {
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
 function tick() {
-  save.ctx = { gm: gmValid, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (floor.gmUntil || 0) > Date.now(), guild: !!myGuild, guildPct: gv2Info?.guild?.bonus_pct ?? null, decreePct: decreePctNow(), decree: gmValid || (floor.gmUntil || 0) > Date.now() || echoUntil > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, sessionSecs: (Date.now() - sessionStart) / 1000 };
+  save.ctx = { gm: gmValid, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (floor.gmUntil || 0) > Date.now(), guild: !!myGuild && !myGuild.is_staff, guildPct: myGuild?.is_staff || gv2Info?.guild?.is_staff ? 0 : gv2Info?.guild?.bonus_pct ?? null, decreePct: decreePctNow(), decree: gmValid || (floor.gmUntil || 0) > Date.now() || echoUntil > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, sessionSecs: (Date.now() - sessionStart) / 1000 };
   { const uh = unwrittenHour(save.ctx), ar = $('arena'); if (ar.classList.contains('unwritten') !== uh) { ar.classList.toggle('unwritten', uh); ar.title = uh ? 'The Unwritten Hour: +5% damage until the guardian falls' : ''; } }
   const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS), fx = effectsOf(save.heroes[0]);
   if (fx.has('whisper') && Date.now() - lastWhisper > 120000) { lastWhisper = Date.now(); log(WHISPERS[Math.floor(Math.random() * WHISPERS.length)], '#b9a8ff'); }
@@ -192,7 +192,7 @@ function render() {
 async function renderLb() {
   const h = save.heroes[0];
   let rows = await be.leaderboard(h.name); if (localStaffOnly()) rows = boardWithStaff([{ name: h.name, damage: localStaffDmg, staff: true }, ...(rows.players || rows).filter(r => r.name !== h.name && !r.staff)], null, 10); // local-only staff: shown, never sent
-  await refreshTags(); const badge = n => gv2On() && gTags[n] ? bannerBadge(gTags[n].banner, gTags[n].tag) : '';
+  await refreshTags(); const badge = n => gv2On() && gTags[n] ? bannerBadge(gTags[n].banner, gTags[n].tag) + (gTags[n].staff ? `<span class="smark" title="Staff guild">${STAFF_MARK}</span>` : '') : '';
   const top = (rows.players || rows).filter(r => !r.staff).slice(0, 3), mine = (rows.players || rows).find(r => r.name === h.name && !r.staff);
   $('top3').innerHTML = `<span class="t3h">Top damage</span>${top.map((r, i) => `<span class="t3 ${r.name === h.name ? 'me' : ''}"><b>${i + 1}</b>${badge(r.name)}${esc(r.name)} <small>${fmt(r.damage)}</small></span>`).join('') || '<span class="sub">No hits yet</span>'}${mine && mine.rank > 3 ? `<span class="t3 me"><b>${mine.rank}</b>you</span>` : ''}`;
   $('lb').innerHTML = $('lbSide').innerHTML = rows.map(r => {
@@ -407,12 +407,12 @@ async function openGuild() {
   const rows = board.map(g => `<tr class="${myGuild?.id === g.id ? 'mine' : ''}"><td>${g.rank}</td><td>${gv2On() ? bannerBadge(g.banner, g.tag) : ''}[${esc(g.tag)}] ${esc(g.name)}${gv2On() && g.level ? ` <small class="sub">Lv ${g.level}${g.open === false ? ' · invite-only' : ''}</small>` : ''}</td><td>${g.members}/${gv2On() && g.level ? slotsOf(g.level) : GUILD_CAP}</td><td>${fmt(g.damage)}</td>${!myGuild && !blocked ? `<td><button data-join="${esc(g.tag)}">Join</button></td>` : '<td></td>'}</tr>`).join('');
   $('guildSub').textContent = myGuild ? `· [${myGuild.tag}] ${myGuild.name}` : '· none';
   $('guildBody').innerHTML = `${blocked}${myGuild ? `<p>You are in <b>[${esc(myGuild.tag)}] ${esc(myGuild.name)}</b>${myGuild.owner ? ' (founder)' : ''} · ${myGuild.members}/${GUILD_CAP} members.</p>
-    <p class="sub">${gmValid ? 'Staff: no guild bonus, and your damage never counts toward the guild.' : `Guild bonus: +${GUILD_BUFF * 100}% XP and gold. It never changes damage, ranks or rewards.`}</p><button id="gLeave">Leave guild</button>`
-    : blocked ? '' : `<div class="grow"><input id="gName" maxlength="24" placeholder="Guild name"><input id="gTag" maxlength="4" placeholder="TAG" style="max-width:90px;text-transform:uppercase"><button id="gCreate" class="cta" ${gmValid ? 'disabled title="Staff cannot own a guild"' : ''}>Found guild</button></div><p class="sub" id="gMsg">Up to ${GUILD_CAP} members. Members get +${GUILD_BUFF * 100}% XP and gold.</p>`}
+    <p class="sub">${myGuild.is_staff ? `${STAFF_MARK} Staff guild: no bonus · invite only.` : gmValid ? 'Staff: no guild bonus, and your damage never counts toward the guild.' : `Guild bonus: +${GUILD_BUFF * 100}% XP and gold. It never changes damage, ranks or rewards.`}</p><button id="gLeave">Leave guild</button>`
+    : blocked ? '' : `<div class="grow"><input id="gName" maxlength="24" placeholder="Guild name"${gmValid ? ` value="${STAFF_GUILD.name}"` : ''}><input id="gTag" maxlength="4" placeholder="TAG" style="max-width:90px;text-transform:uppercase"${gmValid ? ` value="${STAFF_GUILD.tag}"` : ''}><button id="gCreate" class="cta">${gmValid ? 'Found staff guild' : 'Found guild'}</button></div><p class="sub" id="gMsg">${gmValid ? `${STAFF_MARK} Staff guild: no bonus · invite only. One per tower; hidden from the guild board.` : `Up to ${GUILD_CAP} members. Members get +${GUILD_BUFF * 100}% XP and gold.`}</p>`}
     <div class="grow tabs"><button id="gFloor" aria-pressed="${!guildAll}">This floor</button><button id="gAll" aria-pressed="${guildAll}">All floors</button></div>
     <table><tr><th>#</th><th>Guild</th><th>Members</th><th>Damage</th><th></th></tr>${rows || '<tr><td colspan="5" class="sub">No guilds yet.</td></tr>'}</table>`;
-  const done = async (f, m) => { try { await f(); myGuild = await be.myGuild(); if (save.ctx) save.ctx.guild = !!myGuild; log(`System notice: ${m}`); openGuild(); } catch (e) { const el = $('gMsg'); if (el) el.textContent = e.message; else notice(e.message); } };
-  if ($('gCreate')) $('gCreate').onclick = () => { const c = checkGuild($('gName').value, $('gTag').value); if (!c.ok) { $('gMsg').textContent = c.reason; return; } done(() => be.createGuild(c.name, c.tag, meArg()), `guild [${c.tag}] founded.`); };
+  const done = async (f, m) => { try { await f(); myGuild = await be.myGuild(); if (save.ctx) save.ctx.guild = !!myGuild && !myGuild.is_staff; log(`System notice: ${m}`); openGuild(); } catch (e) { const msg = guildError(e.message); const el = $('gMsg'); if (el) el.textContent = msg; else notice(msg); } };
+  if ($('gCreate')) $('gCreate').onclick = () => { const c = checkGuild($('gName').value, $('gTag').value, gmValid); if (!c.ok) { $('gMsg').textContent = c.reason; return; } done(() => be.createGuild(c.name, c.tag, meArg()), `guild [${c.tag}] founded.`); };
   if ($('gLeave')) $('gLeave').onclick = () => done(() => be.leaveGuild(), 'you left the guild.');
   $('guildBody').querySelectorAll('[data-join]').forEach(b => b.onclick = () => done(async () => { const r = await be.joinGuild(b.dataset.join, meArg()); if (r?.requested) throw new Error(`[${b.dataset.join}] is invite-only: your request was sent to its officers.`); }, `joined [${b.dataset.join}].`));
   if (gv2On() && gv2Info && !blocked) { $('guildBody').insertAdjacentHTML('afterbegin', invitesHtml(gv2Info)); $('guildBody').querySelectorAll('[data-ainv]').forEach(b => b.onclick = () => done(() => be.guildAcceptInvite(+b.dataset.ainv), 'invite accepted.')); $('guildBody').querySelectorAll('[data-dinv]').forEach(b => b.onclick = () => done(() => be.guildDeclineInvite(+b.dataset.dinv), 'invite declined.')); }

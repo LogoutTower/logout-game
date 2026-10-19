@@ -24,7 +24,8 @@ assert.equal(rg.damage, ra.damage, 'no damage change'); assert(Math.abs(rg.gold 
 assert.equal(guildMul({ ctx: { guild: true, gm: true } }), 1, 'staff: no guild buff');
 // local backend
 const be = new LocalBackend(); const me = { name: 'Tess' };
-await assert.rejects(be.createGuild('Staff Hall', 'GM', { name: 'X', staff: true }), /staff cannot own/);
+// staff founding (one private staff guild, no bonus): see test/staffguild.test.mjs
+assert.equal(checkGuild('Floor 0', 'FZ').reason, 'That name is reserved.'); assert.equal(checkGuild('Floor Zero', 'ZERO', true).ok, true);
 await be.createGuild('Ash Court', 'ash', me); assert.equal((await be.myGuild()).tag, 'ASH'); await assert.rejects(be.joinGuild('NB', me), /already/);
 await be.leaveGuild(); assert.equal(await be.myGuild(), null); await be.joinGuild('nb', me); assert.equal((await be.myGuild()).tag, 'NB');
 const gg = be._g(); for (let i = 0; gg.members.filter(x => x.guild_id === 1).length < GUILD_CAP; i++) gg.members.push({ name: 'F' + i, guild_id: 1 }); be._sg(gg); await assert.rejects(be.joinGuild('NB', { name: 'Late' }), /full/);
