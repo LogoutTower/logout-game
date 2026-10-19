@@ -116,3 +116,16 @@ header{padding-top:max(14px,env(safe-area-inset-top))}main{padding-left:max(12px
 .detail{flex:1;min-width:240px}.vs{text-align:center;font-size:11px;letter-spacing:3px;color:var(--mut);margin:6px 0;text-transform:uppercase}.delta{font-size:16px;margin:8px 0}
 .bagbtns{display:flex;gap:6px}.bagbtns button{flex:1;min-height:44px}
 @media(max-width:640px){#bag{width:calc(100vw - 16px)}.bagwrap{flex-direction:column}.eqrow{grid-template-columns:1fr}#bag>button{position:sticky;bottom:0;width:100%;background:rgba(30,15,65,.95)}}
+
+/* hero HP + buffs */
+.seg.mid i:not(.off){background:#ffd84f;box-shadow:0 0 5px #ffd84f88}.seg.worn i:not(.off){background:#ff3355;box-shadow:0 0 6px #ff3355aa}
+.buffs{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 6px}.buff{font-size:11px;letter-spacing:1px;padding:2px 8px;border:1px solid var(--cy);border-radius:999px;color:var(--cy);background:#5ff6ff14}
+.buff.bad,.bad{color:#ff3355;border-color:#ff3355}.buff.bad{background:#ff335514}
+/* town */
+#town{max-width:820px;width:95vw;max-height:90vh;overflow:auto;background:linear-gradient(rgba(60,30,40,.35),rgba(20,10,45,.6)),var(--glass)}
+#town h2 .tg{margin-left:auto;color:var(--gold);letter-spacing:2px}
+.townwrap{display:grid;grid-template-columns:1fr 1.3fr;gap:12px}.tcard{border:1px solid var(--line);border-radius:10px;padding:12px;background:rgba(10,4,24,.45);position:relative}
+.tcard h3{font:800 17px 'Cinzel',serif;color:#fff3c9;margin:4px 0}.npc{width:96px;height:96px;image-rendering:pixelated;background:center/100% no-repeat;float:right;margin:-4px -4px 4px 8px;filter:drop-shadow(0 0 6px #ff9a2e55)}
+.srow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #ffffff10;clear:both}.srow>div{flex:1}.srow small{display:block;color:var(--mut);font-size:11px}.srow button{min-width:76px;min-height:44px;margin:0}
+.srow[style]{border-left:2px solid var(--rc);padding-left:8px}
+@media(max-width:640px){#town{width:calc(100vw - 16px)}.townwrap{grid-template-columns:1fr}#town>button{position:sticky;bottom:0;width:100%;background:rgba(30,15,65,.95)}.act{min-width:48px}.act span{font-size:10px}#dock{gap:2px}.rb{width:46px;height:46px}}

@@ -1,5 +1,5 @@
 // Cosmetics: catalog, unlock rules, save migration, layered sprite grids. Pure (no DOM). No stat effects.
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 const I = (id, type, label, value, unlock = null, extra = {}) => ({ id, type, label, value, unlock, ...extra });
 export const CATALOG = [
   // skin tones
@@ -93,8 +93,13 @@ export function migrateSave(s) {
   }
   if (s.version < 3) { // v3: loot inventory, equipped gear, drop cosmetics, aura slot
     s.inv = s.inv || []; s.lootSeq = s.lootSeq || 0; s.progress.drops = s.progress.drops || [];
-    s.heroes.forEach(h => { h.equip = h.equip || { weapon: null, armor: null, trinket: null }; h.look.aura = h.look.aura || 'au-none'; });
+    s.heroes.forEach(h => { h.equip = h.equip || { weapon: null, armor: null, trinket: null }; h.look = { ...defaultLook(h.cls), ...(h.look || {}) }; h.look.aura = h.look.aura || 'au-none'; });
     s.version = 3;
+  }
+  if (s.version < 4) { // v4: hero HP, town buffs, shop purchases
+    s.heroes.forEach(h => { if (h.hp == null) h.hp = null; }); // null = full HP (resolved against max HP at runtime)
+    s.buffs = s.buffs || { rested: 0, elixir: 0, vigil: 0 }; s.shop = s.shop || null;
+    s.version = 4;
   }
   return s;
 }

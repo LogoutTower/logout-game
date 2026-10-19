@@ -28,9 +28,9 @@ assert(DROP_COSMETICS.length >= 6); for (const el of ['fire', 'frost', 'void', '
 const it = r => ({ rarity: r, floor: 5 }); const vals = RARITIES.map(r => salvageValue(it(r.id))); vals.forEach((v, i) => i && assert(v > vals[i - 1])); assert(salvageValue({ rarity: 'rare', floor: 50 }) > salvageValue({ rarity: 'rare', floor: 5 }));
 // migration v2 → v3 keeps progress, adds bag/equip/drops/aura
 const v2 = { version: 2, gold: 9, lastTick: 1, heroes: [{ id: 'h', name: 'W', cls: 'Blade', level: 4, xp: 2, gear: 1, look: { skin: 'skin-1' } }], progress: { cleared: [1, 2], top3: [1], rank1: 1 } };
-const s = migrateSave(v2); assert.equal(s.version, SAVE_VERSION); assert.equal(SAVE_VERSION, 3); assert.deepEqual(s.inv, []); assert.equal(s.lootSeq, 0);
+const s = migrateSave(v2); assert.equal(s.version, SAVE_VERSION); assert(SAVE_VERSION >= 3); assert.deepEqual(s.inv, []); assert.equal(s.lootSeq, 0);
 assert.deepEqual(s.heroes[0].equip, { weapon: null, armor: null, trinket: null }); assert.equal(s.heroes[0].look.aura, 'au-none'); assert.deepEqual(s.progress.cleared, [1, 2]); assert.deepEqual(s.progress.drops, []);
-const v1 = migrateSave({ heroes: [{ id: 'q', name: 'Q', cls: 'Vanguard', level: 1, xp: 0, gear: 0 }], gold: 0, lastTick: 1 }); assert.equal(v1.version, 3); assert(v1.heroes[0].equip && v1.inv);
+const v1 = migrateSave({ heroes: [{ id: 'q', name: 'Q', cls: 'Vanguard', level: 1, xp: 0, gear: 0 }], gold: 0, lastTick: 1 }); assert.equal(v1.version, SAVE_VERSION); assert(v1.heroes[0].equip && v1.inv);
 // grant, bag cap + auto-salvage, equip raises DPS, salvage pays gold, cosmetic unlocks
 const before = heroDps(s.heroes[0]);
 for (let i = 0; i < 80; i++) grantDrops(s, 10, 1);

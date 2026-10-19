@@ -1,5 +1,7 @@
-import { CLASSES, newHero, heroDps, levelCost, gearCost, computeProgress, accrue, applyXp, offlineCap, bossName, fmt, fmtDur, xpToNext } from './game.js';
+import { CLASSES, newHero, heroDps, levelCost, gearCost, accrue, offlineProgress, applyXp, heroHp, heroMaxHp, isWorn, effectiveDps, buffsOf, bossName, fmt, fmtDur, xpToNext } from './game.js';
 import { makeBackend } from './storage.js';
+import { innCost, rest, shopStock, buy as shopBuy, soldOut, npcGrid } from './town.js';
+import { sprite } from './sprites.js';
 import { grantDrops, equipItem, salvageItem, salvageValue, rarityOf, statLabel, INV_SIZE, GEAR_SLOTS } from './loot.js';
 import { OFFLINE_CAP_HOURS, MAX_FLOOR } from '../config.js';
 import { bossSprite, bossIsBig, heroSprite } from './sprites.js';
@@ -36,11 +38,12 @@ async function boot() {
   $('maxf').textContent = MAX_FLOOR;
   be = await makeBackend(); save = migrateSave(await be.loadSave());
   if (!save) return showCreate();
-  const cap = offlineCap(save.heroes, OFFLINE_CAP_HOURS), p = computeProgress(save.heroes, save.lastTick, Date.now(), cap);
+  const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
+  save.gold += p.gold; const ups = applyXp(save.heroes, p.xp); pending += p.damage;
   if (p.secs > 30) {
-    save.gold += p.gold; const ups = applyXp(save.heroes, p.xp); const r = await be.submitDamage(save.heroes[0].name, p.damage);
+    const r = await be.submitDamage(h0.name, pending); pending = 0;
     lootLines = []; const got = handleClears(r.clears, true);
-    $('awaytxt').innerHTML = `Log out disabled. You fought on for ${fmtDur(p.secs)}${p.capped ? ` (capped at ${cap}h)` : ''}<br>Damage: ${fmt(p.damage)}<br>Gold: +${fmt(p.gold)}<br>XP: +${fmt(p.xp)}${ups.length ? `<br>Level ups: ${ups.length}` : ''}${r.advanced ? `<br>Floors cleared: ${r.advanced}. Floor ${r.floor} is open.` : ''}${got.length ? `<br>Cosmetics unlocked: ${got.map(i => esc(i.label)).join(', ')}` : ''}${lootLines.length ? `<br>Loot: ${lootLines.join(', ')}` : ''}`;
+    $('awaytxt').innerHTML = `Log out disabled. You fought on for ${fmtDur(p.secs)}${p.capped ? ` (capped at ${cap}h)` : ''}${p.vigilUsed ? ' · Scroll of Vigil burned' : ''}<br>HP: ${Math.round(heroHp(h0))} / ${heroMaxHp(h0)}${p.lowSecs > 0 ? ` · worn down for ${fmtDur(p.lowSecs)} (DPS halved). Rest at the inn.` : ''}<br>Damage: ${fmt(p.damage)}<br>Gold: +${fmt(p.gold)}<br>XP: +${fmt(p.xp)}${ups.length ? `<br>Level ups: ${ups.length}` : ''}${r.advanced ? `<br>Floors cleared: ${r.advanced}. Floor ${r.floor} is open.` : ''}${got.length ? `<br>Cosmetics unlocked: ${got.map(i => esc(i.label)).join(', ')}` : ''}${lootLines.length ? `<br>Loot: ${lootLines.join(', ')}` : ''}`;
     $('away').showModal();
   }
   save.lastTick = Date.now(); await be.saveSave(save); startGame();
@@ -81,7 +84,7 @@ async function startGame(fresh = false) {
   floor = await be.getFloor(); log(`${save.heroes[0].name} awoke on Floor ${floor.floor}. The guardian stirs.`); log('System notice: log out disabled.');
   if (fresh) { notice('Log out disabled'); setTimeout(() => notice(`Floor ${floor.floor} is open`), 900); } // no replayed notices on reload
   $('lvl').onclick = () => buy('level'); $('gear').onclick = () => buy('gear'); $('wardrobeBtn').onclick = openWardrobe;
-  $('helpBtn').onclick = () => tourShow(0); $('bagBtn').onclick = openBag; placeDock();
+  $('townBtn').onclick = openTown; $('helpBtn').onclick = () => tourShow(0); $('bagBtn').onclick = openBag; placeDock();
   setInterval(tick, 1000); setInterval(sync, 5000); render(); renderLb();
   if (!save.tutorialSeen) setTimeout(startTour, fresh ? 1600 : 400);
 }
@@ -114,9 +117,13 @@ function render() {
   const c = hpColor(pct); $('hpfill').style.width = (lay ? inLayer * 100 : 0) + '%'; $('hpfill').style.background = `linear-gradient(90deg, ${c}aa, ${c})`; $('hpfill').style.color = c;
   $('hptext').textContent = `${fmt(floor.hp)} / ${fmt(floor.maxHp)} HP · ${lay}× layers`;
   $('hname2').innerHTML = `<div style="color:${nameColorOf(h)}">${esc(h.name)}</div><div class="ttl">${esc(titleOf(h))}</div>`; $('hlv').textContent = `LV ${h.level}`;
-  const hp = 0.85 + 0.15 * Math.abs(Math.sin(Date.now() / 3000)); $('hhp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < hp ? '' : 'off'}"></i>`).join('');
+  const hp = heroHp(h) / heroMaxHp(h), worn = isWorn(h); $('hhp').className = 'seg' + (worn ? ' worn' : hp < 0.6 ? ' mid' : ''); $('hhp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < hp ? '' : 'off'}"></i>`).join('');
+  $('hhp').title = `HP ${Math.round(heroHp(h))} / ${heroMaxHp(h)}`;
+  const b = buffsOf(save), mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  $('buffs').innerHTML = [worn ? '<span class="buff bad" title="Below 30% HP: DPS halved">Worn down · DPS ½</span>' : '', b.rested > 0 ? `<span class="buff" title="+15% gold and XP">Well Rested ${mmss(b.rested)}</span>` : '',
+    b.elixir > 0 ? `<span class="buff" title="+25% DPS">Fury ${mmss(b.elixir)}</span>` : '', b.vigil > 0 ? `<span class="buff" title="Offline cap raised once">Vigil +${b.vigil}h</span>` : ''].join('');
   const xp = h.xp / xpToNext(h.level); $('hxp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < xp ? '' : 'off'}"></i>`).join('');
-  $('stats').innerHTML = `${CLASSES[h.cls].icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${heroDps(h).toFixed(1)}</b> · Gold <b>${fmt(save.gold)}</b>`;
+  $('stats').innerHTML = `${CLASSES[h.cls].icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${effectiveDps(save).toFixed(1)}</b> · HP <b>${Math.round(heroHp(h))}/${heroMaxHp(h)}</b> · Gold <b>${fmt(save.gold)}</b>`;
   $('lvlL').textContent = `Train ${fmt(levelCost(h))}g`; $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`; $('lvl').disabled = save.gold < levelCost(h);
   $('equipped').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip?.[s]; return `<span class="eq" style="${it ? `color:${rarityOf(it.rarity).color}` : ''}">${s[0].toUpperCase() + s.slice(1)}: ${it ? esc(it.name) : '—'}</span>`; }).join('');
   $('bagL').textContent = `Bag ${save.inv.length}/${INV_SIZE}`; $('gear').title = 'Forge: temper your weapon, +15% damage per tier';
@@ -129,6 +136,24 @@ async function renderLb() {
     return `<li class="${me ? 'me' : ''}" value="${r.rank}"><span style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span></li>`;
   }).join('');
 }
+// ---- Town (safe zone of the current floor): inn + rotating shop
+function openTown() {
+  const f = floor.floor, now = Date.now(), st = shopStock(f, now), h = save.heroes[0], c = innCost(f);
+  $('townTitle').textContent = `Town of Floor ${f}`;
+  $('innkeeper').style.backgroundImage = sprite(npcGrid('innkeeper').rows, npcGrid('innkeeper').pal); $('merchant').style.backgroundImage = sprite(npcGrid('merchant').rows, npcGrid('merchant').pal);
+  $('innInfo').innerHTML = `HP <b>${Math.round(heroHp(h))} / ${heroMaxHp(h)}</b>${isWorn(h) ? ' · <span class="bad">worn down</span>' : ''}`;
+  $('restBtn').textContent = `Rest · ${fmt(c)}g`; $('restBtn').disabled = save.gold < c;
+  $('restBtn').onclick = async () => { if (rest(save, f)) { log('You slept at the inn. HP restored · Well Rested (+15% gold & XP, 30 min).', '#5cff8a'); notice('Well Rested · +15% gold & XP'); await be.saveSave(save); render(); openTown(); } };
+  const left = st.endsAt - now; $('shopTimer').textContent = `New stock in ${fmtDur(left / 1000)}`;
+  $('shopList').innerHTML = st.items.map((it, i) => { const R = it.item ? rarityOf(it.item.rarity) : null, out = soldOut(save, st, i);
+    return `<div class="srow" ${R ? `style="--rc:${R.color}"` : ''}><div><b style="${R ? `color:${R.color}` : ''}">${esc(it.name)}</b><small>${R ? `${R.label} ${it.item.slot} · ${Object.entries(it.item.stats).map(([k, v]) => statLabel(k, v)).join(' · ')}` : esc(it.desc)}</small></div>
+      <button data-i="${i}" ${out || save.gold < it.price ? 'disabled' : ''}>${out ? 'Sold' : `${fmt(it.price)}g`}</button></div>`; }).join('');
+  $('shopList').onclick = async e => { const btn = e.target.closest('button[data-i]'); if (!btn) return; const got = shopBuy(save, f, Date.now(), +btn.dataset.i);
+    if (got) { log(`Bought ${got}.`); notice(`Bought · ${got}`); await be.saveSave(save); render(); } openTown(); };
+  $('townGold').textContent = `Gold ${fmt(save.gold)}`;
+  if (!$('town').open) $('town').showModal();
+}
+
 // ---- Bag: inventory grid, compare panel, equip and salvage
 let bagSel = -1;
 const itemCard = (it, cls = '') => { const R = rarityOf(it.rarity); return `<div class="item ${cls}" style="--rc:${R.color}"><b style="color:${R.color}">${esc(it.name)}</b><small>${R.label} · ${it.slot} · Floor ${it.floor} · ${it.element}</small>${Object.entries(it.stats).map(([k, v]) => `<div>${statLabel(k, v)}</div>`).join('')}</div>`; };
@@ -155,7 +180,7 @@ function openBag() {
 const TOUR = [
   { t: 'You fight on your own', x: 'Your hero attacks the floor guardian automatically, every second, even while you are offline. Close the tab; the tower keeps count.', el: () => $('arena') },
   { t: 'Gold and XP', x: 'Every hit pays out: 10% of your damage becomes gold and 5% becomes XP. Fill the XP bar to level up and hit harder.', el: () => $('stats') },
-  { t: 'Train · Forge · Wardrobe', x: 'Train spends gold on a level. Forge tempers your gear for +15% damage per tier. Wardrobe changes your look; it is cosmetic only.', el: () => $('dock') },
+  { t: 'Train · Forge · Wardrobe', x: 'Train spends gold on a level. Forge tempers your gear for +15% damage per tier. Wardrobe changes your look (cosmetic only). Bag holds boss loot; Town has an inn to heal and a shop.', el: () => $('dock') },
   { t: 'One guardian, whole server', x: 'Everyone in the tower shares this boss. Top damage when it falls earns titles, name colours and other rewards.', el: () => $('lb').closest('.panel') },
   { t: 'Layers', x: 'The guardian\'s HP comes in layers: each diamond is one full HP bar. Break every layer to clear the floor and open the stair.', el: () => $('layers').closest('.gauge') },
 ];

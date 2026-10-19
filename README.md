@@ -1,7 +1,7 @@
 # $LOGOUT — idle tower prototype (v1)
 Static browser idle game: an auto-fighting hero climbs floors 1–10, chipping at a shared floor boss (other players simulated locally). Offline progress is computed from timestamps (capped at 12h). Saves go to localStorage.
 
-**Run locally:** `python3 -m http.server 8000` then open http://localhost:8000. Tests: `node test/offline.test.mjs`, `node test/cosmetics.test.mjs`, `node test/floors.test.mjs`. Dev-only boss plan preview: `/preview-bosses.html`.
+**Run locally:** `python3 -m http.server 8000` then open http://localhost:8000. Tests: `for t in offline cosmetics floors progress loot town; do node test/$t.test.mjs; done`; browser regression (needs playwright-core): `node test/e2e.play.mjs [url]`. Dev-only boss plan preview: `/preview-bosses.html`.
 
 **Deploy:** no build step. *GitHub Pages:* push the repo, Settings → Pages → deploy from branch `main`, root. *Cloudflare Pages:* connect the repo, build command empty, output dir `/`.
 

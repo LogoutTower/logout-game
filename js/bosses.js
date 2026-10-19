@@ -2,7 +2,7 @@
 // Pure (no DOM). Palette chars: k = deep shadow, E = glow (both unshaded).
 import { shade } from './pixel.js';
 export const BOSS_SIZE = 32;
-function canvas() {
+export function canvas() {
   const g = Array.from({ length: BOSS_SIZE }, () => Array(BOSS_SIZE).fill('.'));
   const px = (x, y, c) => { x = Math.round(x); y = Math.round(y); if (x >= 1 && x < BOSS_SIZE - 1 && y >= 1 && y < BOSS_SIZE - 1) g[y][x] = c; };
   const rect = (x, y, w, h, c) => { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) px(i, j, c); };
