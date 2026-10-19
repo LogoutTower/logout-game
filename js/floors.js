@@ -20,9 +20,12 @@ const HP0 = 20000, R = Math.log(1.6), SOFT = 10;
 export const baseHp = f => Math.round(HP0 * Math.exp(R * SOFT * Math.log(1 + (f - 1) / SOFT)) / 100) * 100;
 // Arc 2+ is a shared-server climb: the guardian's HP is multiplied by ARC_HP (×60 on floor 11, ×1.33 per floor, flat after 20 until the
 // next arc is tuned). Gear keeps scaling with baseHp only, so heroes do not outgrow it. See docs/BALANCE-FLOORS-11-20.md. Mirrors floor_hp() in SQL.
-export const ARC_HP = { from: 11, start: 60, growth: 1.33, flatFrom: 20 };
+export const ARC_HP = { from: 11, start: 332, growth: 0.988, flatFrom: 20 };
+// Arc 1 (Gatefall Hold) launch-day pacing: explicit guardian HP for floors 1-10, tuned so ~100 fresh heroes clear Floor 10 about 18 h
+// after the gate opens (quick early floors, gentle climb, Floor 10 as a mini-wall). See docs/BALANCE-FLOORS-11-20.md. Mirrors floor_hp().
+export const ARC1_HP = [86000, 630000, 2400000, 7300000, 21000000, 33000000, 44000000, 55000000, 74000000, 150000000];
 export const arcHpMul = f => f < ARC_HP.from ? 1 : ARC_HP.start * Math.pow(ARC_HP.growth, Math.min(f, ARC_HP.flatFrom) - ARC_HP.from);
-export const floorBossHp = f => f < ARC_HP.from ? Math.round(baseHp(f) * (isMilestone(f) ? 2.5 : 1)) : Math.round(baseHp(f) * (isMilestone(f) ? 2.5 : 1) * arcHpMul(f) / 1000) * 1000;
+export const floorBossHp = f => f < ARC_HP.from ? ARC1_HP[Math.max(1, f) - 1] : Math.round(baseHp(f) * (isMilestone(f) ? 2.5 : 1) * arcHpMul(f) / 1000) * 1000;
 // ---- seeded RNG
 export function rng(seed) { let a = (seed * 2654435761 ^ 0x5eed1337) >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const pick = (r, arr) => arr[Math.floor(r() * arr.length)];

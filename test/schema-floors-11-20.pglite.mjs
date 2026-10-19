@@ -17,6 +17,7 @@ await db.exec(`update public.profiles set last_submit = now() - interval '12 hou
 await as(U(1), `select public.submit_damage(900000, 'Ash', 60, 20)`); let s = await st(); assert.equal(s.floor, 10); assert.equal(Number(s.hp), 0, 'cleared but capped'); assert.equal(s.max_floor, 10);
 // ---- addendum (twice)
 await db.exec(rd('schema-addendum-floors-11-20.sql')); await db.exec(rd('schema-addendum-floors-11-20.sql'));
+await db.exec(rd('schema-addendum-arc1-pacing.sql')); // current HP curve (arc 1 launch pacing) layered on top
 for (let f = 1; f <= 30; f++) assert.equal(Number((await db.query(`select public.floor_hp($1) h`, [f])).rows[0].h), floorBossHp(f), `floor_hp(${f}) parity`);
 s = await st(); assert.equal(s.max_floor, 20); assert.equal(s.floor, 11, 'pending clear advanced to floor 11'); assert.equal(Number(s.max_hp), floorBossHp(11));
 assert.equal((await db.query(`select count(*)::int c from public.floor_clears where floor = 10`)).rows[0].c, 1, 'floor 10 clear recorded once');

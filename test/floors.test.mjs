@@ -30,7 +30,8 @@ for (const f of ALL) { const g = bossGrid(f); assert.equal(g.rows.length, 32); g
 for (let f = 2; f <= PLAN_FLOORS; f++) assert(baseHp(f) > baseHp(f - 1), `baseHp ${f}`);
 const plain = ALL.filter(f => !isMilestone(f)); for (let i = 1; i < plain.length; i++) assert(floorBossHp(plain[i]) > floorBossHp(plain[i - 1]));
 const ms = ALL.filter(isMilestone); for (let i = 1; i < ms.length; i++) assert(floorBossHp(ms[i]) > floorBossHp(ms[i - 1]));
-for (const f of ms) { const r = floorBossHp(f) / (baseHp(f) * arcHpMul(f)); assert(r >= 2 && r <= 3); assert(floorBossHp(f) > floorBossHp(f - 1)); if (f < PLAN_FLOORS && f !== 10) assert(floorBossHp(f) > floorBossHp(f + 1)); } // floor 11 opens arc 2 with a step up
+for (const f of ms.filter(f => f > 10)) { const r = floorBossHp(f) / (baseHp(f) * arcHpMul(f)); assert(r >= 2 && r <= 3); assert(floorBossHp(f) > floorBossHp(f - 1)); if (f < PLAN_FLOORS && f !== 10) assert(floorBossHp(f) > floorBossHp(f + 1)); } // floor 11 opens arc 2 with a step up
 assert(Number.isSafeInteger(floorBossHp(100)) && floorBossHp(100) < 1e13, 'floor 100 HP stays sane (arc 3+ to be tuned)');
-for (let f = 1; f <= 10; f++) assert.equal(arcHpMul(f), 1, 'arc 1 HP unchanged');
+for (let f = 1; f <= 10; f++) assert.equal(arcHpMul(f), 1, 'arc 1 uses ARC1_HP');
+assert(floorBossHp(10) >= 1.5 * floorBossHp(9) && floorBossHp(11) > floorBossHp(10) && floorBossHp(11) < 1.5 * floorBossHp(10), 'floor 10 mini-wall, no cliff into arc 2');
 console.log('floor plan tests passed');

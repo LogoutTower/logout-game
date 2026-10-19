@@ -2,7 +2,7 @@
 // Each panel: { art, arc, text }. art is drawn procedurally by js/cutscene-player.js using the arc scene palette (js/arcs.js).
 // Story names live here. The final guardian's name is RIVAL_NAME: swap it in this one place.
 export const RIVAL_NAME = 'Umbra'; // she/her: the Architect's creation, the strongest being in the tower
-export const RIVAL_TITLE = 'Sovereign of the Unwritten Exit'; // Floor 100 title
+export const RIVAL_TITLE = 'Queen Who Rewrites the Tower'; // Floor 100 title
 export const CUTSCENES = {
   intro: { title: 'Session start', panels: [
     { art: 'login', arc: 1, text: 'Welcome, player. Session established. Connection stable.' },

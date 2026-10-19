@@ -1,3 +1,45 @@
+# Balance: launch pacing (supersedes the HP numbers further down)
+
+**Current numbers live in js/floors.js (`ARC1_HP`, `ARC_HP`, `floorBossHp`) and `floor_hp()` in supabase/schema-addendum-arc1-pacing.sql; pglite tests check parity for floors 1-30.** The older "HP curve" tables below describe the first arc 2 tuning (x60, x1.33) and are kept for history only.
+
+## DPS model (fresh launch-day heroes, not the 400 DPS strong hero)
+- A fresh Lv 1 Blade, simulated minute by minute: damage gives 10% gold and 5% XP, XP levels it up, and gold buys the cheaper of a level or a forge tier. Loot adds about 25%; wear-down and Inn gaps cost about 30% (efficiency 0.7). The result is about Lv 13/forge 9 (~54 DPS) at 1 h, Lv 21 (~116 DPS) at 7 h, and Lv 24-25 (~150 DPS) at 18-24 h.
+- On top of that, a 0.6 realism factor (late spending while idle or offline, gaps, not everyone online) and arrivals spread over the first 3 h. That comes to about 6.3M damage per hero in the first 24 h. From day 2 the model uses about 8.6M per hero per day, which is the arc 2 figure.
+
+## Floors 1-10 (Gatefall Hold): about 18 h for 100 heroes
+| Floor | HP | Target clear (100 heroes, from gate open) |
+|---|---|---|
+| 1 | 86,000 | ~0.25 h |
+| 2 | 630,000 | ~0.75 h |
+| 3 | 2,400,000 | ~1.5 h |
+| 4 | 7,300,000 | ~2.5 h |
+| 5 | 21,000,000 | ~4 h |
+| 6 | 33,000,000 | ~5.75 h |
+| 7 | 44,000,000 | ~7.75 h |
+| 8 | 55,000,000 | ~10 h |
+| 9 | 74,000,000 | ~12.75 h |
+| 10 | 150,000,000 | ~18 h |
+
+Total is 387.4M. The early floors fall in minutes, the climb is gentle, and Floor 10 (150M, 2x Floor 9) is the mini-wall at about 5 h.
+
+## Floors 11-20 (Rimegear Ascent): about 1 week at 100 DAU
+`ARC_HP = { start: 332, growth: 0.988 }`. Floor 11 is 172.6M, 1.15x Floor 10, with no cliff, and each floor after that is about 1.2x the one before. The arc total is 6.01B, about 7 days at 100 heroes x 8.6M a day.
+| Floor | HP | Cumulative (days at 100 DAU) |
+|---|---|---|
+| 11 | 172,607,000 | ~0.2 d |
+| 12 | 214,457,000 | ~0.5 d |
+| 13 | 263,671,000 | ~0.8 d |
+| 14 | 321,055,000 | ~1.1 d |
+| 15 | 387,432,000 | ~1.6 d |
+| 16 | 463,765,000 | ~2.1 d |
+| 17 | 550,933,000 | ~2.8 d |
+| 18 | 649,977,000 | ~3.5 d |
+| 19 | 761,877,000 | ~4.4 d |
+| 20 | 2,219,263,000 | ~7.0 d |
+
+## Turnout scaling (server-side, supabase/schema-addendum-turnout-scaling.sql)
+When a floor starts, `max_hp = floor_hp(f) x clamp(active / 100, 0.5, 50)`. Here `active` counts the profiles whose `last_submit` falls in the last 24 h. Overflow damage carries over. **Mid-floor surge:** the server re-checks turnout at most once an hour, on the next damage write. If more HP is needed, `max_hp` grows and the remaining fraction is kept. It never shrinks mid-floor. The cost is one indexed count per hour, which fits the free tier. A trigger on floor_state applies this, so it covers every advance path, and clients already show the server's `max_hp`. With 50-5,000 active heroes, clear times hold at about 18 h for arc 1 and about 1 week for arc 2. Fewer than 50 heroes is slower (25 heroes take about 2x as long); more than 5,000 is faster. The floor that is live when the addendum runs keeps its unscaled HP. Gold, XP and loot come from damage dealt, so per-hero rewards don't change; only floor-clear drops slow down.
+
 # Balance: floors 11-20 (arc 2, Rimegear Ascent)
 
 All numbers come from js/floors.js (`ARC_HP`, `floorBossHp`) and match `floor_hp()` in supabase/schema-addendum-floors-11-20.sql (a pglite test checks parity for floors 1-30).
