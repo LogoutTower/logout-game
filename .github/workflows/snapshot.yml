@@ -1,0 +1,32 @@
+# Publishes the public board snapshot (leaderboard, guild tags, recent clears, waitlist count, egress pace) every ~10 minutes to the
+# `snapshot` branch, which the game reads from raw.githubusercontent.com instead of Supabase. Free on public repos.
+# Also opens (once) a GitHub issue when the Supabase egress monthly pace passes ~80% of the free 5 GB.
+name: snapshot
+on:
+  schedule: [{ cron: '*/10 * * * *' }]
+  workflow_dispatch: {}
+permissions: { contents: write, issues: write }
+concurrency: { group: snapshot, cancel-in-progress: true }
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - id: snap
+        run: node scripts/snapshot.mjs /tmp/snapshot.json
+      - name: publish to the snapshot branch (single orphan commit, no history growth)
+        if: steps.snap.outputs.skip != '1'
+        run: |
+          mkdir /tmp/pub && cd /tmp/pub && git init -q -b snapshot && cp /tmp/snapshot.json .
+          git add snapshot.json && git -c user.name="LOGOUT Dev" -c user.email="dev@logout.invalid" commit -qm snapshot
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" snapshot
+      - name: egress early warning
+        if: steps.snap.outputs.warn == '1'
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          t="Supabase egress pace above 80% of free tier"
+          gh issue list --state open --search "$t in:title" --json number -q '.[0].number' | grep -q . || \
+            gh issue create --title "$t" --body "Monthly pace ~${{ steps.snap.outputs.pace }} GB of 5 GB. See docs/SCALING-PLAYBOOK.md."

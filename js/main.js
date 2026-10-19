@@ -130,6 +130,7 @@ async function startGame(fresh = false) {
   $('lbBtn').onclick = () => $('lbSheet').showModal(); $('top3').onclick = () => $('lbSheet').showModal(); $('logBtn').onclick = () => $('logSheet').showModal(); $('sbBtn').onclick = openSandboxUi;
   $('tabGuild').hidden = !featureOn(FEATURES, 'guilds', gmValid); $('chatBtn').hidden = !featureOn(FEATURES, 'chat', gmValid);
   $('topbar').classList.remove('hidden'); $('tabbar').classList.remove('hidden'); setInterval(badgePoll, 60000); setTimeout(badgePoll, 4000);
+  ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => addEventListener(ev, () => be?.touch?.(), { passive: true })); addEventListener('pagehide', () => { try { if (be?._dirty) be._push(be._dirty); } catch {} });
   setInterval(tick, 1000); setInterval(sync, 5000); render(); renderLb();
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
@@ -461,7 +462,7 @@ async function pollChat() {
   if (chatFloor !== floor.floor) { chatFloor = floor.floor; chatLast = 0; chatMsgs.length = 0; }
   try { const n = await be.chatFetch(chatLast); for (const m of n) { chatMsgs.push(m); chatLast = Math.max(chatLast, m.id); } if (chatMsgs.length > 100) chatMsgs.splice(0, chatMsgs.length - 100); if (n.length) renderChat(); } catch {}
 }
-// ---- Badge dots (polled every 60 s while visible; guild info at most every 2 min): floor chat, guild chat, finished quests, join requests.
+// ---- Badge dots (polled every 60 s while visible; guild info at most every 10 min; chat dots come from tick heads): floor chat, guild chat, finished quests, join requests.
 let chatSeen = null, chatSeenFloor = null, gSeen = null, gSeenGuild = null, lastGPoll = 0; const gDots = { req: false, quest: false, chat: false };
 const questKey = i => `${i.week}:${(i.quests || []).filter(q => q.done).map(q => q.idx).join(',')}`;
 function syncMoreDot() { setDot('dotMore', !$('dotChat').hidden, 'New floor chat'); setDot('dotGuild', gDots.req || gDots.quest || gDots.chat, [gDots.req ? 'Join requests waiting' : '', gDots.quest ? 'Guild quest completed' : '', gDots.chat ? 'New guild chat' : ''].filter(Boolean).join(' · ')); }
@@ -469,14 +470,16 @@ async function badgePoll() {
   if (document.hidden || !save || !be || !floor) return; const me = save.heroes[0].name;
   if (featureOn(FEATURES, 'chat', gmValid) && !$('chat').open && be.chatFetch) {
     if (chatSeenFloor !== floor.floor) { chatSeenFloor = floor.floor; chatSeen = null; }
+    const head = be.heads?.chat; if (head != null) { if (chatSeen !== null && head > chatSeen && !be.mine?.has(head)) setDot('dotChat', true); chatSeen = Math.max(chatSeen || 0, head); } else // tick carries the newest id: no fetch at all
     try { const n = await be.chatFetch(chatSeen || 0); if (chatSeen !== null && n.some(m => m.name !== me)) setDot('dotChat', true); chatSeen = Math.max(chatSeen || 0, ...n.map(m => m.id)); } catch {}
   }
-  if (gv2On() && myGuild && !localStaffOnly() && !$("guild").open && Date.now() - lastGPoll > 119e3) {
+  if (gv2On() && myGuild && !localStaffOnly() && !$("guild").open && Date.now() - lastGPoll > 599e3) {
     lastGPoll = Date.now(); try { gv2Info = await be.guildInfo(); } catch {} const i = gv2Info;
     if (i?.guild) {
       if (gSeenGuild !== i.guild.id) { gSeenGuild = i.guild.id; gSeen = null; }
       gDots.req = ['leader', 'officer'].includes(i.me?.role) && (i.requests || []).length > 0;
       const qk = questKey(i), qs = localStorage.getItem('logout.v1.questSeen'); if (qs === null) localStorage.setItem('logout.v1.questSeen', qk); else gDots.quest = /:\d/.test(qk) && qk !== qs;
+      const gh = be.heads?.guild; if (gh != null && be.heads?.chat != null) { if (gSeen !== null && gh > gSeen && !be.mine?.has(gh)) gDots.chat = true; gSeen = Math.max(gSeen || 0, gh); } else
       try { const n = await be.guildChatFetch(gSeen || 0); if (gSeen !== null && n.some(m => m.name !== me)) gDots.chat = true; gSeen = Math.max(gSeen || 0, ...n.map(m => m.id)); } catch {}
     }
   }

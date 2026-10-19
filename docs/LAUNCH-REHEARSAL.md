@@ -1,5 +1,7 @@
 # Launch-day rehearsal (local only)
 
+> Superseded for egress numbers by docs/SCALING-PLAYBOOK.md (egress diet, ~0.31 MB per player per day).
+
 Everything here runs on the box. Nothing touches the live database.
 
 - `node test/rehearsal.pglite.mjs 100 30` (or `500 30`) runs PGlite with every addendum applied in order (twice, to prove they are idempotent) and Supabase's default table grants, so RLS decides. Time is mocked by back-dating server timestamps one 30-minute round at a time.

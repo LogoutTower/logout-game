@@ -8,7 +8,7 @@ import { newHero, heroDps, xpToNext, levelCost, gearCost, computeProgress } from
 let PGlite; try { ({ PGlite } = await import('@electric-sql/pglite')); } catch { console.log('pglite not installed, rehearsal skipped'); process.exit(0); }
 const N = +(process.argv[2] || 100), HOURS = +(process.argv[3] || 20), STEP = 1800; // 30-minute rounds
 export const ADDENDA = ['schema.sql', 'schema-addendum-guilds-chat.sql', 'schema-addendum-guilds-v2.sql', 'schema-addendum-staff-guild.sql', 'schema-addendum-floor-zero.sql',
-  'schema-addendum-floors-11-20.sql', 'schema-addendum-arc1-pacing.sql', 'schema-addendum-turnout-scaling.sql', 'waitlist.sql', 'waitlist-count.sql', 'schema-addendum-open-chat.sql'];
+  'schema-addendum-floors-11-20.sql', 'schema-addendum-arc1-pacing.sql', 'schema-addendum-turnout-scaling.sql', 'waitlist.sql', 'waitlist-count.sql', 'schema-addendum-open-chat.sql', 'schema-addendum-egress.sql'];
 const db = new PGlite();
 await db.exec(`create schema auth; create table auth.users (id uuid primary key, is_anonymous boolean default true, email text);
   create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
@@ -42,8 +42,8 @@ for (let step = 0; t < HOURS * 3600; step++, t += STEP) {
   while (heroes.length < arrive) { const i = heroes.length + 1, uid = U(i); await db.exec(`insert into auth.users (id, is_anonymous) values ('${uid}', ${i % 4 !== 0})`); // 1 in 4 binds an identity
     heroes.push({ uid, name: `Hero${i}`, h: newHero(`Hero${i}`, ['Blade', 'Vanguard', 'Arcanist'][i % 3]), gold: 0, xp: 0, joined: t }); }
   await shift(STEP);
-  for (const h of heroes) { const dmg = grow(h); const r = await as(h.uid, `select public.submit_damage($1, $2, $3, $4) r`, [dmg, h.name, h.h.level, h.h.gear], 'submit_damage');
-    if (r) { const s = r[0].r; const row = await st(); assert.equal(Number(s.max_hp), Number(row.max_hp), 'submit_damage returns the stored (scaled) max_hp'); } }
+  for (const h of heroes) { const dmg = grow(h); const r = await as(h.uid, `select public.tick($1, $2, $3, $4, $5) r`, [dmg, h.name, h.h.level, h.h.gear, h.seen || 0], 'tick'); // the client's one call per flush
+    if (r) { const s = r[0].r; for (const c of s.cl || []) h.seen = Math.max(h.seen || 0, c[0]); const row = await st(); assert.equal(Number(s.mx), Number(row.max_hp), 'tick returns the stored (scaled) max_hp'); } }
   // social: guilds early, chat each round, reads
   if (step === 1 || step === 4) for (const h of heroes) { if (h.g) continue; const k = +h.name.slice(4);
     if (k % 25 === 1) { h.g = await as(h.uid, `select public.guild_create($1, $2) r`, [`Guild ${k}`, `G${k}`], 'guild_create'); h.tag = `G${k}`; }
@@ -84,6 +84,12 @@ for (let step = 0; t < HOURS * 3600; step++, t += STEP) {
   assert.equal(await as(g, `select public.guild_chat_post('Newbie', 'x')`, [], 'chat_gate_probe'), null, 'guild chat: members only');
   const leak = (await db.query(`select to_jsonb(m)::text j from public.chat_messages m`)).rows.map(r => r.j).join('');
   assert(!/00000000-0000|@example/.test(leak), 'no user ids or emails in chat rows'); }
+// ---- egress addendum: snapshot (public, anon) and the pace estimate
+{ const sn = (await as(null, `select public.snapshot() r`, [], 'snapshot'))[0].r; assert.equal(sn.f, (await st()).floor); assert(sn.lb.length <= 25 && sn.h.length >= 10);
+  assert(!/00000000-0000|@example/.test(JSON.stringify(sn)), 'snapshot carries no ids or emails');
+  await db.exec(`insert into public.egress_stats (day, calls, bytes) values (current_date - 1, 1000, 160000000) on conflict (day) do update set bytes = 160000000`);
+  const eg = (await as(null, `select public.egress_estimate() r`, [], 'egress_estimate'))[0].r; assert.equal(eg.warn, true, '160 MB/day of tick → pace over 80% of 5 GB');
+  assert.equal((await as(null, `select public.tick(1, 'x', 1, 0, 0)`, [], 'tick_anon_probe')), null, 'anon cannot tick'); stats.errors--; }
 const fin = await st(); const probe = Object.entries(stats.errByMsg).filter(([k]) => k.startsWith('chat_gate_probe')).reduce((s, [, v]) => s + v, 0);
 const out = { heroes: N, clears, turnout, arcEvents, surge, waitlist: wl?.[0]?.c, final: fin, calls: stats.calls, errors: stats.errors - probe, expectedProbeErrors: probe,
   errorRate: +((stats.errors - probe) / stats.calls * 100).toFixed(2), errByMsg: stats.errByMsg, bytes: stats.bytes };
