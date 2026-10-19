@@ -1,5 +1,5 @@
 // Cosmetics: catalog, unlock rules, save migration, layered sprite grids. Pure (no DOM). No stat effects.
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 const I = (id, type, label, value, unlock = null, extra = {}) => ({ id, type, label, value, unlock, ...extra });
 export const CATALOG = [
   // skin tones
@@ -101,6 +101,11 @@ export function migrateSave(s) {
     s.buffs = s.buffs || { rested: 0, elixir: 0, vigil: 0 }; s.shop = s.shop || null;
     s.version = 4;
   }
+  if (s.version < 5) { // v5: talent trees (existing heroes get points for their level automatically: points = level − 1)
+    for (const h of s.heroes || []) { h.talents = h.talents || {}; h.respecs = h.respecs || 0; }
+    s.version = 5;
+  }
+  for (const h of s.heroes || []) h.look = { ...defaultLook(h.cls), ...(h.look || {}) }; // repair partial looks on any version
   return s;
 }
 export const titleOf = h => byId(h.look.title).value;

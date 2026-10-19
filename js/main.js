@@ -1,8 +1,9 @@
 import { effectsOf, CLASSES, newHero, heroDps, levelCost, gearCost, accrue, offlineProgress, applyXp, heroHp, heroMaxHp, isWorn, effectiveDps, buffsOf, bossName, fmt, fmtDur, xpToNext } from './game.js';
 import { makeBackend } from './storage.js';
-import { innCost, rest, shopStock, buy as shopBuy, soldOut, npcGrid } from './town.js';
+import { priceFor, innCost, rest, shopStock, buy as shopBuy, soldOut, npcGrid } from './town.js';
 import { sprite } from './sprites.js';
-import { isSpecialSlot } from './floors.js';
+import { isSpecialSlot, bossInfo } from './floors.js';
+import { treeOf, nodeById, canLearn, learn, freePoints, totalPoints, spentIn, respec, respecCost } from './talents.js';
 import { TRICKLE, trickleDrops, grantDrops, equipItem, salvageItem, salvageValue, rarityOf, statLabel, INV_SIZE, GEAR_SLOTS } from './loot.js';
 import { OFFLINE_CAP_HOURS, MAX_FLOOR } from '../config.js';
 import { bossSprite, bossIsBig, heroSprite } from './sprites.js';
@@ -43,6 +44,7 @@ async function boot() {
   $('maxf').textContent = MAX_FLOOR;
   be = await makeBackend(); save = migrateSave(await be.loadSave()); if (save) delete save.ctx; // live-only context, never trusted from storage
   if (!save) return showCreate();
+  { const f0 = (await be.getFloor()).floor, bi = bossInfo(f0); save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0) }; } // offline maths sees the same floor context
   const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
   save.gold += p.gold; const ups = applyXp(save.heroes, p.xp); pending += p.damage;
   const offFloor = (await be.getFloor()).floor, trickled = trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
@@ -90,16 +92,16 @@ async function startGame(fresh = false) {
   floor = await be.getFloor(); log(`${save.heroes[0].name} awoke on Floor ${floor.floor}. The guardian stirs.`); log('System notice: log out disabled.');
   if (fresh) { notice('Log out disabled'); setTimeout(() => notice(`Floor ${floor.floor} is open`), 900); } // no replayed notices on reload
   $('lvl').onclick = () => buy('level'); $('gear').onclick = () => buy('gear'); $('wardrobeBtn').onclick = openWardrobe;
-  $('townBtn').onclick = openTown; $('helpBtn').onclick = () => tourShow(0); $('bagBtn').onclick = openBag; placeDock();
+  $('townBtn').onclick = openTown; $('helpBtn').onclick = () => tourShow(0); $('bagBtn').onclick = openBag; $('talBtn').onclick = () => { talSel = null; openTalents(); }; placeDock();
   setInterval(tick, 1000); setInterval(sync, 5000); render(); renderLb();
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
 function tick() {
-  save.ctx = { bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), sessionSecs: (Date.now() - sessionStart) / 1000 };
+  save.ctx = { bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, sessionSecs: (Date.now() - sessionStart) / 1000 };
   const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS), fx = effectsOf(save.heroes[0]);
   if (fx.has('whisper') && Date.now() - lastWhisper > 120000) { lastWhisper = Date.now(); log(WHISPERS[Math.floor(Math.random() * WHISPERS.length)], '#b9a8ff'); }
   save.gold += p.gold; recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp; pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage);
-  if (applyXp(save.heroes, p.xp).length) { log(`System notice: level ${save.heroes[0].level} reached.`); notice(`Level ${save.heroes[0].level} reached`); }
+  if (applyXp(save.heroes, p.xp).length) { log(`System notice: level ${save.heroes[0].level} reached.`); notice(`Level ${save.heroes[0].level} reached · +1 talent point`); }
   for (const it of trickleDrops(save, p.secs, floor.floor, p.secs > 2 ? TRICKLE.offlineMax : Infinity)) { const R = rarityOf(it.rarity); log(`Loot · ${R.label} ${it.name}${it.salvaged ? ' (bag full: salvaged)' : ''}`, R.color); notice(`${R.label} find — ${it.name}`, R.color); }
   if (p.damage > 0) { hits++; if (fx.has('tenth') && hits % 10 === 0) { hitFx(p.damage); log('The Tenth Bell rings — double hit.', '#7ff6ff'); } hitFx(p.damage); } $('boss').classList.add('hit'); setTimeout(() => $('boss').classList.remove('hit'), 120); render();
 }
@@ -141,6 +143,7 @@ function render() {
   H('stats').innerHTML = `${CLASSES[h.cls].icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${effectiveDps(save).toFixed(1)}</b> · HP <b>${Math.round(heroHp(h))}/${heroMaxHp(h)}</b> · Gold <b>${fmt(save.gold)}</b>`;
   H('lvlL').textContent = `Train ${fmt(levelCost(h))}g`; $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`; $('lvl').disabled = save.gold < levelCost(h);
   H('equipped').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip?.[s]; return `<span class="eq" style="${it ? `color:${rarityOf(it.rarity).color}` : ''}">${s[0].toUpperCase() + s.slice(1)}: ${it ? esc(it.name) : '—'}</span>`; }).join('');
+  { const fp = freePoints(h); const tb = $('talBadge'); if (tb.hidden !== !(fp > 0)) tb.hidden = !(fp > 0); if (tb.textContent !== String(fp)) tb.textContent = fp; }
   H('bagL').textContent = `Bag ${save.inv.length}/${INV_SIZE}`; $('gear').title = 'Forge: temper your weapon, +15% damage per tier';
   H('gearL').textContent = `Forge ${fmt(gearCost(h))}g`; $('gear').disabled = save.gold < gearCost(h);
 }
@@ -162,7 +165,7 @@ function openTown() {
   const left = st.endsAt - now; $('shopTimer').textContent = `New stock in ${fmtDur(left / 1000)}`;
   $('shopList').innerHTML = st.items.map((it, i) => { const R = it.item ? rarityOf(it.item.rarity) : null, out = soldOut(save, st, i);
     return `<div class="srow" ${R ? `style="--rc:${R.color}"` : ''}><div><b style="${R ? `color:${R.color}` : ''}">${esc(it.name)}</b><small>${R ? `${R.label} ${it.item.slot} · ${Object.entries(it.item.stats).map(([k, v]) => statLabel(k, v)).join(' · ')}` : esc(it.desc)}</small></div>
-      <button data-i="${i}" ${out || save.gold < it.price ? 'disabled' : ''}>${out ? 'Sold' : `${fmt(it.price)}g`}</button></div>`; }).join('');
+      <button data-i="${i}" ${out || save.gold < priceFor(save, it) ? 'disabled' : ''}>${out ? 'Sold' : `${fmt(priceFor(save, it))}g`}</button></div>`; }).join('');
   $('shopList').onclick = async e => { const btn = e.target.closest('button[data-i]'); if (!btn) return; const got = shopBuy(save, f, Date.now(), +btn.dataset.i);
     if (got) { log(`Bought ${got}.`); notice(`Bought · ${got}`); await be.saveSave(save); render(); } openTown(); };
   $('townGold').textContent = `Gold ${fmt(save.gold)}`;
@@ -217,3 +220,22 @@ const dockMQ = matchMedia('(max-width: 640px)'), dockHome = document.createComme
 function placeDock() { const d = $('dock'); if (dockMQ.matches) { if (d.parentNode !== document.body) { d.replaceWith(dockHome); document.body.append(d); } } else if (dockHome.parentNode) dockHome.replaceWith(d); }
 dockMQ.addEventListener('change', placeDock);
 boot();
+
+// ---- Talents: glass-HUD tree, tap a node for its tooltip, Learn / Respec.
+let talSel = null;
+function openTalents() {
+  const h = save.heroes[0], fp = freePoints(h), f = floor.floor, rc = respecCost(h, f);
+  $('talPts').textContent = `· ${h.cls} · ${fp} point${fp === 1 ? '' : 's'} free · ${totalPoints(h)} total`;
+  $('talTree').innerHTML = treeOf(h.cls).map(b => `<section class="tbranch"><h3>${esc(b.name)} <small>${spentIn(h, b.id)} pts</small></h3><p class="sub">${esc(b.blurb)}</p>${b.nodes.map(n => {
+    const r = h.talents?.[n.id] || 0, why = canLearn(h, n.id), gated = why && why.startsWith('needs');
+    return `<button class="tnode ${r >= n.max ? 'max' : ''} ${gated ? 'gated' : ''} ${!why ? 'can' : ''} ${n.capstone ? 'cap' : ''} ${talSel === n.id ? 'sel' : ''}" data-id="${n.id}" aria-label="${esc(n.name)} ${r}/${n.max}"><span>${esc(n.name)}</span><b>${r}/${n.max}</b></button>`; }).join('')}</section>`).join('');
+  const n = talSel && nodeById(talSel);
+  if (n) { const r = h.talents?.[n.id] || 0, why = canLearn(h, n.id);
+    $('talTip').innerHTML = `<b>${esc(n.name)}</b>${n.capstone ? ' <small class="capt">capstone</small>' : ''} <small>rank ${r}/${n.max}${n.req ? ` · needs ${n.req} pts in branch` : ''}</small><p>${esc(n.desc)}</p><button id="talLearn" class="cta" ${why ? 'disabled' : ''}>${why ? esc(why) : 'Learn'}</button>`;
+    $('talLearn').onclick = async () => { if (learn(h, n.id)) { log(`System notice: talent learned — ${n.name} (${(h.talents[n.id])}/${n.max}).`); await be.saveSave(save); render(); openTalents(); } };
+  } else $('talTip').innerHTML = '<p class="sub">Tap a node to see what it does. Later nodes unlock after you spend points in that branch.</p>';
+  $('talRespec').textContent = rc ? `Respec · ${fmt(rc)}g` : 'Respec · free once'; $('talRespec').disabled = save.gold < rc || !Object.keys(h.talents || {}).length;
+  $('talRespec').onclick = async () => { if (respec(save, f)) { log('System notice: talents reset. All points refunded.'); talSel = null; await be.saveSave(save); render(); openTalents(); } };
+  $('talTree').onclick = e => { const b = e.target.closest('.tnode'); if (b) { talSel = b.dataset.id; openTalents(); } };
+  if (!$('talents').open) $('talents').showModal();
+}

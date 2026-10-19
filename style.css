@@ -142,3 +142,17 @@ header{padding-top:max(14px,env(safe-area-inset-top))}main{padding-left:max(12px
 @keyframes uglow{to{box-shadow:0 0 18px #ffd76a,inset 0 0 14px #7ff6ff88}}
 .item .ab{color:#5cff9a}.item .db{color:#ff9b7a}.item .lore{font-style:italic;color:#b9a8ff;font-size:12px;margin:4px 0}
 @media (prefers-reduced-motion:reduce){.uniq,.cell.ucell{animation:none}}
+
+/* Talents */
+.rb{position:relative}.badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--gold);color:#1a0b33;font:700 11px/18px 'Rajdhani',sans-serif;box-shadow:0 0 8px var(--gold)}
+#talents{max-width:900px;width:95vw;max-height:90vh;overflow:auto}
+.taltree{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.tbranch{border:1px solid var(--line);border-radius:10px;padding:10px;background:rgba(10,4,24,.45);display:flex;flex-direction:column;gap:8px}
+.tbranch h3{margin:0;color:var(--cy);font-size:15px;letter-spacing:2px;text-transform:uppercase}.tbranch h3 small{color:var(--gold);float:right}.tbranch .sub{margin:0}
+.tnode{display:flex;justify-content:space-between;align-items:center;min-height:48px;margin:0;padding:6px 12px;border-radius:24px;border:1px solid var(--line);background:rgba(30,15,65,.6);text-align:left;position:relative}
+.tnode+.tnode::before{content:'';position:absolute;left:24px;top:-9px;height:8px;border-left:2px solid var(--line)}
+.tnode b{font-size:12px;color:var(--gold)}.tnode.can{border-color:var(--cy);box-shadow:0 0 10px #5ff6ff55}.tnode.max{border-color:var(--gold);background:rgba(80,60,10,.35)}
+.tnode.gated{opacity:.45}.tnode.cap{border-width:2px}.tnode.cap span::before{content:'★ ';color:var(--gold)}.tnode.sel{outline:2px solid #fff;outline-offset:1px}
+.taltip{margin:12px 0;padding:10px 12px;border:1px solid var(--cy);border-radius:10px;background:rgba(10,4,24,.6);min-height:64px}.taltip p{margin:6px 0}.taltip .capt{color:var(--gold)}
+.talbtns{display:flex;gap:10px;justify-content:flex-end}
+@media(max-width:640px){.taltree{grid-template-columns:1fr}#talents{width:calc(100vw - 16px)}.taltip{position:sticky;bottom:52px;background:rgba(22,10,48,.97);z-index:2;box-shadow:0 -8px 20px #0a0418}.talbtns{position:sticky;bottom:0;background:rgba(30,15,65,.95);padding:6px 0}.talbtns button{flex:1}}

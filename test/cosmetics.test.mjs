@@ -1,9 +1,9 @@
 import assert from 'node:assert';
-import { CATALOG, migrateSave, recordClear, isUnlocked, equip, defaultLook, byId, heroGrid, fakeProfile, unlockText, itemsFor } from '../js/cosmetics.js';
+import { CATALOG, migrateSave, recordClear, isUnlocked, equip, defaultLook, byId, heroGrid, fakeProfile, unlockText, itemsFor, SAVE_VERSION } from '../js/cosmetics.js';
 const fresh = () => migrateSave({ heroes: [{ id: 'a', name: 'K', cls: 'Blade', level: 3, xp: 5, gear: 1 }], gold: 42, lastTick: 1 });
 // migration of v1 save
 let s = fresh();
-assert.equal(s.version, 4); assert.equal(s.gold, 42); assert.equal(s.heroes[0].level, 3);
+assert.equal(s.version, SAVE_VERSION); assert.equal(s.gold, 42); assert.equal(s.heroes[0].level, 3);
 assert.deepEqual(s.heroes[0].look, defaultLook('Blade')); assert.deepEqual(s.progress, { cleared: [], top3: [], rank1: 0, drops: [] });
 assert.deepEqual(migrateSave(JSON.parse(JSON.stringify(s))), s, 'migration idempotent');
 assert.equal(migrateSave(null), null);

@@ -2,12 +2,15 @@
 import { heroMaxHp, heroHp, buffsOf, effectsOf, RESTED, ELIXIR } from './game.js';
 import { rng, baseHp, bossInfo } from './floors.js';
 import { rollItem, salvageValue, INV_SIZE } from './loot.js';
+import { talentBonus } from './talents.js';
 import { canvas, shadeShape } from './bosses.js';
 const tier = f => Math.sqrt(baseHp(f) / baseHp(1)); // price scale per floor
-export const innCost = (f, save) => Math.round(30 * tier(f) * (save && effectsOf(save.heroes[0]).has('innTax') ? 1.25 : 1));
+export const innCost = (f, save) => Math.round(30 * tier(f) * (save && effectsOf(save.heroes[0]).has('innTax') ? 1.25 : 1) * (save ? 1 - talentBonus(save.heroes[0]).innPct / 100 : 1));
+/** Shop price after talent discounts. */
+export const priceFor = (save, it) => Math.round(it.price * (save ? 1 - talentBonus(save.heroes[0]).shopPct / 100 : 1));
 export function rest(save, floor) {
   const c = innCost(floor, save); if (save.gold < c) return false;
-  save.gold -= c; const h = save.heroes[0]; h.hp = heroMaxHp(h); buffsOf(save).rested = RESTED.secs; return true;
+  save.gold -= c; const h = save.heroes[0]; h.hp = heroMaxHp(h); buffsOf(save).rested = Math.round(RESTED.secs * (1 + talentBonus(h).restedPct / 100)); return true;
 }
 export const SHOP_BUCKET_MS = 4 * 3600e3; // stock rotates every 4 hours
 export const POTION_HEAL = 0.5, VIGIL_HOURS = 4;
@@ -25,14 +28,14 @@ export function shopStock(floor, now) {
 }
 /** Buy stock index i. Gear can be bought once per rotation. Returns a short result string or null if not possible. */
 export function buy(save, floor, now, i) {
-  const st = shopStock(floor, now), it = st.items[i]; if (!it || save.gold < it.price) return null;
+  const st = shopStock(floor, now), it = st.items[i]; if (!it || save.gold < priceFor(save, it)) return null;
   if (!save.shop || save.shop.floor !== floor || save.shop.bucket !== st.bucket) save.shop = { floor, bucket: st.bucket, bought: [] };
   const h = save.heroes[0], b = buffsOf(save);
   if (it.kind === 'gear') { if (save.shop.bought.includes(i) || save.inv.length >= INV_SIZE) return null; save.inv.push({ ...it.item }); save.shop.bought.push(i); }
   if (it.kind === 'potion') { if (heroHp(h) >= heroMaxHp(h)) return null; h.hp = Math.min(heroMaxHp(h), heroHp(h) + POTION_HEAL * heroMaxHp(h)); }
   if (it.kind === 'elixir') b.elixir = ELIXIR.secs;
   if (it.kind === 'vigil') { if (b.vigil > 0) return null; b.vigil = VIGIL_HOURS; }
-  save.gold -= it.price; return it.name;
+  save.gold -= priceFor(save, it); return it.name;
 }
 export const soldOut = (save, st, i) => st.items[i].kind === 'gear' && save.shop?.bucket === st.bucket && save.shop?.floor === st.floor && save.shop.bought.includes(i);
 // ---- NPC sprites (original): a stout innkeeper with apron and mug, a hooded peddler with an overloaded pack.

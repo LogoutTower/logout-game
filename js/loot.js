@@ -1,4 +1,5 @@
 // Loot: seeded, reproducible boss drops (stat gear + rare element cosmetics), inventory, equip and salvage. Pure (no DOM, no Math.random).
+import { talentBonus } from './talents.js';
 import { rng, baseHp, isSpecialSlot, bossInfo } from './floors.js';
 import { DROP_COSMETICS } from './cosmetics.js';
 export const INV_SIZE = 20;
@@ -108,11 +109,11 @@ export function rollDrops({ heroId = 'hero', floor, share, seq = 0, owned = [], 
   return { items, cosmetic, element };
 }
 /** Salvage gold for an item; Scrapper's Ledger (equipped) pays ×3. */
-export const salvageGold = (save, it) => salvageValue(it) * (uniqueFx(save).has('ledger') ? 3 : 1);
+export const salvageGold = (save, it) => Math.round(salvageValue(it) * (uniqueFx(save).has('ledger') ? 3 : 1) * (1 + talentBonus(save.heroes[0]).salvagePct / 100));
 export const salvageValue = it => Math.round(20 * Math.pow(RARITIES.findIndex(r => r.id === it.rarity) + 1, 2) * scale(it.floor));
 /** Apply one kill's drops to a v3 save. Returns { items, cosmetic, salvaged } (salvaged = auto-salvaged gold when the bag is full). */
 export function grantDrops(save, floor, share) {
-  const h = save.heroes[0], d = rollDrops({ heroId: h.id, floor, share, seq: save.lootSeq++, owned: save.progress.drops, ownedU: ownedUniqueNames(save), luck: uniqueFx(save).has('luck') ? 1.25 : 1 });
+  const h = save.heroes[0], d = rollDrops({ heroId: h.id, floor, share, seq: save.lootSeq++, owned: save.progress.drops, ownedU: ownedUniqueNames(save), luck: (uniqueFx(save).has('luck') ? 1.25 : 1) * (1 + talentBonus(h).lootPct / 100) });
   let salvaged = 0;
   for (const it of d.items) {
     if (it.rarity === 'unique') { save.inv.push(it); continue; } // never auto-salvaged (may exceed the bag)
