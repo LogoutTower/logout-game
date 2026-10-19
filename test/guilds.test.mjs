@@ -8,7 +8,7 @@ const { newHero, simulate, guildMul } = await import('../js/game.js');
 const { LocalBackend } = await import('../js/storage.js');
 const { SupabaseBackend } = await import('../js/supabase.js');
 const { FEATURES } = await import('../config.js');
-assert.equal(FEATURES.guilds, 'off'); assert.equal(FEATURES.chat, 'off'); // stay off live until the addendum has run
+assert.equal(FEATURES.guilds, 'all'); assert.equal(FEATURES.chat, 'all'); assert.equal(FEATURES.bindIdentity, 'gm'); // live since the addendum ran; posting still needs a bound identity
 // validation
 assert(checkGuild('Night Bell', 'nb').ok && checkGuild('Night Bell', 'nb').tag === 'NB');
 for (const [n, t] of [['ab', 'AB'], ['x'.repeat(25), 'AB'], ['Good', 'A'], ['Good', 'ABCDE'], ['evil.com', 'EV'], ['Shitlords', 'SL'], ['Ok Name', 'F4CK'.replace('4', 'U')]]) assert(!checkGuild(n, t).ok, `rejected: ${n} ${t}`);
