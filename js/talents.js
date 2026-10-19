@@ -78,7 +78,7 @@ export const TREES = {
 export const KEYS = ['dpsPct', 'goldPct', 'xpPct', 'capH', 'hpPct', 'drainPct', 'regenPct', 'layerPct', 'rallyPct', 'innPct', 'shopPct', 'offlinePct', 'lootPct', 'salvagePct', 'doublePct', 'elementPct', 'restedPct', 'restedMulPct', 'bonusPts', 'lowMulPct'];
 const ALL = Object.values(TREES).flatMap(bs => bs.flatMap(b => b.nodes.map(n => ({ ...n, branch: b.id }))));
 export const nodeById = id => ALL.find(n => n.id === id);
-export const treeOf = cls => TREES[cls] || [];
+export const treeOf = cls => TREES[cls] || []; // the staff class has no tree
 const ranks = h => h?.talents || {};
 /** Summed talent effects for a hero. */
 export function talentBonus(h) {
@@ -100,9 +100,9 @@ export function canLearn(h, id) {
   return null;
 }
 export function learn(h, id) { if (canLearn(h, id)) return false; h.talents = { ...ranks(h), [id]: (ranks(h)[id] || 0) + 1 }; return true; }
-export const respecCost = (h, floor) => (h.respecs || 0) === 0 ? 0 : Math.round(150 * Math.sqrt(baseHp(floor) / baseHp(1)));
+export const respecCost = (h, floor, gm = false) => gm || (h.respecs || 0) === 0 ? 0 : Math.round(150 * Math.sqrt(baseHp(floor) / baseHp(1)));
 /** Refund every point. First respec is free; then gold scaled by floor. */
 export function respec(save, floor) {
-  const h = save.heroes[0], c = respecCost(h, floor); if (save.gold < c || spent(h) === 0) return false;
+  const h = save.heroes[0], c = respecCost(h, floor, !!save.ctx?.gm); if (save.gold < c || spent(h) === 0) return false;
   save.gold -= c; h.talents = {}; h.respecs = (h.respecs || 0) + 1; return true;
 }

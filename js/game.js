@@ -9,6 +9,9 @@ export { floorBossHp, bossName, bossInfo } from './floors.js';
 import { talentBonus } from './talents.js';
 export { talentBonus };
 
+// Staff class stats are registered by gm.js (kept out of CLASSES so it never appears in the class picker).
+export const STAFF_CLASSES = {};
+export const classOf = cls => CLASSES[cls] || STAFF_CLASSES[cls];
 export function newHero(name, cls) {
   if (!CLASSES[cls]) throw new Error('bad class');
   return { id: Math.random().toString(36).slice(2, 10), name: String(name).slice(0, 20) || 'Nameless', cls, level: 1, xp: 0, gear: 0, hp: CLASSES[cls].hp };
@@ -23,9 +26,11 @@ export function gearBonus(h) {
 /** Special effects of equipped Unique items (see UNIQUES in loot.js). */
 export const effectsOf = h => { const w = h?.equip?.weapon; return w?.rarity === 'unique' ? new Set([w.ability.id, w.drawback.id]) : new Set(); };
 export const FX = { tenthMul: 1.1, heavyMul: 0.95, lastLayer: { below: 0.2, mul: 1.3 }, lifesteal: 0.65, drain: 1.2, steadyLowMul: 0.85, hearthHp: 0.5, momentum: { perMin: 0.01, max: 0.3 }, milestoneMul: 1.5 };
-export const heroDps = h => { const c = CLASSES[h.cls], g = gearBonus(h), e = effectsOf(h); return +((c.atk * c.spd * (1 + 0.25 * (h.level - 1)) + g.dps) * (1 + 0.15 * h.gear) * (1 + g.dpsPct / 100) * talentDpsMul(h) * (e.has('tenth') ? FX.tenthMul : 1) * (e.has('heavy') ? FX.heavyMul : 1)).toFixed(3); };
+export const heroDps = h => { const c = classOf(h.cls), g = gearBonus(h), e = effectsOf(h); return +((c.atk * c.spd * (1 + 0.25 * (h.level - 1)) + g.dps) * (1 + 0.15 * h.gear) * (1 + g.dpsPct / 100) * talentDpsMul(h) * (e.has('tenth') ? FX.tenthMul : 1) * (e.has('heavy') ? FX.heavyMul : 1)).toFixed(3); };
 const talentDpsMul = h => { const t = talentBonus(h); return (1 + (t.dpsPct + t.rallyPct) / 100) * (1 + t.doublePct / 100); };
 const goldMul = heroes => 1 + (gearBonus(heroes[0]).goldPct + talentBonus(heroes[0]).goldPct) / 100, xpMul = heroes => 1 + (gearBonus(heroes[0]).xpPct + talentBonus(heroes[0]).xpPct) / 100;
+/** Shaper's Decree: +5% gold/XP for everyone on a floor while a staff hero is fighting there (ctx.decree, set live or from the server floor state). */
+const decreeMul = save => save.ctx?.decree ? 1.05 : 1;
 export const offlineCap = (heroes, base = 12) => base + gearBonus(heroes[0]).capH + talentBonus(heroes[0]).capH;
 export const xpToNext = lvl => Math.round(50 * Math.pow(1.4, lvl - 1));
 export const levelCost = h => Math.round(40 * Math.pow(1.5, h.level - 1));
@@ -45,7 +50,7 @@ export function computeProgress(heroes, lastTick, now, capHours = 12) {
 export const DRAIN_SECS = 1030;            // full → empty in ~17 min; worn down (30%) after ~12 min of fighting
 export const LOW_HP = 0.3, LOW_MUL = 0.5;  // worn-down threshold and DPS penalty
 export const RESTED = { secs: 1800, mul: 1.15 }, ELIXIR = { secs: 600, mul: 1.25 };
-export const heroMaxHp = h => Math.round(CLASSES[h.cls].hp * (1 + 0.1 * (h.level - 1)) * (1 + talentBonus(h).hpPct / 100));
+export const heroMaxHp = h => Math.round(classOf(h.cls).hp * (1 + 0.1 * (h.level - 1)) * (1 + talentBonus(h).hpPct / 100));
 /** Well Rested gold/XP multiplier (Sanctuary talent strengthens it). */
 export const restedMul = h => 1 + (RESTED.mul - 1) * (1 + talentBonus(h).restedMulPct / 100);
 export const heroHp = h => Math.min(heroMaxHp(h), h.hp ?? heroMaxHp(h));
@@ -67,9 +72,9 @@ export const effectiveDps = save => totalDps(save.heroes) * (isWorn(save.heroes[
  *  Mutates hero HP and buff timers; returns float { dmg, gold, xp, lowSecs }. */
 export function simulate(save, secs) {
   const h = save.heroes[0], max = heroMaxHp(h), b = buffsOf(save), e = effectsOf(h), tb = talentBonus(h), raw = max / DRAIN_SECS * (e.has('lifesteal') ? FX.lifesteal : 1) * (e.has('drain') ? FX.drain : 1);
-  const drain = Math.max(raw * 0.1, raw * (1 - tb.drainPct / 100) - tb.regenPct / 100 * max / 60); // talents: slower drain + regen
+  const drain = save.ctx?.gm ? 0 : Math.max(raw * 0.1, raw * (1 - tb.drainPct / 100) - tb.regenPct / 100 * max / 60); // talents: slower drain + regen
   const base = totalDps(save.heroes) * layerMul(save), lowMul = lowMulOf(h), hearth = e.has('hearth');
-  const gM = goldMul(save.heroes), xM = xpMul(save.heroes);
+  const gM = goldMul(save.heroes) * decreeMul(save), xM = xpMul(save.heroes) * decreeMul(save);
   let hp = heroHp(h), t = Math.max(0, secs), dmg = 0, gold = 0, xp = 0, lowSecs = 0;
   for (let guard = 0; t > 1e-9 && guard < 16; guard++) {
     const low = hp <= LOW_HP * max + 1e-9; let seg = t;
@@ -100,7 +105,7 @@ export function accrue(save, now, capHours = 12, offline = false) {
 }
 /** Offline return: same rules as live play. A Scroll of Vigil adds 4h to the cap once (consumed only if the extra time was needed). */
 export function offlineProgress(save, now, baseCapHours = 12) {
-  const b = buffsOf(save), cap = offlineCap(save.heroes, baseCapHours) + (b.vigil || 0), raw = Math.max(0, (now - save.lastTick) / 1000);
+  const b = buffsOf(save), cap = offlineCap(save.heroes, save.ctx?.gm ? 24 : baseCapHours) + (b.vigil || 0), raw = Math.max(0, (now - save.lastTick) / 1000);
   const vigilUsed = b.vigil > 0 && raw > (cap - b.vigil) * 3600; if (vigilUsed) b.vigil = 0;
   const r = accrue(save, now, cap, true); return { ...r, cap, vigilUsed };
 }

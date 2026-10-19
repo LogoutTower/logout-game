@@ -34,7 +34,7 @@ export class SupabaseBackend {
     s.updatedAt = this.now(); this.store.setItem(this.k + '.save', JSON.stringify(s)); this._dirty = s;
     if (this.now() - (this._lastPush || 0) >= FLUSH_MS) await this._push(s);
   }
-  async _push(s) { this._lastPush = this.now(); this._dirty = null; await this.sb.from('saves').upsert({ user_id: this.user.id, data: s, updated_at: new Date(s.updatedAt || this.now()).toISOString() }); }
+  async _push(s) { this._lastPush = this.now(); this._dirty = null; const { ctx, ...data } = s; await this.sb.from('saves').upsert({ user_id: this.user.id, data, updated_at: new Date(s.updatedAt || this.now()).toISOString() }); }
   async getFloor() {
     if (!this.floor || this.now() - this.lastPoll >= POLL_MS) {
       const { data } = await this.sb.from('floor_state').select('*').eq('id', 1).single(); this.lastPoll = this.now();
@@ -44,7 +44,7 @@ export class SupabaseBackend {
   }
   /** Batched: damage accumulates locally and is sent to submit_damage at most every FLUSH_MS. The server clamps it. */
   async submitDamage(playerName, amount, hero = {}) {
-    this.pending += amount; this.meta = { name: playerName, level: hero.level || 1, gear: hero.gear || 0 };
+    this.pending += amount; this.meta = { name: playerName, level: hero.level || 1, gear: hero.gear || 0 }; // staff status is decided by the server role
     if (this.now() - this.lastFlush < FLUSH_MS) { const f = await this.getFloor(); return { ...f, advanced: false, accepted: amount, clears: [] }; }
     return this.flush();
   }

@@ -3,6 +3,8 @@ import { talentBonus } from './talents.js';
 import { rng, baseHp, isSpecialSlot, bossInfo } from './floors.js';
 import { DROP_COSMETICS } from './cosmetics.js';
 export const INV_SIZE = 20;
+/** Bag size: 20, or 60 for a valid staff hero (save.ctx.gm is runtime-only). */
+export const bagSize = save => save?.ctx?.gm ? 60 : INV_SIZE;
 export const GEAR_SLOTS = ['weapon', 'armor', 'trinket'];
 export const RARITIES = [
   { id: 'common', label: 'Common', color: '#c9c2d8', w: 60, mul: 1, affixes: 0 },
@@ -117,7 +119,7 @@ export function grantDrops(save, floor, share) {
   let salvaged = 0;
   for (const it of d.items) {
     if (it.rarity === 'unique') { save.inv.push(it); continue; } // never auto-salvaged (may exceed the bag)
-    if (save.inv.length < INV_SIZE) save.inv.push(it); else { const g = salvageGold(save, it); save.gold += g; salvaged += g; }
+    if (save.inv.length < bagSize(save)) save.inv.push(it); else { const g = salvageGold(save, it); save.gold += g; salvaged += g; }
   }
   if (d.cosmetic) save.progress.drops.push(d.cosmetic);
   return { ...d, salvaged };
@@ -132,12 +134,13 @@ export function trickleDrops(save, secs, floor, maxDrops = Infinity) {
     if (out.length >= maxDrops) { t.secs %= every; break; }
     t.secs -= every; const r = rng(hash(`${h.id}|trickle|${t.seq}`)), it = rollItem(r, floor, bossInfo(floor).lootElement, `t${t.seq}`, TRICKLE.weights); t.seq++;
     it.trickle = true; out.push(it);
-    if (save.inv.length < INV_SIZE) save.inv.push(it); else { save.gold += salvageGold(save, it); it.salvaged = true; }
+    if (save.inv.length < bagSize(save)) save.inv.push(it); else { save.gold += salvageGold(save, it); it.salvaged = true; }
   }
   return out;
 }
 export function equipItem(save, invIndex) {
   const h = save.heroes[0], it = save.inv[invIndex]; if (!it) return false;
+  if ((it.gm || String(it.id).startsWith('gm-')) && !save.ctx?.gm) return false; // staff items need a valid staff flag/role
   const w = h.equip.weapon, jealous = x => x?.rarity === 'unique' && x.drawback.id === 'jealous';
   if (it.slot === 'trinket' && jealous(w)) return false; // the jealous Unique refuses company
   const old = h.equip[it.slot]; h.equip[it.slot] = it; save.inv.splice(invIndex, 1); if (old) save.inv.push(old);
@@ -145,4 +148,6 @@ export function equipItem(save, invIndex) {
   return true;
 }
 export function salvageItem(save, invIndex) { const it = save.inv[invIndex]; if (!it) return 0; const g = salvageGold(save, it); save.inv.splice(invIndex, 1); save.gold += g; return g; }
+/** Base DPS of a Legendary weapon on floor f (parity reference for the staff weapon). */
+export const legendaryWeaponDps = f => +(1.5 * scale(f) * 3).toFixed(1);
 export { AFFIXES, scale as gearScale, ELEMENT_WORD, U_PRE, U_BASE, U_EPI };

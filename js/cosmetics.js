@@ -46,7 +46,7 @@ export const CATALOG = [
 export const DROP_COSMETICS = CATALOG.filter(i => i.unlock?.drop);
 export const SLOTS = ['skin', 'hairColor', 'hairStyle', 'outfitColor', 'outfitStyle', 'trim', 'weapon', 'weaponColor', 'aura', 'title', 'nameColor'];
 export const CREATION_SLOTS = ['skin', 'hairColor', 'hairStyle', 'outfitColor'];
-export const byId = id => CATALOG.find(i => i.id === id);
+export const byId = id => CATALOG.find(i => i.id === id) || GM_ITEMS.find(i => i.id === id); // staff items resolve for rendering only; never listed
 export const itemsFor = (slot, cls) => CATALOG.filter(i => i.type === slot && (!i.cls || i.cls === cls));
 export function unlockText(u) {
   if (!u) return 'Available';
@@ -75,7 +75,7 @@ export function recordClear(save, floor, rank, share = 1) {
   return CATALOG.filter(i => isUnlocked(i, p) && !before.has(i.id));
 }
 export function defaultLook(cls) {
-  const w = itemsFor('weapon', cls)[0].id;
+  const w = (itemsFor('weapon', cls)[0] || itemsFor('weapon', 'Vanguard')[0]).id;
   return { skin: 'skin-2', hairColor: 'hc-ink', hairStyle: 'hs-short', outfitColor: 'oc-cyan', outfitStyle: 'os-tunic', trim: 'tr-steel', weapon: w, weaponColor: 'wc-steel', title: 't-trapped', nameColor: 'nc-white', aura: 'au-none' };
 }
 /** Choose an item if unlocked & valid for the class; returns true on success. */
@@ -118,6 +118,7 @@ export function fakeProfile(name) {
 }
 
 import { shade } from './pixel.js';
+import { GM_ITEMS, GM_CLASS } from './gm.js';
 // ---------- layered sprite: 16x16 layer grid, shaded/outlined to 32x32 ----------
 export const HERO_SIZE = 32;
 const BASE = [ // chibi proportions: big head (rows 2-8), small body (rows 9-15)
@@ -135,9 +136,14 @@ const WEAPONS = { // [x,y,ch] lists drawn at the hero's right hand (col 12-15)
   orb: [[12,1,'W'],[13,1,'W'],[14,1,'W'],[12,2,'W'],[13,2,'p'],[14,2,'W'],[13,3,'w'],[13,4,'w'],[13,5,'w'],[13,6,'w'],[13,7,'w'],[13,8,'w'],[13,9,'w'],[13,10,'w']],
   wand: [[13,5,'W'],[14,4,'W'],[12,4,'W'],[13,3,'W'],[13,6,'w'],[13,7,'w'],[13,8,'w']],
 };
+const GM_GRID = [ // hooded long coat, face in full shadow with two faint cyan glints, gold trim, flared hem
+  '................', '.....kkkkkk.....', '....kOOOOOOk....', '...kOOOOOOOOk...', '..kOOTTTTTTOOk..', '..kOTvvvvvvTOk..', '..kOTvcvvcvTOk..', '..kOTvvvvvvTOk..', '...kOTvvvvTOk...', '...kTOOOOOOTk...', '..kOOTOOOOTOOk..', '..kbOTOOOOTObk..', '..kOOTOOOOTOOk..', '.kOOOTOOOOTOOOk.', 'kOOOOTOOOOTOOOOk', 'kTTTTTkbbkTTTTTk'];
+const GM_KATANA = [[14,0,'K'],[14,1,'K'],[15,1,'y'],[14,2,'K'],[14,3,'K'],[15,3,'y'],[14,4,'K'],[14,5,'K'],[15,5,'y'],[14,6,'K'],[14,7,'K'],[13,8,'y'],[14,8,'y'],[15,8,'y'],[14,9,'b'],[14,10,'b']]; // single void katana, gold spine + guard
 /** Returns {rows: 32 strings of 32 chars, pal: char->colour} for a look + class. */
-export const heroGrid = (look, cls) => { const g = heroGrid16(look, cls); return shade(g.rows, g.pal, { flat: 'fm' }); };
+export const heroGrid = (look, cls) => { const g = heroGrid16(look, cls); return shade(g.rows, g.pal, { flat: cls === GM_CLASS ? 'fmvcy' : 'fm' }); };
 export function heroGrid16(look, cls) {
+  if (cls === GM_CLASS) { const g = GM_GRID.map(r => [...r]); for (const [x, y, c] of GM_KATANA) g[y][x] = c;
+    return { rows: g.map(r => r.join('')), pal: { k: '#05030a', O: '#17131f', T: '#d9a93f', v: '#030106', c: '#5ff6ff', K: '#0a0710', y: '#ffd76a', b: '#241c30' } }; }
   const g = BASE.map(r => [...r]), set = (x, y, c) => { if (x >= 0 && x < 16 && y >= 0 && y < 16) g[y][x] = c; };
   const fill = (x0, x1, y0, y1, c) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) set(x, y, c); };
   const style = byId(look.outfitStyle).value, hair = byId(look.hairStyle).value;

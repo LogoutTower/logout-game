@@ -4,9 +4,13 @@ import { priceFor, innCost, rest, shopStock, buy as shopBuy, soldOut, npcGrid } 
 import { sprite } from './sprites.js';
 import { isSpecialSlot, bossInfo } from './floors.js';
 import { treeOf, nodeById, canLearn, learn, freePoints, totalPoints, spentIn, respec, respecCost } from './talents.js';
-import { TRICKLE, trickleDrops, grantDrops, equipItem, salvageItem, salvageValue, rarityOf, statLabel, INV_SIZE, GEAR_SLOTS } from './loot.js';
-import { OFFLINE_CAP_HOURS, MAX_FLOOR, FEATURES, SOLANA_RPC, TOKEN_MINT, HOLDER_THRESHOLD } from '../config.js';
+import { TRICKLE, trickleDrops, grantDrops, equipItem, salvageItem, salvageValue, rarityOf, statLabel, INV_SIZE, bagSize, GEAR_SLOTS } from './loot.js';
+import { GM_PASS_HASH, OFFLINE_CAP_HOURS, MAX_FLOOR, FEATURES, SOLANA_RPC, TOKEN_MINT, HOLDER_THRESHOLD } from '../config.js';
 import { featureOn } from './features.js';
+import { GM_CLASS, GM_SIGIL, EVENTIDE, gmOn, checkPass, sanitizeSave, becomeGm, leaveGm, eventide, shouldAnnounce } from './gm.js';
+import { openSandbox, sandboxFloor, sandboxFight, sandboxLoot, closeSandbox } from './sandbox.js';
+import { legendaryWeaponDps } from './loot.js';
+import { classOf } from './game.js';
 import { holderStatus } from './supabase.js';
 import { bossSprite, bossIsBig, heroSprite } from './sprites.js';
 import { SLOTS, CREATION_SLOTS, itemsFor, isUnlocked, unlockText, defaultLook, migrateSave, recordClear, equip, titleOf, nameColorOf, fakeProfile, byId, SAVE_VERSION } from './cosmetics.js';
@@ -26,8 +30,9 @@ const hpColor = pct => pct > 0.5 ? '#5cff9a' : pct > 0.2 ? '#ffd84f' : '#ff3355'
 function hitFx(dmg, mine = true) {
   const fx = $('fx'), b = $('boss'), r = b.getBoundingClientRect(), a = fx.getBoundingClientRect();
   const x = r.left - a.left + r.width / 2, y = r.top - a.top + r.height / 2;
-  const d = document.createElement('span'); d.className = 'dmg' + (mine ? ' me' : ''); d.textContent = fmt(dmg); d.style.left = (x - 20 + Math.random() * 40) + 'px'; d.style.top = (y - 30) + 'px';
+  const gmHit = mine && save?.heroes?.[0]?.cls === GM_CLASS; const d = document.createElement('span'); d.className = 'dmg' + (mine ? ' me' : '') + (gmHit ? ' gm' : ''); d.textContent = fmt(dmg); d.style.left = (x - 20 + Math.random() * 40) + 'px'; d.style.top = (y - 30) + 'px';
   const s = document.createElement('i'); s.className = 'slash'; s.style.left = (x - 60) + 'px'; s.style.top = y + 'px';
+  if (gmHit) { s.className = 'slash crack'; s.style.left = (x - 30 + Math.random() * 40) + 'px'; s.style.top = (y - 20 + Math.random() * 30) + 'px'; s.style.rotate = (Math.random() * 360) + 'deg'; } // gold void-crack
   fx.append(d, s); setTimeout(() => { d.remove(); s.remove(); }, 1000);
 }
 const SLOT_LABEL = { skin: 'Skin', hairColor: 'Hair colour', hairStyle: 'Hair style', outfitColor: 'Outfit colour', outfitStyle: 'Outfit style', trim: 'Armor trim', weapon: 'Weapon', weaponColor: 'Weapon finish', aura: 'Aura', title: 'Title', nameColor: 'Name colour' };
@@ -45,8 +50,10 @@ function picker(el, slots, look, heroCls, progress, onPick) {
 async function boot() {
   $('maxf').textContent = MAX_FLOOR;
   be = await makeBackend(); save = migrateSave(await be.loadSave()); if (save) delete save.ctx; // live-only context, never trusted from storage
+  gmValid = be.name === 'supabase' ? !!be.isGm?.() : await checkPass(localStorage.getItem('logout.v1.gm'), GM_PASS_HASH); // server role, or the local hash unlock
+  if (save && sanitizeSave(save, gmValid)) { save = migrateSave(save); await be.saveSave(save); } // pasted staff ids are stripped
   if (!save) return showCreate();
-  { const f0 = (await be.getFloor()).floor, bi = bossInfo(f0); save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0) }; } // offline maths sees the same floor context
+  { const f0 = (await be.getFloor()).floor, bi = bossInfo(f0); save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid }; } // offline maths sees the same floor context
   const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
   save.gold += p.gold; const ups = applyXp(save.heroes, p.xp); pending += p.damage;
   const offFloor = (await be.getFloor()).floor, trickled = trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
@@ -73,7 +80,7 @@ function showCreate() {
 function handleClears(clears = [], quiet = false) {
   const me = save.heroes[0].name, all = [];
   for (const c of clears) {
-    const got = recordClear(save, c.floor, c.ranking.indexOf(me) + 1, c.maxHp ? (c.dmg?.[me] || 0) / c.maxHp : 1); all.push(...got);
+    const got = recordClear(save, c.floor, gmValid ? 0 : c.ranking.indexOf(me) + 1, c.maxHp ? (c.dmg?.[me] || 0) / c.maxHp : 1); all.push(...got);
     for (const it of got) { log(`System notice: cosmetic unlocked — ${it.label}.`); if (!quiet) notice(`Cosmetic unlocked — ${it.label}`); }
     const share = c.maxHp ? (c.dmg?.[me] || 0) / c.maxHp : 0, d = grantDrops(save, c.floor, share);
     for (const it of d.items) { const R = rarityOf(it.rarity); if (it.rarity === 'unique') { log(`System notice: UNIQUE item acquired — ${it.name} · ${it.stamp}. ${it.ability.text}; drawback: ${it.drawback.text}.`, R.color); if (!quiet) notice(`UNIQUE item acquired — ${it.name}`, R.color); lootLines.push(`<span class="uniq">UNIQUE ${esc(it.name)}</span>`); continue; } log(`Loot · ${R.label} ${it.name} (Floor ${c.floor})`, R.color); lootLines.push(`<span style="color:${R.color}">${esc(R.label)} ${esc(it.name)}</span>`); if (!quiet) notice(`${R.label} drop — ${it.name}`, R.color); }
@@ -99,7 +106,7 @@ async function startGame(fresh = false) {
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
 function tick() {
-  save.ctx = { bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, sessionSecs: (Date.now() - sessionStart) / 1000 };
+  save.ctx = { gm: gmValid, decree: gmValid || (floor.gmUntil || 0) > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, sessionSecs: (Date.now() - sessionStart) / 1000 };
   const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS), fx = effectsOf(save.heroes[0]);
   if (fx.has('whisper') && Date.now() - lastWhisper > 120000) { lastWhisper = Date.now(); log(WHISPERS[Math.floor(Math.random() * WHISPERS.length)], '#b9a8ff'); }
   save.gold += p.gold; recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp; pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage);
@@ -113,12 +120,13 @@ function catchUp() { if (!save || !floor || Date.now() - lastCatchUp < 500) retu
 document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
 addEventListener('focus', catchUp); addEventListener('pageshow', catchUp);
 async function sync() {
-  const r = await be.submitDamage(save.heroes[0].name, pending, save.heroes[0]); pending = 0;
+  if (be.name === 'local') be.decree = gmValid;
+  const r = await be.submitDamage(save.heroes[0].name, pending, { ...save.heroes[0], staff: gmValid }); pending = 0;
   if (recent.dmg > 0) { log(`You strike for ${fmt(recent.dmg)} · +${fmt(recent.gold)} gold · +${fmt(recent.xp)} XP`); recent = { dmg: 0, gold: 0, xp: 0 }; }
   const quiet = quietSync; quietSync = false; // clears that happened before this session are logged, not re-toasted
   if (r.advanced) { const f = r.floor - 1; log(`${bossName(f)} fell beneath many blades. The stair to Floor ${r.floor} lies open.`); log(`System notice: Floor ${r.floor} is open.`); floorCleared(f); setTimeout(() => notice(`Floor ${r.floor} is open`), 2400); }
   handleClears(r.clears, quiet);
-  floor = await be.getFloor(); await be.saveSave(save); render(); renderLb();
+  floor = await be.getFloor(); gmFloorChecks(); await be.saveSave(save); render(); renderLb();
 }
 function buy(kind) {
   const h = save.heroes[0], c = kind === 'level' ? levelCost(h) : gearCost(h); if (save.gold < c) return;
@@ -127,7 +135,7 @@ function buy(kind) {
 }
 function render() {
   const h = save.heroes[0];
-  $('hero').style.backgroundImage = heroSprite(h.look, h.cls); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; $('boss').style.backgroundImage = bossSprite(floor.floor); $('boss').classList.toggle('big', bossIsBig(floor.floor));
+  $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('hero').classList.toggle('gmaura', h.look.aura === 'gm-aura'); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; $('boss').style.backgroundImage = bossSprite(floor.floor); $('boss').classList.toggle('big', bossIsBig(floor.floor));
   const won = floor.floor >= MAX_FLOOR && floor.hp <= 0;
   H('bname').textContent = won ? 'Log out enabled' : bossName(floor.floor);
   H('floor').textContent = won ? 'System notice · the tower is silent' : `Guardian of Floor ${floor.floor} / ${MAX_FLOOR}`;
@@ -135,24 +143,25 @@ function render() {
   H('layers').innerHTML = Array.from({ length: LAYERS }, (_, i) => `<i class="${i < lay ? 'on' : ''}"></i>`).join('');
   const c = hpColor(pct); $('hpfill').style.width = (lay ? inLayer * 100 : 0) + '%'; $('hpfill').style.background = `linear-gradient(90deg, ${c}aa, ${c})`; $('hpfill').style.color = c;
   H('hptext').textContent = `${fmt(floor.hp)} / ${fmt(floor.maxHp)} HP · ${lay}× layers`;
-  H('hname2').innerHTML = `<div style="color:${nameColorOf(h)}">${esc(h.name)}</div><div class="ttl">${esc(titleOf(h))}</div>`; H('hlv').textContent = `LV ${h.level}`;
+  H('hname2').innerHTML = `<div ${h.cls === GM_CLASS ? `class="gmname"` : `style="color:${nameColorOf(h)}"`}>${h.cls === GM_CLASS ? GM_SIGIL + ' ' : ''}${esc(h.name)}</div><div class="ttl">${esc(titleOf(h))}</div>`; H('hlv').textContent = `LV ${h.level}`;
   const hp = heroHp(h) / heroMaxHp(h), worn = isWorn(h); $('hhp').className = 'seg' + (worn ? ' worn' : hp < 0.6 ? ' mid' : ''); H('hhp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < hp ? '' : 'off'}"></i>`).join('');
   $('hhp').title = `HP ${Math.round(heroHp(h))} / ${heroMaxHp(h)}`;
   const b = buffsOf(save), mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   H('buffs').innerHTML = [worn ? '<span class="buff bad" title="Below 30% HP: DPS halved">Worn down · DPS ½</span>' : '', b.rested > 0 ? `<span class="buff" title="+15% gold and XP">Well Rested ${mmss(b.rested)}</span>` : '',
     b.elixir > 0 ? `<span class="buff" title="+25% DPS">Fury ${mmss(b.elixir)}</span>` : '', b.vigil > 0 ? `<span class="buff" title="Offline cap raised once">Vigil +${b.vigil}h</span>` : ''].join('');
   const xp = h.xp / xpToNext(h.level); H('hxp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < xp ? '' : 'off'}"></i>`).join('');
-  H('stats').innerHTML = `${CLASSES[h.cls].icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${effectiveDps(save).toFixed(1)}</b> · HP <b>${Math.round(heroHp(h))}/${heroMaxHp(h)}</b> · Gold <b>${fmt(save.gold)}</b>`;
+  H('stats').innerHTML = `${classOf(h.cls).icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${effectiveDps(save).toFixed(1)}</b> · HP <b>${Math.round(heroHp(h))}/${heroMaxHp(h)}</b> · Gold <b>${fmt(save.gold)}</b>`;
   H('lvlL').textContent = `Train ${fmt(levelCost(h))}g`; $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`; $('lvl').disabled = save.gold < levelCost(h);
   H('equipped').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip?.[s]; return `<span class="eq" style="${it ? `color:${rarityOf(it.rarity).color}` : ''}">${s[0].toUpperCase() + s.slice(1)}: ${it ? esc(it.name) : '—'}</span>`; }).join('');
-  { const fp = freePoints(h); const tb = $('talBadge'); if (tb.hidden !== !(fp > 0)) tb.hidden = !(fp > 0); if (tb.textContent !== String(fp)) tb.textContent = fp; }
-  H('bagL').textContent = `Bag ${save.inv.length}/${INV_SIZE}`; $('gear').title = 'Forge: temper your weapon, +15% damage per tier';
+  { const fp = treeOf(h.cls).length ? freePoints(h) : 0; const tb = $('talBadge'); if (tb.hidden !== !(fp > 0)) tb.hidden = !(fp > 0); if (tb.textContent !== String(fp)) tb.textContent = fp; }
+  H('bagL').textContent = `Bag ${save.inv.length}/${bagSize(save)}`; $('gear').title = 'Forge: temper your weapon, +15% damage per tier';
   H('gearL').textContent = `Forge ${fmt(gearCost(h))}g`; $('gear').disabled = save.gold < gearCost(h);
 }
 async function renderLb() {
   const h = save.heroes[0];
   $('lb').innerHTML = (await be.leaderboard(h.name)).map(r => {
     const me = r.name === h.name, pr = me ? { title: titleOf(h), color: nameColorOf(h) } : fakeProfile(r.name);
+    if (r.staff) return `<li class="staff" value="0"><small>Tower Staff</small><span class="gmname">${GM_SIGIL} ${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(me ? titleOf(h) : 'Tower Staff')}</span></li>`;
     return `<li class="${me ? 'me' : ''}" value="${r.rank}"><span style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span>${me && r.rank > 3 ? '<div class="climb">Climb: Train, Forge and equip loot to raise DPS. Top 3 on a kill earns rare rewards.</div>' : ''}</li>`;
   }).join('');
 }
@@ -179,9 +188,9 @@ let bagSel = -1;
 const itemCard = (it, cls = '') => { const R = rarityOf(it.rarity); return `<div class="item ${cls}" style="--rc:${R.color}"><b class="${it.rarity === 'unique' ? 'uniq' : ''}" style="color:${R.color}">${esc(it.name)}</b><small>${R.label} · ${it.slot} · Floor ${it.floor} · ${it.element}</small>${Object.entries(it.stats).map(([k, v]) => `<div>${statLabel(k, v)}</div>`).join('')}${it.rarity === 'unique' ? `<div class="ab">✦ ${esc(it.ability.text)}</div><div class="db">▾ ${esc(it.drawback.text)}</div><div class="lore">${esc(it.lore)}</div><small>${esc(it.stamp)}</small>` : ''}</div>`; };
 function openBag() {
   const h = save.heroes[0];
-  $('bagCount').textContent = `· ${save.inv.length} / ${INV_SIZE}`;
+  $('bagCount').textContent = `· ${save.inv.length} / ${bagSize(save)}`;
   $('eqrow').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip[s]; return `<div class="eqslot" title="${s}">${it ? itemCard(it, 'mini') : `<div class="item mini empty">${s}: empty</div>`}</div>`; }).join('');
-  $('bagGrid').innerHTML = Array.from({ length: Math.max(INV_SIZE, save.inv.length) }, (_, i) => { const it = save.inv[i]; if (!it) return '<button class="cell" disabled aria-label="empty slot"></button>';
+  $('bagGrid').innerHTML = Array.from({ length: Math.max(bagSize(save), save.inv.length) }, (_, i) => { const it = save.inv[i]; if (!it) return '<button class="cell" disabled aria-label="empty slot"></button>';
     const R = rarityOf(it.rarity); return `<button class="cell ${i === bagSel ? 'sel' : ''} ${it.rarity === 'unique' ? 'ucell' : ''}" data-i="${i}" style="--rc:${R.color}" title="${esc(R.label + ' ' + it.name)}">${{ weapon: '⚔', armor: '⛨', trinket: '◈' }[it.slot]}</button>`; }).join('');
   $('bagGrid').onclick = e => { const b = e.target.closest('button.cell[data-i]'); if (b) { bagSel = +b.dataset.i; openBag(); } };
   const it = save.inv[bagSel];
@@ -243,7 +252,7 @@ function openTalents() {
 }
 
 // ---- System / Identity panel. Guest-first; binding is opt-in and feature-flagged.
-let gmActive = () => !!be?.isGm?.();
+let gmValid = false; const gmActive = () => gmValid;
 async function openSystem() {
   const online = be.name === 'supabase', canBind = featureOn(FEATURES, 'bindIdentity', gmActive()), anon = online && be.isAnonymous();
   const status = !online ? 'Offline mode. Your progress lives in this browser only.' : anon ? 'Guest identity. Bind it to keep your progress across devices.' : 'Identity bound. Your progress is stored in the tower.';
@@ -265,3 +274,45 @@ async function openSystem() {
   if (typeof renderGmSlot === 'function') renderGmSlot();
   if (!$('system').open) $('system').showModal();
 }
+
+// ---- Staff (gm): entrance notice, Eventide upkeep, hidden unlock field, sandbox.
+let lastAnnSeen = 0, lastFloorSeen = 0;
+function bigNotice(m) { const n = document.createElement('div'); n.className = 'notice bigsys'; n.innerHTML = `<small>◈ System notice</small><span>${esc(m)}</span>`; document.body.append(n); setTimeout(() => n.remove(), 6000); }
+async function gmFloorChecks() {
+  const h = save.heroes[0], f = floor.floor;
+  if (gmValid && h.equip?.weapon?.gm && h.equip.weapon.floor !== f) h.equip.weapon = eventide(f, legendaryWeaponDps(f)); // Legendary parity follows the floor
+  if (gmValid && h.cls === GM_CLASS && f !== lastFloorSeen) {
+    const last = JSON.parse(localStorage.getItem('logout.v1.gmAnn') || 'null');
+    if (shouldAnnounce(last, f, Date.now())) { localStorage.setItem('logout.v1.gmAnn', JSON.stringify({ floor: f, at: Date.now() })); bigNotice(`The Architect has entered Floor ${f}.`); log(`System notice: The Architect has entered Floor ${f}.`, '#ffd76a'); be.gmAnnounce?.(f); }
+  }
+  lastFloorSeen = f;
+  const a = floor.announce, at = a ? Date.parse(a.at) : 0; // online: everyone on the floor sees the entrance (polled with the floor)
+  if (!gmValid && a && a.floor === f && at > lastAnnSeen && Date.now() - at < 10 * 60e3) { lastAnnSeen = at; bigNotice(`The Architect has entered Floor ${f}.`); }
+}
+let gmTaps = 0;
+function renderGmSlot() {
+  const el = $('gmSlot'); if (!el) return; const online = be.name === 'supabase', h = save.heroes[0];
+  $('system').querySelector('.settings summary').onclick = () => { if (++gmTaps >= 5) { gmTaps = 0; el.dataset.show = '1'; renderGmSlot(); } };
+  if (!gmValid && (online || !GM_PASS_HASH || el.dataset.show !== '1')) { el.innerHTML = ''; return; } // hidden unless revealed, and only while local mode has a hash set
+  el.innerHTML = gmValid ? `<div class="staffbox"><b class="gmname">${GM_SIGIL} Staff access</b>
+      ${h.cls === GM_CLASS ? `<button id="gmLeave">Return to ${esc(h.prevCls || 'Vanguard')}</button>` : '<button id="gmBecome" class="cta">Take the Architect\'s form</button>'}
+      ${featureOn(FEATURES, 'sandbox', true) ? '<button id="gmSandbox">Sandbox</button>' : ''}${online ? '' : '<button id="gmLock">Lock staff access</button>'}</div>`
+    : `<div class="staffbox"><input id="gmPass" type="password" autocomplete="off" placeholder="access phrase"><button id="gmTry">Verify</button></div>`;
+  if ($('gmTry')) $('gmTry').onclick = async () => { const p = $('gmPass').value; if (await checkPass(p, GM_PASS_HASH)) { localStorage.setItem('logout.v1.gm', p); gmValid = true; save.ctx.gm = true; notice('Staff access verified'); renderGmSlot(); render(); } else notice('Access denied'); };
+  if ($('gmBecome')) $('gmBecome').onclick = async () => { becomeGm(save, legendaryWeaponDps(floor.floor), floor.floor); lastFloorSeen = 0; gmFloorChecks(); await be.saveSave(save); render(); renderLb(); renderGmSlot(); };
+  if ($('gmLeave')) $('gmLeave').onclick = async () => { leaveGm(save); save = migrateSave(save); await be.saveSave(save); render(); renderLb(); renderGmSlot(); };
+  if ($('gmLock')) $('gmLock').onclick = async () => { localStorage.removeItem('logout.v1.gm'); gmValid = false; sanitizeSave(save, false); save = migrateSave(save); save.ctx = {}; await be.saveSave(save); render(); renderGmSlot(); };
+  if ($('gmSandbox')) $('gmSandbox').onclick = openSandboxUi;
+}
+let sbx = null;
+function openSandboxUi() {
+  if (!gmValid) return; sbx = sbx || openSandbox(save);
+  const d = $('sandbox'); sandboxFloor(sbx, sbx.floor);
+  const draw = () => {
+    $('sbBoss').style.backgroundImage = bossSprite(sbx.floor); $('sbName').textContent = `Floor ${sbx.floor} · ${bossInfoName(sbx.floor)}`;
+    $('sbHp').textContent = `${fmt(sbx.hp)} HP`; $('sbItems').innerHTML = sbx.items.map(it => itemCard(it)).join('') || '<p class="sub">No test loot yet.</p>'; $('sbLog').textContent = sbx.log.slice(-3).join(' · '); };
+  $('sbFloor').value = sbx.floor; $('sbFloor').oninput = () => { sandboxFloor(sbx, +$('sbFloor').value); $('sbNum').textContent = sbx.floor; draw(); }; $('sbNum').textContent = sbx.floor;
+  $('sbFight').onclick = () => { sandboxFight(sbx, 10); draw(); }; $('sbLoot').onclick = () => { sandboxLoot(sbx, 3); draw(); }; $('sbUnique').onclick = () => { sandboxLoot(sbx, 1, [0, 0, 0, 0, 0, 1]); draw(); };
+  d.onclose = () => { sbx = closeSandbox(sbx); }; draw(); if (!d.open) d.showModal();
+}
+const bossInfoName = f => { const i = bossInfo(f); return `${i.name}${i.kind !== 'generated' ? ' · special' : ''}`; };

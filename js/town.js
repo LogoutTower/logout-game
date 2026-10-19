@@ -1,11 +1,11 @@
 // Town hub (one safe town per floor): inn rest + Well Rested buff, a seeded rotating shop, and original NPC sprites. Pure (no DOM).
 import { heroMaxHp, heroHp, buffsOf, effectsOf, RESTED, ELIXIR } from './game.js';
 import { rng, baseHp, bossInfo } from './floors.js';
-import { rollItem, salvageValue, INV_SIZE } from './loot.js';
+import { rollItem, salvageValue, bagSize } from './loot.js';
 import { talentBonus } from './talents.js';
 import { canvas, shadeShape } from './bosses.js';
 const tier = f => Math.sqrt(baseHp(f) / baseHp(1)); // price scale per floor
-export const innCost = (f, save) => Math.round(30 * tier(f) * (save && effectsOf(save.heroes[0]).has('innTax') ? 1.25 : 1) * (save ? 1 - talentBonus(save.heroes[0]).innPct / 100 : 1));
+export const innCost = (f, save) => save?.ctx?.gm ? 0 : Math.round(30 * tier(f) * (save && effectsOf(save.heroes[0]).has('innTax') ? 1.25 : 1) * (save ? 1 - talentBonus(save.heroes[0]).innPct / 100 : 1));
 /** Shop price after talent discounts. */
 export const priceFor = (save, it) => Math.round(it.price * (save ? 1 - talentBonus(save.heroes[0]).shopPct / 100 : 1));
 export function rest(save, floor) {
@@ -31,7 +31,7 @@ export function buy(save, floor, now, i) {
   const st = shopStock(floor, now), it = st.items[i]; if (!it || save.gold < priceFor(save, it)) return null;
   if (!save.shop || save.shop.floor !== floor || save.shop.bucket !== st.bucket) save.shop = { floor, bucket: st.bucket, bought: [] };
   const h = save.heroes[0], b = buffsOf(save);
-  if (it.kind === 'gear') { if (save.shop.bought.includes(i) || save.inv.length >= INV_SIZE) return null; save.inv.push({ ...it.item }); save.shop.bought.push(i); }
+  if (it.kind === 'gear') { if (save.shop.bought.includes(i) || save.inv.length >= bagSize(save)) return null; save.inv.push({ ...it.item }); save.shop.bought.push(i); }
   if (it.kind === 'potion') { if (heroHp(h) >= heroMaxHp(h)) return null; h.hp = Math.min(heroMaxHp(h), heroHp(h) + POTION_HEAL * heroMaxHp(h)); }
   if (it.kind === 'elixir') b.elixir = ELIXIR.secs;
   if (it.kind === 'vigil') { if (b.vigil > 0) return null; b.vigil = VIGIL_HOURS; }
