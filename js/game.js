@@ -28,15 +28,15 @@ export function gearBonus(h) {
 export const effectsOf = h => { const w = h?.equip?.weapon; return w?.rarity === 'unique' ? new Set([w.ability.id, w.drawback.id]) : new Set(); };
 export const FX = { tenthMul: 1.1, heavyMul: 0.95, lastLayer: { below: 0.2, mul: 1.3 }, lifesteal: 0.65, drain: 1.2, steadyLowMul: 0.85, hearthHp: 0.5, momentum: { perMin: 0.01, max: 0.3 }, milestoneMul: 1.5 };
 export const heroDps = h => { const c = classOf(h.cls), g = gearBonus(h), e = effectsOf(h); return +((c.atk * c.spd * (1 + 0.25 * (h.level - 1)) + g.dps) * (1 + 0.15 * h.gear) * (1 + g.dpsPct / 100) * talentDpsMul(h) * (e.has('tenth') ? FX.tenthMul : 1) * (e.has('heavy') ? FX.heavyMul : 1)).toFixed(3); };
-const talentDpsMul = h => { const t = talentBonus(h); return (1 + (t.dpsPct + t.rallyPct) / 100) * (1 + t.doublePct / 100); };
+const talentDpsMul = h => { const t = talentBonus(h), high = t.highHpDpsPct && heroHp(h) > 0.5 * heroMaxHp(h) ? t.highHpDpsPct : 0; return (1 + (t.dpsPct + t.rallyPct + t.eclipsePct + t.crackPct + high) / 100) * (1 + t.doublePct / 100); };
 const goldMul = heroes => 1 + (gearBonus(heroes[0]).goldPct + talentBonus(heroes[0]).goldPct) / 100, xpMul = heroes => 1 + (gearBonus(heroes[0]).xpPct + talentBonus(heroes[0]).xpPct) / 100;
 /** Shaper's Decree: +5% gold/XP for everyone on a floor while a staff hero is fighting there (ctx.decree, set live or from the server floor state). */
-const decreeMul = save => save.ctx?.decree ? 1.05 : 1;
+const decreeMul = save => save.ctx?.decree ? 1 + (save.ctx.decreePct || 5) / 100 : 1; // Final Decree / Collapse of Stars: 6%
 export const guildMul = save => save.ctx?.guild && !save.ctx?.gm ? 1 + GUILD_BUFF : 1; // guild members: XP and gold only (staff gets none)
 export const offlineCap = (heroes, base = 12) => base + gearBonus(heroes[0]).capH + talentBonus(heroes[0]).capH;
 export const xpToNext = lvl => Math.round(50 * Math.pow(1.4, lvl - 1));
 export const levelCost = h => Math.round(40 * Math.pow(1.5, h.level - 1));
-export const gearCost = h => Math.round(60 * Math.pow(1.6, h.gear));
+export const gearCost = h => Math.round(60 * Math.pow(1.6, h.gear) * (1 - talentBonus(h).forgePct / 100));
 export const totalDps = heroes => heroes.reduce((s, h) => s + heroDps(h), 0);
 
 /** Deterministic progress for elapsed time between lastTick and now (ms). */
@@ -69,7 +69,7 @@ export const layerMul = save => { const e = effectsOf(save.heroes[0]), c = save.
   if (t.layerPct && (c.bossPct ?? 1) < FX.lastLayer.below) m *= 1 + t.layerPct / 100;
   if (t.elementPct && w && c.element && w.element === c.element) m *= 1 + t.elementPct / 100;
   return m; };
-export const effectiveDps = save => totalDps(save.heroes) * (!save.ctx?.gm && isWorn(save.heroes[0]) ? lowMulOf(save.heroes[0]) : 1) * (buffsOf(save).elixir > 0 ? ELIXIR.mul : 1) * layerMul(save);
+export const effectiveDps = save => totalDps(save.heroes) * (!save.ctx?.gm && isWorn(save.heroes[0]) ? lowMulOf(save.heroes[0]) : 1) * (buffsOf(save).elixir > 0 ? ELIXIR.mul : 1) * layerMul(save) * ((save.ctx?.bossPct ?? 1) < 0.5 ? 1 + talentBonus(save.heroes[0]).lowBossPct / 100 : 1);
 /** Simulate `secs` of fighting (live or offline: same rules). Splits time at HP-threshold and buff-expiry breakpoints.
  *  Mutates hero HP and buff timers; returns float { dmg, gold, xp, lowSecs }. */
 export function simulate(save, secs) {

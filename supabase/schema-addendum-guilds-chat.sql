@@ -174,3 +174,29 @@ grant execute on function public.guild_create(text, text), public.guild_join(tex
   public.guild_board(int), public.chat_post(text, text), public.chat_report(bigint, text) to authenticated;
 grant execute on function public.guild_board(int) to anon;
 -- chat_clean stays internal (called by the functions above only).
+
+-- ============================== staff Codex marks ==============================
+-- Codex effects other players can see (role = gm only, so they can't be spoofed): Cornerstone rune, Supernova burst,
+-- "The Architect has shaped Floor N." (The Final Shape), Herald's Voice entrance line (filtered), Final Decree / Collapse
+-- of Stars (+6% Decree) and Decree Echo (presence lingers 2 min). Polled with floor_state; rate-limited per floor per 10 min.
+alter table public.floor_state add column if not exists gm_marks jsonb not null default '{}'::jsonb;
+create or replace function public.gm_mark(p_kind text, p_floor int, p_text text default null) returns boolean
+language plpgsql security definer set search_path = public as $$
+declare m jsonb; prev jsonb; t text := null; c jsonb;
+begin
+  if not exists (select 1 from public.profiles where id = auth.uid() and role = 'gm') then raise exception 'forbidden'; end if;
+  if p_kind not in ('cornerstone', 'supernova', 'shaped', 'herald', 'decree6', 'echo') then raise exception 'unknown mark'; end if;
+  select coalesce(gm_marks, '{}'::jsonb) into m from public.floor_state where id = 1 for update;
+  if p_kind = 'echo' then
+    update public.floor_state set gm_present_until = greatest(coalesce(gm_present_until, now()), now() + interval '210 seconds') where id = 1; return true; end if;
+  if p_kind = 'decree6' then
+    update public.floor_state set gm_marks = m || jsonb_build_object('decree6', jsonb_build_object('floor', p_floor, 'at', now(),
+      'until', now() + case when p_text = 'final' then interval '120 seconds' else interval '10 seconds' end)) where id = 1; return true; end if;
+  prev := m -> p_kind;
+  if prev is not null and (prev->>'floor')::int = p_floor and (prev->>'at')::timestamptz > now() - interval '10 minutes' then return false; end if;
+  if p_kind = 'herald' then c := public.chat_clean(p_text, 80); if not (c->>'ok')::boolean then raise exception '%', c->>'reason'; end if; t := c->>'text'; end if;
+  update public.floor_state set gm_marks = m || jsonb_build_object(p_kind, jsonb_build_object('floor', p_floor, 'at', now(), 'text', t)) where id = 1;
+  return true;
+end $$;
+revoke all on function public.gm_mark(text, int, text) from public;
+grant execute on function public.gm_mark(text, int, text) to authenticated;

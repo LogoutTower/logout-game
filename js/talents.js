@@ -3,7 +3,10 @@ import { baseHp } from './floors.js';
 // eff: per-rank stat contributions. Keys: dpsPct goldPct xpPct capH hpPct drainPct regenPct layerPct rallyPct innPct shopPct offlinePct
 //      lootPct salvagePct doublePct elementPct restedPct restedMulPct bonusPts lowMulPct
 const N = (id, name, desc, max, eff) => ({ id, name, desc, max, eff });
-const B = (id, name, blurb, nodes) => ({ id, name, blurb, nodes: nodes.map((n, i) => ({ ...n, tier: i, req: i * 2, capstone: i === nodes.length - 1 })) });
+// Flexible shape: any number of branches and nodes. opts.req overrides the per-tier gate (default 2 points per tier);
+// a node may carry gate: [node ids that must be maxed] and hidden: true (not shown until its gate is met).
+export const B = (id, name, blurb, nodes, opts = {}) => ({ id, name, blurb, nodes: nodes.map((n, i) => ({ ...n, tier: i, req: n.req ?? opts.req?.[i] ?? i * 2, capstone: n.capstone ?? i === nodes.length - 1 })) });
+export { N };
 export const TREES = {
   Vanguard: [
     B('bulwark', 'Bulwark', 'Stand. Endure. Out-wait the tower.', [
@@ -75,15 +78,21 @@ export const TREES = {
     ]),
   ],
 };
-export const KEYS = ['dpsPct', 'goldPct', 'xpPct', 'capH', 'hpPct', 'drainPct', 'regenPct', 'layerPct', 'rallyPct', 'innPct', 'shopPct', 'offlinePct', 'lootPct', 'salvagePct', 'doublePct', 'elementPct', 'restedPct', 'restedMulPct', 'bonusPts', 'lowMulPct'];
-const ALL = Object.values(TREES).flatMap(bs => bs.flatMap(b => b.nodes.map(n => ({ ...n, branch: b.id }))));
+export const KEYS = ['forgePct', 'highHpDpsPct', 'lowBossPct', 'eclipsePct', 'crackPct', 'salvageDblPct', 'dpsPct', 'goldPct', 'xpPct', 'capH', 'hpPct', 'drainPct', 'regenPct', 'layerPct', 'rallyPct', 'innPct', 'shopPct', 'offlinePct', 'lootPct', 'salvagePct', 'doublePct', 'elementPct', 'restedPct', 'restedMulPct', 'bonusPts', 'lowMulPct'];
+const EXTRA = {}; // trees registered by other modules (the staff Codex): kept out of TREES, which only lists player classes
+let ALL = []; const index = () => { ALL = [...Object.values(TREES), ...Object.values(EXTRA)].flatMap(bs => bs.flatMap(b => b.nodes.map(n => ({ ...n, branch: b.id })))); }; index();
+/** Add a class tree from another module (the staff Codex registers itself from codex.js, so no class pool ever lists it). */
+export function registerTree(cls, branches) { EXTRA[cls] = branches; index(); }
 export const nodeById = id => ALL.find(n => n.id === id);
-export const treeOf = cls => TREES[cls] || []; // the staff class has no tree
+export const treeOf = cls => TREES[cls] || EXTRA[cls] || [];
+export const hasTalent = (h, id) => (h?.talents?.[id] || 0) > 0 && treeOf(h.cls).some(b => b.nodes.some(n => n.id === id));
+export const gateMet = (h, n) => !n.gate || n.gate.every(id => (h?.talents?.[id] || 0) >= (nodeById(id)?.max || 1));
 const ranks = h => h?.talents || {};
 /** Summed talent effects for a hero. */
 export function talentBonus(h) {
   const b = Object.fromEntries(KEYS.map(k => [k, 0]));
-  for (const [id, r] of Object.entries(ranks(h))) { const n = nodeById(id); if (n && r > 0) for (const [k, v] of Object.entries(n.eff)) b[k] += v * Math.min(r, n.max); }
+  const own = new Set(treeOf(h?.cls).flatMap(br => br.nodes.map(n => n.id)));
+  for (const [id, r] of Object.entries(ranks(h))) { const n = nodeById(id); if (n && r > 0 && own.has(id)) for (const [k, v] of Object.entries(n.eff)) b[k] += v * Math.min(r, n.max); }
   return b;
 }
 export const spentIn = (h, branchId) => Object.entries(ranks(h)).reduce((s, [id, r]) => s + (nodeById(id)?.branch === branchId ? r : 0), 0);
@@ -97,6 +106,7 @@ export function canLearn(h, id) {
   const r = ranks(h)[id] || 0; if (r >= n.max) return 'max rank';
   if (freePoints(h) < 1) return 'no points';
   if (spentIn(h, n.branch) < n.req) return `needs ${n.req} points in branch`;
+  if (!gateMet(h, n)) return 'sealed';
   return null;
 }
 export function learn(h, id) { if (canLearn(h, id)) return false; h.talents = { ...ranks(h), [id]: (ranks(h)[id] || 0) + 1 }; return true; }

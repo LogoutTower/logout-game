@@ -1,4 +1,5 @@
 // Staff ("gm") package: hidden class, look, weapon, perks and the local unlock. Pure (no DOM).
+import { CODEX_NAMES, isCodexId } from './codex.js';
 // Everything here is excluded from every generator, pool, picker and Wardrobe list (see test/gm.test.mjs).
 import { CLASSES, STAFF_CLASSES } from './game.js';
 export const GM_CLASS = 'GameMaster';
@@ -12,18 +13,20 @@ export const GM_SIGIL = '◆';
 export const GM_ITEMS = [ // cosmetic ids (all prefixed gm-) rendered only for a valid staff hero
   { id: 'gm-title', type: 'title', label: 'Architect', value: GM_TITLE },
   { id: 'gm-name', type: 'nameColor', label: 'Void Gold', value: '#0b0812' },
-  { id: 'gm-coat', type: 'outfitStyle', label: 'Architect Coat', value: 'gm-coat' },
+  { id: 'gm-coat', type: 'outfitStyle', label: 'Vesperveil, Mantle of the Unwritten', value: 'gm-coat', lore: 'System notice: wearer identity not found. The tower stopped asking.' },
   { id: 'gm-hood', type: 'hairStyle', label: 'Shadow Hood', value: 'gm-hood' },
   { id: 'gm-black', type: 'outfitColor', label: 'Void Leather', value: '#17131f' },
   { id: 'gm-gold', type: 'trim', label: 'Architect Gold', value: '#d9a93f' },
   { id: 'gm-katana', type: 'weapon', label: 'Eventide', value: 'gm-katana' },
   { id: 'gm-edge', type: 'weaponColor', label: 'Void Edge', value: '#0a0710' },
-  { id: 'gm-aura', type: 'aura', label: 'Void Ring', value: '#ffd76a' },
+  { id: 'gm-unsheathed', type: 'weaponColor', label: 'Eventide, Unsheathed', value: '#ffd76a', codex: 'cx-longnight' }, // Long Night skin (gold-dominant blade)
+  { id: 'gm-aura', type: 'aura', label: 'Galaxy of the Unwritten', value: '#ffd76a' }, // grows with level: see js/galaxy.js
 ];
 export const GM_LOOK = { skin: 'skin-1', hairColor: 'hc-ink', hairStyle: 'gm-hood', outfitColor: 'gm-black', outfitStyle: 'gm-coat', trim: 'gm-gold', weapon: 'gm-katana', weaponColor: 'gm-edge', aura: 'gm-aura', title: 'gm-title', nameColor: 'gm-name' };
 export const EVENTIDE = { id: 'gm-eventide', name: 'Eventide, the Final Shape', lore: 'System notice: this object has no origin. It was here before the tower.', ability: "Shaper's Decree: while you fight on a floor, every hero there gets +5% XP and gold." };
 export const DECREE_MUL = 1.05;
-export const GM_NAMES = ['GameMaster', 'Architect of the Cosmos', 'Shaper of Destiny', 'Eventide', 'Final Shape', "Shaper's Decree"];
+export const VESPERVEIL = GM_ITEMS.find(i => i.id === 'gm-coat');
+export const GM_NAMES = ['GameMaster', 'Architect of the Cosmos', 'Shaper of Destiny', 'Eventide', 'Final Shape', "Shaper's Decree", 'Vesperveil', 'Mantle of the Unwritten', 'Galaxy of the Unwritten', 'Unsheathed', ...CODEX_NAMES];
 export const isGmId = id => typeof id === 'string' && id.startsWith('gm-');
 /** Eventide: a Legendary-parity weapon of the given floor (base stat only, no Unique ability). */
 export const eventide = (floor, legendaryDps) => ({ id: EVENTIDE.id, gm: true, slot: 'weapon', rarity: 'legendary', floor, element: 'void', name: EVENTIDE.name, lore: EVENTIDE.lore, stats: { dps: legendaryDps }, affixes: [] });
@@ -45,6 +48,7 @@ export function sanitizeSave(save, valid) {
     if (h.cls === GM_CLASS) { h.cls = CLASSES[h.prevCls] ? h.prevCls : 'Vanguard'; changed = true; }
     for (const [k, v] of Object.entries(h.look || {})) if (isGmId(v)) { delete h.look[k]; changed = true; }
     for (const [k, it] of Object.entries(h.equip || {})) if (it && (it.gm || isGmId(it.id))) { h.equip[k] = null; changed = true; }
+    for (const id of Object.keys(h.talents || {})) if (isCodexId(id)) { delete h.talents[id]; changed = true; } // Codex ranks are staff-only
   }
   const n = (save.inv || []).length; save.inv = (save.inv || []).filter(it => !(it?.gm || isGmId(it?.id))); if (save.inv.length !== n) changed = true;
   return changed;
@@ -54,10 +58,10 @@ export function becomeGm(save, legendaryDps, floor) {
   const h = save.heroes[0]; if (h.cls !== GM_CLASS) h.prevCls = h.cls;
   h.cls = GM_CLASS; h.prevLook = h.prevLook || { ...h.look }; h.look = { ...h.look, ...GM_LOOK };
   h.hp = null; // full HP (null resolves to max)
-  const old = h.equip?.weapon; h.equip = h.equip || {}; if (old && !old.gm) save.inv.push(old); h.equip.weapon = eventide(floor, legendaryDps); h.talents = {};
+  const old = h.equip?.weapon; h.equip = h.equip || {}; if (old && !old.gm) save.inv.push(old); h.equip.weapon = eventide(floor, legendaryDps); if (!Object.keys(h.talents || {}).some(isCodexId)) { h.prevTalents = { ...(h.talents || {}) }; h.talents = {}; } // Codex replaces the class tree; current level's points, free respec
 }
 export function leaveGm(save) {
-  const h = save.heroes[0]; if (h.cls !== GM_CLASS) return; h.cls = CLASSES[h.prevCls] ? h.prevCls : 'Vanguard'; h.look = { ...(h.prevLook || {}) }; delete h.prevLook; if (h.equip?.weapon?.gm) h.equip.weapon = null;
+  const h = save.heroes[0]; if (h.cls !== GM_CLASS) return; h.cls = CLASSES[h.prevCls] ? h.prevCls : 'Vanguard'; h.look = { ...(h.prevLook || {}) }; delete h.prevLook; if (h.equip?.weapon?.gm) h.equip.weapon = null; h.talents = { ...(h.prevTalents || {}) }; delete h.prevTalents;
 }
 /** Entrance announcement rate limit: once per floor per 10 minutes. */
 export function shouldAnnounce(last, floor, now) { return !(last && last.floor === floor && now - last.at < GM_PERKS.announceEveryMs); }

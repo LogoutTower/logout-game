@@ -56,7 +56,7 @@ export class SupabaseBackend {
     if (!this.floor || this.now() - this.lastPoll >= POLL_MS) {
       const { data, error } = await this.sb.from('floor_state').select('*').eq('id', 1).single(); this.lastPoll = this.now();
       if (error || !data) { if (this.floor) return { ...this.floor, hp: this.floor.hp - this.pending }; throw error || new Error('floor unavailable'); } // keep the cached floor when the poll fails
-      this.floor = { floor: data.floor, hp: Number(data.hp), maxHp: Number(data.max_hp), gmUntil: Date.parse(data.gm_present_until || 0) || 0, announce: data.gm_announce || null };
+      this.floor = { floor: data.floor, hp: Number(data.hp), maxHp: Number(data.max_hp), gmUntil: Date.parse(data.gm_present_until || 0) || 0, announce: data.gm_announce || null, marks: data.gm_marks || {} };
     }
     return { ...this.floor, hp: this.floor.hp - this.pending };
   }
@@ -71,7 +71,7 @@ export class SupabaseBackend {
     const amt = Math.floor(this.pending); this.pending -= amt; this.lastFlush = this.now(); if (this._dirty) await this._push(this._dirty);
     const { data, error } = await this.sb.rpc('submit_damage', { p_amount: amt, p_name: this.meta.name || 'Nameless', p_level: this.meta.level || 1, p_gear: this.meta.gear || 0 });
     if (error) { this.pending += amt; const f = await this.getFloor(); return { ...f, advanced: false, accepted: 0, clears: [], offline: true }; } // unreachable / rate-limited: keep the damage and retry next flush
-    const before = this.floor?.floor; this.floor = { floor: data.floor, hp: Number(data.hp), maxHp: Number(data.max_hp), gmUntil: Date.parse(data.gm_present_until || 0) || 0, announce: data.gm_announce || null }; this.lastPoll = this.now();
+    const before = this.floor?.floor; this.floor = { floor: data.floor, hp: Number(data.hp), maxHp: Number(data.max_hp), gmUntil: Date.parse(data.gm_present_until || 0) || 0, announce: data.gm_announce || null, marks: data.gm_marks || {} }; this.lastPoll = this.now();
     const clears = await this._clears();
     return { ...this.floor, advanced: data.floor !== before && before != null, accepted: Number(data.accepted), clears };
   }
@@ -116,6 +116,7 @@ export class SupabaseBackend {
   }
   async sever() { await this.sb.auth.signOut(); this.store.removeItem(this.k + '.save'); this.user = null; }
   async gmPresence() { if (this.isGm()) await this.sb.rpc('gm_presence'); } // server checks role; non-GMs get an error
+  async gmMark(kind, floor, text = null) { if (!this.isGm()) return false; const { data, error } = await this.sb.rpc('gm_mark', { p_kind: kind, p_floor: floor, p_text: text }); if (error) throw new Error(error.message); return data; } // server role only
   async gmAnnounce(floor) { if (this.isGm()) { const { data } = await this.sb.rpc('gm_announce', { p_floor: floor }); return data; } return false; }
 }
 /** Read-only holder check through a public Solana RPC. Disabled while the mint is empty. */

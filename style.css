@@ -199,3 +199,19 @@ header{padding-top:max(14px,env(safe-area-inset-top))}main{padding-left:max(12px
 .chatlog .msg .mod { float: right; display: flex; gap: 4px; } .chatlog .msg .mod button { min-height: 32px; min-width: 32px; padding: 2px 6px; font-size: .75em; opacity: .7; }
 .chatform { display: flex; gap: 6px; margin-top: 8px; } .chatform input { flex: 1; min-height: 44px; } .chatform button { min-height: 44px; }
 @media (max-width: 600px) { #guild, #chat { width: calc(100vw - 16px); max-width: none; } .chatlog { height: 46vh; } }
+/* ---- staff galaxy aura, Codex, Final Shape */
+#galaxy{position:absolute;pointer-events:none;z-index:0;image-rendering:auto}#hero{z-index:1}
+.gmname.shape{background:linear-gradient(90deg,#ffd76a,#fff3c4,#9a5cff,#ffd76a);background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent!important;animation:shapeshim 6s linear infinite}
+@keyframes shapeshim{to{background-position:300% 0}}
+@media (prefers-reduced-motion:reduce){.gmname.shape{animation:none}}
+#rune{position:absolute;left:50%;bottom:6%;translate:-50% 0;color:#ffd76a;font-size:22px;text-shadow:0 0 10px #ffd76a,0 0 20px #9a5cff;pointer-events:auto;z-index:2;opacity:.85}
+.supernova{position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 70% 45%,#ffd76acc,#9a5cff55 30%,transparent 60%);animation:nova 1.6s ease-out forwards;z-index:3}
+@keyframes nova{0%{opacity:0;scale:.3}25%{opacity:1}100%{opacity:0;scale:1.4}}
+.dmg.dust{color:#cfd8ff;text-shadow:0 0 6px #9a7bff}
+.notice.glow-rare{box-shadow:0 0 18px var(--glow,#ffd76a)}
+#talents.codex{background:radial-gradient(circle at 30% 0,#2a1a4a,#0b0812 70%);border-color:#ffd76a88;box-shadow:0 0 40px #9a5cff44}
+#talents.codex h2{color:#ffd76a;font-family:Cinzel,serif;letter-spacing:2px}
+#talents.codex .taltree{grid-template-columns:repeat(4,minmax(150px,1fr));overflow-x:auto;max-height:62vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#talents.codex .tnode{border-color:#ffd76a55;background:linear-gradient(160deg,#160f26,#0b0812)}#talents.codex .tnode.cap{border-color:#ffd76a;box-shadow:0 0 10px #ffd76a66}
+#talents.codex .tnode.hiddennode{border-style:dashed;border-color:#9a5cff}
+@media(max-width:640px){#talents.codex .taltree{grid-template-columns:repeat(4,minmax(132px,1fr))}}

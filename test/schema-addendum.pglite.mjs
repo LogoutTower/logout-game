@@ -59,4 +59,11 @@ await as(ids[5], `select public.chat_report(${last}, 'spam')`); await as(ids[5],
 assert.equal((await as(ids[7], `select * from public.chat_messages where id = ${last}`)).rows.length, 1, 'two reporters: still visible');
 await as(ids[7], `select public.chat_report(${last})`); assert.equal((await as(ids[8], `select * from public.chat_messages where id = ${last}`)).rows.length, 0, 'hidden after 3');
 assert.equal((await as(ids[8], `select * from public.chat_reports`)).rows.length, 0, 'reports unreadable');
-console.log('schema addendum (guilds + chat) tests passed, idempotent');
+// ---- staff Codex marks: role = gm only, herald filtered, rate-limited per floor
+assert.match(await err(as(ids[2], `select public.gm_mark('shaped', 1)`)), /forbidden/, 'players cannot spoof marks');
+assert.equal((await as(GM, `select public.gm_mark('shaped', 3) r`)).rows[0].r, true); assert.equal((await as(GM, `select public.gm_mark('shaped', 3) r`)).rows[0].r, false, 'rate-limited');
+assert.match(await err(as(GM, `select public.gm_mark('herald', 3, 'visit evil.com')`)), /links/);
+await as(GM, `select public.gm_mark('herald', 3, 'The shit has arrived')`); await as(GM, `select public.gm_mark('decree6', 3, 'final')`);
+const mk = (await db.query(`select gm_marks from public.floor_state`)).rows[0].gm_marks; assert.equal(mk.herald.text, 'The **** has arrived'); assert(Date.parse(mk.decree6.until) > Date.now() + 100e3);
+assert.match(await err(as(GM, `select public.gm_mark('bogus', 3)`)), /unknown/);
+console.log('schema addendum (guilds + chat + staff marks) tests passed, idempotent');

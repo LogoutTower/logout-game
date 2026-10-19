@@ -102,8 +102,8 @@ export function rollItem(r, floor, element, seq = 0, weights = null, owned = [])
 const pick = (r, a) => a[Math.floor(r() * a.length)];
 const hash = s => { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 /** Seeded drops for one boss kill. Same (heroId, floor, seq, share) always gives the same result. */
-export function rollDrops({ heroId = 'hero', floor, share, seq = 0, owned = [], ownedU = [], luck = 1 }) {
-  const r = rng(hash(`${heroId}|${floor}|${seq}`)), element = bossInfo(floor).lootElement, special = isSpecialSlot(floor), items = [];
+export function rollDrops({ heroId = 'hero', floor, share, seq = 0, owned = [], ownedU = [], luck = 1 , elementOverride = null }) {
+  const r = rng(hash(`${heroId}|${floor}|${seq}`)), element = elementOverride || bossInfo(floor).lootElement, special = isSpecialSlot(floor), items = [];
   const rolls = special ? 2 : 1;
   for (let i = 0; i < rolls; i++) if (r() < Math.min(1, gearChance(share, floor) * luck)) items.push(rollItem(r, floor, element, `${seq}.${i}`, null, ownedU));
   let cosmetic = null;
@@ -115,11 +115,11 @@ export const salvageGold = (save, it) => Math.round(salvageValue(it) * (uniqueFx
 export const salvageValue = it => Math.round(20 * Math.pow(RARITIES.findIndex(r => r.id === it.rarity) + 1, 2) * scale(it.floor));
 /** Apply one kill's drops to a v3 save. Returns { items, cosmetic, salvaged } (salvaged = auto-salvaged gold when the bag is full). */
 export function grantDrops(save, floor, share) {
-  const h = save.heroes[0], d = rollDrops({ heroId: h.id, floor, share, seq: save.lootSeq++, owned: save.progress.drops, ownedU: ownedUniqueNames(save), luck: (uniqueFx(save).has('luck') ? 1.25 : 1) * (1 + talentBonus(h).lootPct / 100) });
+  const h = save.heroes[0], d = rollDrops({ heroId: h.id, floor, share, seq: save.lootSeq++, owned: save.progress.drops, ownedU: ownedUniqueNames(save), elementOverride: takeDestiny(save), luck: (uniqueFx(save).has('luck') ? 1.25 : 1) * (1 + talentBonus(h).lootPct / 100) });
   let salvaged = 0;
   for (const it of d.items) {
     if (it.rarity === 'unique') { save.inv.push(it); continue; } // never auto-salvaged (may exceed the bag)
-    if (save.inv.length < bagSize(save)) save.inv.push(it); else { const g = salvageGold(save, it); save.gold += g; salvaged += g; }
+    if (save.inv.length < bagSize(save)) save.inv.push(it); else { const g = salvagePay(save, it); save.gold += g; salvaged += g; }
   }
   if (d.cosmetic) save.progress.drops.push(d.cosmetic);
   return { ...d, salvaged };
@@ -134,7 +134,7 @@ export function trickleDrops(save, secs, floor, maxDrops = Infinity) {
     if (out.length >= maxDrops) { t.secs %= every; break; }
     t.secs -= every; const r = rng(hash(`${h.id}|trickle|${t.seq}`)), it = rollItem(r, floor, bossInfo(floor).lootElement, `t${t.seq}`, TRICKLE.weights); t.seq++;
     it.trickle = true; out.push(it);
-    if (save.inv.length < bagSize(save)) save.inv.push(it); else { save.gold += salvageGold(save, it); it.salvaged = true; }
+    if (save.inv.length < bagSize(save)) save.inv.push(it); else { save.gold += salvagePay(save, it); it.salvaged = true; }
   }
   return out;
 }
@@ -147,7 +147,23 @@ export function equipItem(save, invIndex) {
   if (jealous(it) && h.equip.trinket) { save.inv.push(h.equip.trinket); h.equip.trinket = null; }
   return true;
 }
-export function salvageItem(save, invIndex) { const it = save.inv[invIndex]; if (!it) return 0; const g = salvageGold(save, it); save.inv.splice(invIndex, 1); save.gold += g; return g; }
+export function salvageItem(save, invIndex) { const it = save.inv[invIndex]; if (!it) return 0; const g = salvagePay(save, it); save.inv.splice(invIndex, 1); save.gold += g; return g; }
 /** Base DPS of a Legendary weapon on floor f (parity reference for the staff weapon). */
 export const legendaryWeaponDps = f => +(1.5 * scale(f) * 3).toFixed(1);
 export { AFFIXES, scale as gearScale, ELEMENT_WORD, U_PRE, U_BASE, U_EPI };
+
+// ---- Codex hooks (staff only; talentBonus/hero class gate them, so they are inert for everyone else)
+/** Salvage payout incl. Second Draft (seeded chance to pay double). */
+export function salvagePay(save, it) { const c = talentBonus(save.heroes[0]).salvageDblPct; let g = salvageGold(save, it);
+  if (c > 0) { save.salvSeq = (save.salvSeq || 0) + 1; if (rng(hash(`${save.heroes[0].id}|salv|${save.salvSeq}`))() < c / 100) g *= 2; } return g; }
+/** Shaper of Destiny: the chosen element is used by the next boss drop, then cleared. */
+export function takeDestiny(save) { const d = save.destiny; if (!d?.element || save.heroes[0].cls !== 'GameMaster') return null; save.destiny = { ...d, element: null }; return d.element; }
+export const DESTINY_MS = 24 * 3600e3;
+export function chooseDestiny(save, element, now = Date.now()) { if (save.destiny?.at && now - save.destiny.at < DESTINY_MS) return false; save.destiny = { element, at: now }; return true; }
+/** Master Plan: reroll one non-Unique, non-staff item's stats (same slot family, rarity, floor), once per floor. */
+export function rerollItem(save, invIndex, floor) {
+  const it = save.inv[invIndex]; if (!it || it.gm || it.rarity === 'unique' || save.planFloor === floor) return null;
+  const ri = RARITIES.findIndex(r => r.id === it.rarity), w = RARITIES.map((_, i) => i === ri ? 1 : 0);
+  save.planSeq = (save.planSeq || 0) + 1; const n = rollItem(rng(hash(`${it.id}|plan|${save.planSeq}`)), it.floor, it.element, `p${save.planSeq}`, w);
+  n.id = `${it.id}~p${save.planSeq}`; if (it.customName) n.customName = it.customName; save.inv[invIndex] = n; save.planFloor = floor; return n;
+}

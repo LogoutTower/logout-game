@@ -11,9 +11,12 @@ import { featureOn } from './features.js';
 import { checkGuild, GUILD_CAP, GUILD_BUFF } from './guilds.js';
 import { cleanChat, CHAT_MAX } from './chatfilter.js';
 import { boardWithStaff, wouldRankLabel } from './ranks.js';
-import { staffActive, GM_CLASS, GM_SIGIL, EVENTIDE, gmOn, checkPass, sanitizeSave, becomeGm, leaveGm, eventide, shouldAnnounce } from './gm.js';
-import { openSandbox, sandboxFloor, sandboxFight, sandboxLoot, closeSandbox } from './sandbox.js';
-import { legendaryWeaponDps } from './loot.js';
+import { VESPERVEIL, staffActive, GM_CLASS, GM_SIGIL, EVENTIDE, gmOn, checkPass, sanitizeSave, becomeGm, leaveGm, eventide, shouldAnnounce } from './gm.js';
+import { openSandbox, sandboxFloor, sandboxFight, sandboxLoot, closeSandbox, sandboxEdit } from './sandbox.js';
+import { legendaryWeaponDps, rerollItem, chooseDestiny, DESTINY_MS } from './loot.js';
+import { cx, CODEX, isCodex } from './codex.js';
+import { galaxyTier, mountGalaxy } from './galaxy.js';
+import { ELEMENT_WORD } from './loot.js'; const ELEMENTS = Object.keys(ELEMENT_WORD);
 import { classOf } from './game.js';
 import { holderStatus } from './supabase.js';
 import { bossSprite, bossIsBig, heroSprite } from './sprites.js';
@@ -25,7 +28,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 let lootLines = [];
 let be, save, floor, pending = 0, recent = { dmg: 0, gold: 0, xp: 0 }, quietSync = true, cls = 'Vanguard', draftLook = defaultLook('Vanguard'), toastT;
 const log = (m, color) => { const d = document.createElement('div'); d.textContent = m; if (m.startsWith('System notice')) d.className = 'rune'; if (color) { d.style.color = color; d.className = 'loot'; } if (color === '#7ff6ff') d.className = 'loot uniq'; $('log').prepend(d); };
-function notice(m, color) { const n = document.createElement('div'); n.className = 'notice' + (color === '#7ff6ff' ? ' uniq' : ''); if (color) n.style.borderColor = color; n.innerHTML = `<small>◈ System notice</small><span${color ? ` style="color:${color}"` : ''}>${esc(m)}</span>`; $('notices').append(n); setTimeout(() => n.remove(), color === '#7ff6ff' ? 7000 : 3200); }
+function notice(m, color) { const n = document.createElement('div'); n.className = 'notice' + (color === '#7ff6ff' ? ' uniq' : ''); if (color) n.style.borderColor = color; if (color && cx(save?.heroes?.[0], 'cx-reader')) { n.classList.add('glow-rare'); n.style.setProperty('--glow', color); } /* Thread-Reader */ n.innerHTML = `<small>◈ System notice</small><span${color ? ` style="color:${color}"` : ''}>${esc(m)}</span>`; $('notices').append(n); setTimeout(() => n.remove(), color === '#7ff6ff' ? 7000 : 3200); }
 const sessionStart = Date.now(); let hits = 0, lastWhisper = Date.now();
 const WHISPERS = ['The weapon hums a floor number you have not reached.', 'Something in the blade asks whether you remember logging in.', 'A whisper: "the guardian is afraid of you."', 'The weapon murmurs your name, then someone else\'s.', 'A voice from the steel: "one more floor."'];
 function floorCleared(f) { $('clearedSub').textContent = `${bossName(f)} has fallen`; const c = $('cleared'); c.classList.remove('show'); void c.offsetWidth; c.classList.add('show'); }
@@ -38,6 +41,7 @@ function hitFx(dmg, mine = true) {
   const s = document.createElement('i'); s.className = 'slash'; s.style.left = (x - 60) + 'px'; s.style.top = y + 'px';
   if (gmHit) { s.className = 'slash crack'; s.style.left = (x - 30 + Math.random() * 40) + 'px'; s.style.top = (y - 20 + Math.random() * 30) + 'px'; s.style.rotate = (Math.random() * 360) + 'deg'; } // gold void-crack
   fx.append(d, s); setTimeout(() => { d.remove(); s.remove(); }, 1000);
+  if (gmHit && cx(save.heroes[0], 'cx-orbit')) { const u = document.createElement('span'); u.className = 'dmg dust'; u.textContent = '✦'; u.style.left = (x - 40 + Math.random() * 80) + 'px'; u.style.top = (y - 10 + Math.random() * 30) + 'px'; fx.append(u); setTimeout(() => u.remove(), 1000); } // Orbit stardust
 }
 const SLOT_LABEL = { skin: 'Skin', hairColor: 'Hair colour', hairStyle: 'Hair style', outfitColor: 'Outfit colour', outfitStyle: 'Outfit style', trim: 'Armor trim', weapon: 'Weapon', weaponColor: 'Weapon finish', aura: 'Aura', title: 'Title', nameColor: 'Name colour' };
 const COLOR_SLOTS = ['skin', 'hairColor', 'outfitColor', 'trim', 'weaponColor', 'nameColor', 'aura'];
@@ -99,7 +103,7 @@ function handleClears(clears = [], quiet = false) {
 function openWardrobe() {
   const h = save.heroes[0];
   $('wpreview').style.backgroundImage = heroSprite(h.look, h.cls);
-  $('wname').innerHTML = `<span style="color:${nameColorOf(h)}">${esc(h.name)}</span><br><span class="ttl">«${esc(titleOf(h))}»</span>`;
+  $('wname').innerHTML = `<span style="color:${nameColorOf(h)}">${esc(h.name)}</span><br><span class="ttl">«${esc(titleOf(h))}»</span>` + (h.cls === GM_CLASS && h.look.outfitStyle === 'gm-coat' ? `<p class="sub" id="vesper"><b style="color:#ffd76a">${esc(VESPERVEIL.label)}</b><br>${esc(VESPERVEIL.lore)}</p>` : '');
   picker($('wpick'), SLOTS, h.look, h.cls, save.progress, async id => { if (equip(save, id)) { await be.saveSave(save); render(); openWardrobe(); } });
   if (!$('wardrobe').open) $('wardrobe').showModal();
 }
@@ -113,9 +117,11 @@ async function startGame(fresh = false) {
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
 function tick() {
-  save.ctx = { gm: gmValid, guild: !!myGuild, decree: gmValid || (floor.gmUntil || 0) > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, sessionSecs: (Date.now() - sessionStart) / 1000 };
+  save.ctx = { gm: gmValid, guild: !!myGuild, decreePct: decreePctNow(), decree: gmValid || (floor.gmUntil || 0) > Date.now() || echoUntil > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, sessionSecs: (Date.now() - sessionStart) / 1000 };
   const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS), fx = effectsOf(save.heroes[0]);
   if (fx.has('whisper') && Date.now() - lastWhisper > 120000) { lastWhisper = Date.now(); log(WHISPERS[Math.floor(Math.random() * WHISPERS.length)], '#b9a8ff'); }
+  if (p.damage > 0 && save.sheath && cx(save.heroes[0], 'cx-sheath')) { const extra = Math.round(p.damage * 0.5); p.damage += extra; save.sheath = false; log('Twilight Sheath: the first cut after rest lands +50%.', '#ffd76a'); } // Twilight Sheath
+  codexTick(p);
   save.gold += p.gold; recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp; pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage);
   if (applyXp(save.heroes, p.xp).length) { log(`System notice: level ${save.heroes[0].level} reached.`); notice(`Level ${save.heroes[0].level} reached · +1 talent point`); }
   for (const it of trickleDrops(save, p.secs, floor.floor, p.secs > 2 ? TRICKLE.offlineMax : Infinity)) { const R = rarityOf(it.rarity); log(`Loot · ${R.label} ${it.name}${it.salvaged ? ' (bag full: salvaged)' : ''}`, R.color); notice(`${R.label} find — ${it.name}`, R.color); }
@@ -127,11 +133,11 @@ function catchUp() { if (!save || !floor || Date.now() - lastCatchUp < 500) retu
 document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
 addEventListener('focus', catchUp); addEventListener('pageshow', catchUp);
 async function sync() {
-  if (be.name === 'local') be.decree = gmValid;
+  if (be.name === 'local') { be.decree = gmValid; be.decreePct = decreePctNow(); }
   const r = await submitDmg(save.heroes[0].name, pending, { ...save.heroes[0], staff: gmValid }); pending = 0;
   if (recent.dmg > 0) { log(`You strike for ${fmt(recent.dmg)} · +${fmt(recent.gold)} gold · +${fmt(recent.xp)} XP`); recent = { dmg: 0, gold: 0, xp: 0 }; }
   const quiet = quietSync; quietSync = false; // clears that happened before this session are logged, not re-toasted
-  if (r.advanced) { const f = r.floor - 1; log(`${bossName(f)} fell beneath many blades. The stair to Floor ${r.floor} lies open.`); log(`System notice: Floor ${r.floor} is open.`); floorCleared(f); setTimeout(() => notice(`Floor ${r.floor} is open`), 2400); }
+  if (r.advanced) { const f = r.floor - 1; log(`${bossName(f)} fell beneath many blades. The stair to Floor ${r.floor} lies open.`); log(`System notice: Floor ${r.floor} is open.`); floorCleared(f); setTimeout(() => notice(`Floor ${r.floor} is open`), 2400); codexFloorFell(f, r.floor); }
   handleClears(r.clears, quiet);
   floor = await be.getFloor(); gmFloorChecks(); await be.saveSave(save); render(); renderLb();
 }
@@ -142,20 +148,20 @@ function buy(kind) {
 }
 function render() {
   const h = save.heroes[0];
-  $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('hero').classList.toggle('gmaura', h.look.aura === 'gm-aura'); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; $('boss').style.backgroundImage = bossSprite(floor.floor); $('boss').classList.toggle('big', bossIsBig(floor.floor));
+  $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; $('boss').style.backgroundImage = bossSprite(floor.floor); $('boss').classList.toggle('big', bossIsBig(floor.floor));
   const won = floor.floor >= MAX_FLOOR && floor.hp <= 0;
   H('bname').textContent = won ? 'Log out enabled' : bossName(floor.floor);
   H('floor').textContent = won ? 'System notice · the tower is silent' : `Guardian of Floor ${floor.floor} / ${MAX_FLOOR}`;
   const pct = floor.hp / floor.maxHp, lay = Math.ceil(pct * LAYERS - 1e-9), inLayer = pct * LAYERS - (lay - 1);
   H('layers').innerHTML = Array.from({ length: LAYERS }, (_, i) => `<i class="${i < lay ? 'on' : ''}"></i>`).join('');
   const c = hpColor(pct); $('hpfill').style.width = (lay ? inLayer * 100 : 0) + '%'; $('hpfill').style.background = `linear-gradient(90deg, ${c}aa, ${c})`; $('hpfill').style.color = c;
-  H('hptext').textContent = `${fmt(floor.hp)} / ${fmt(floor.maxHp)} HP · ${lay}× layers`;
-  H('hname2').innerHTML = `<div ${h.cls === GM_CLASS ? `class="gmname"` : `style="color:${nameColorOf(h)}"`}>${h.cls === GM_CLASS ? GM_SIGIL + ' ' : ''}${esc(h.name)}</div><div class="ttl">${esc(titleOf(h))}</div>`; H('hlv').textContent = `LV ${h.level}`;
+  H('hptext').textContent = `${fmt(floor.hp)} / ${fmt(floor.maxHp)} HP · ${lay}× layers` + (cx(h, 'cx-eye') ? ` · layer ${lay}: ${fmt(Math.max(0, inLayer) * floor.maxHp / LAYERS)} / ${fmt(floor.maxHp / LAYERS)} · next: ${bossName(Math.min(floor.floor + 1, MAX_FLOOR))}` : ''); // Draftsman's Eye
+  H('hname2').innerHTML = `<div ${h.cls === GM_CLASS ? `class="gmname${cx(h, 'cx-shape') ? ' shape' : ''}"` : `style="color:${nameColorOf(h)}"`}>${h.cls === GM_CLASS ? GM_SIGIL + ' ' : ''}${esc(h.name)}</div><div class="ttl">${esc(titleOf(h))}</div>`; H('hlv').textContent = `LV ${h.level}`;
   const hp = heroHp(h) / heroMaxHp(h), worn = isWorn(h); $('hhp').className = 'seg' + (worn ? ' worn' : hp < 0.6 ? ' mid' : ''); H('hhp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < hp ? '' : 'off'}"></i>`).join('');
   $('hhp').title = `HP ${Math.round(heroHp(h))} / ${heroMaxHp(h)}`;
   const b = buffsOf(save), mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   H('buffs').innerHTML = [worn ? '<span class="buff bad" title="Below 30% HP: DPS halved">Worn down · DPS ½</span>' : '', b.rested > 0 ? `<span class="buff" title="+15% gold and XP">Well Rested ${mmss(b.rested)}</span>` : '',
-    b.elixir > 0 ? `<span class="buff" title="+25% DPS">Fury ${mmss(b.elixir)}</span>` : '', b.vigil > 0 ? `<span class="buff" title="Offline cap raised once">Vigil +${b.vigil}h</span>` : ''].join('');
+    b.elixir > 0 ? `<span class="buff" title="+25% DPS">Fury ${mmss(b.elixir)}</span>` : '', b.vigil > 0 ? `<span class="buff" title="Offline cap raised once">Vigil +${b.vigil}h</span>` : '', h.cls === GM_CLASS && h.look.aura === 'gm-aura' ? (g => `<span class="buff gold" id="galaxyTier" title="${esc(g.desc)}">Galaxy · Tier ${g.tier} · ${esc(g.name)}</span>`)(galaxyTier(h.level)) : ''].join('');
   const xp = h.xp / xpToNext(h.level); H('hxp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < xp ? '' : 'off'}"></i>`).join('');
   H('stats').innerHTML = `${classOf(h.cls).icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${effectiveDps(save).toFixed(1)}</b> · HP <b>${Math.round(heroHp(h))}/${heroMaxHp(h)}</b> · Gold <b>${fmt(save.gold)}</b>`;
   H('lvlL').textContent = `Train ${fmt(levelCost(h))}g`; $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`; $('lvl').disabled = save.gold < levelCost(h);
@@ -180,7 +186,7 @@ function openTown() {
   $('innkeeper').style.backgroundImage = sprite(npcGrid('innkeeper').rows, npcGrid('innkeeper').pal); $('merchant').style.backgroundImage = sprite(npcGrid('merchant').rows, npcGrid('merchant').pal);
   $('innInfo').innerHTML = `HP <b>${Math.round(heroHp(h))} / ${heroMaxHp(h)}</b>${isWorn(h) ? ' · <span class="bad">worn down</span>' : ''}`;
   $('restBtn').textContent = `Rest · ${fmt(c)}g`; $('restBtn').disabled = save.gold < c;
-  $('restBtn').onclick = async () => { if (rest(save, f)) { log('You slept at the inn. HP restored · Well Rested (+15% gold & XP, 30 min).', '#5cff8a'); notice('Well Rested · +15% gold & XP'); await be.saveSave(save); render(); openTown(); } };
+  $('restBtn').onclick = async () => { if (rest(save, f)) { save.sheath = true; log('You slept at the inn. HP restored · Well Rested (+15% gold & XP, 30 min).', '#5cff8a'); notice('Well Rested · +15% gold & XP'); await be.saveSave(save); render(); openTown(); } };
   const left = st.endsAt - now; $('shopTimer').textContent = `New stock in ${fmtDur(left / 1000)}`;
   $('shopList').innerHTML = st.items.map((it, i) => { const R = it.item ? rarityOf(it.item.rarity) : null, out = soldOut(save, st, i);
     return `<div class="srow" ${R ? `style="--rc:${R.color}"` : ''}><div><b style="${R ? `color:${R.color}` : ''}">${esc(it.name)}</b><small>${R ? `${R.label} ${it.item.slot} · ${Object.entries(it.item.stats).map(([k, v]) => statLabel(k, v)).join(' · ')}` : esc(it.desc)}</small></div>
@@ -206,7 +212,9 @@ function openBag() {
     const cur = h.equip[it.slot], before = heroDps(h), trial = { ...h, equip: { ...h.equip, [it.slot]: it } }, delta = heroDps(trial) - before;
     $('bagDetail').innerHTML = `${itemCard(it)}<div class="vs">vs equipped</div>${cur ? itemCard(cur, 'mini') : '<div class="item mini empty">nothing equipped</div>'}
       <p class="delta" style="color:${delta >= 0 ? '#5cff8a' : '#ff3355'}">DPS ${delta >= 0 ? '+' : ''}${delta.toFixed(1)} (${before.toFixed(1)} → ${(before + delta).toFixed(1)})</p>${['goldPct', 'xpPct', 'capH'].map(k => { const d = (it.stats[k] || 0) - (cur?.stats[k] || 0); return d ? `<div style="color:${d > 0 ? '#5cff8a' : '#ff3355'}">${k === 'capH' ? 'Offline cap' : k === 'goldPct' ? 'Gold' : 'XP'} ${d > 0 ? '+' : ''}${d}${k === 'capH' ? 'h' : '%'}</div>` : ''; }).join('')}
-      <div class="bagbtns"><button id="bEquip" class="cta">Equip</button><button id="bSalv">Salvage · ${fmt(salvageValue(it))}g</button></div>`;
+      <div class="bagbtns"><button id="bEquip" class="cta">Equip</button><button id="bSalv">Salvage · ${fmt(salvageValue(it))}g</button>${cx(h, 'cx-loom') && !it.gm ? '<button id="bLoom">Rename</button>' : ''}${cx(h, 'cx-plan') && !it.gm && it.rarity !== 'unique' ? `<button id="bPlan" ${save.planFloor === floor.floor ? 'disabled title="Used on this floor"' : ''}>Master Plan · reroll</button>` : ''}</div>`;
+    if ($('bLoom')) $('bLoom').onclick = async () => { const v = prompt('Loom of Names: new name (max 28)', it.customName || it.name); if (v == null) return; const c = cleanChat(v, 28); if (!c.ok || c.text !== v.replace(/\s+/g, ' ').trim()) { notice('That name is not allowed'); return; } it.customName = c.text; it.name = c.text; await be.saveSave(save); openBag(); };
+    if ($('bPlan')) $('bPlan').onclick = async () => { const n = rerollItem(save, bagSel, floor.floor); if (n) { log(`Master Plan: ${n.name} redrawn.`, '#ffd76a'); await be.saveSave(save); openBag(); } };
     $('bEquip').onclick = async () => { if (!equipItem(save, bagSel)) { notice('Your Unique weapon refuses to share you with a trinket'); return; } log(`Equipped ${it.name}.`, rarityOf(it.rarity).color); bagSel = -1; await be.saveSave(save); render(); openBag(); };
     $('bSalv').onclick = async () => { if (it.rarity === 'unique' && !confirm('Salvage a one-of-a-kind Unique? It can never drop again.')) return; const g = salvageItem(save, bagSel); log(`Salvaged ${it.name} for ${fmt(g)} gold.`); bagSel = -1; await be.saveSave(save); render(); openBag(); };
   } else $('bagDetail').innerHTML = '<p class="sub">Select an item to compare it with what you have equipped.</p>';
@@ -254,17 +262,19 @@ boot(); checkDeploy();
 // ---- Talents: glass-HUD tree, tap a node for its tooltip, Learn / Respec.
 let talSel = null;
 function openTalents() {
-  const h = save.heroes[0], fp = freePoints(h), f = floor.floor, rc = respecCost(h, f);
-  $('talPts').textContent = `· ${h.cls} · ${fp} point${fp === 1 ? '' : 's'} free · ${totalPoints(h)} total`;
-  $('talTree').innerHTML = treeOf(h.cls).map(b => `<section class="tbranch"><h3>${esc(b.name)} <small>${spentIn(h, b.id)} pts</small></h3><p class="sub">${esc(b.blurb)}</p>${b.nodes.map(n => {
+  const h = save.heroes[0], fp = freePoints(h), f = floor.floor, rc = respecCost(h, f, gmValid);
+  const codex = isCodex(h); $('talents').classList.toggle('codex', codex); $('talents').querySelector('h2').firstChild.textContent = codex ? "The Architect's Codex " : 'Talents ';
+  $('talPts').textContent = `· ${codex ? 'staff' : h.cls} · ${fp} point${fp === 1 ? '' : 's'} free · ${totalPoints(h)} total`;
+  $('talTree').innerHTML = treeOf(h.cls).filter(b => !b.nodes.every(n => n.hidden && canLearn(h, n.id) === 'sealed' && !(h.talents?.[n.id]))).map(b => `<section class="tbranch"><h3>${esc(b.name)} <small>${spentIn(h, b.id)} pts</small></h3><p class="sub">${esc(b.blurb)}</p>${b.nodes.map(n => {
     const r = h.talents?.[n.id] || 0, why = canLearn(h, n.id), gated = why && why.startsWith('needs');
-    return `<button class="tnode ${r >= n.max ? 'max' : ''} ${gated ? 'gated' : ''} ${!why ? 'can' : ''} ${n.capstone ? 'cap' : ''} ${talSel === n.id ? 'sel' : ''}" data-id="${n.id}" aria-label="${esc(n.name)} ${r}/${n.max}"><span>${esc(n.name)}</span><b>${r}/${n.max}</b></button>`; }).join('')}</section>`).join('');
+    return `<button class="tnode ${r >= n.max ? 'max' : ''} ${gated ? 'gated' : ''} ${!why ? 'can' : ''} ${n.capstone ? 'cap' : ''} ${n.hidden ? 'hiddennode' : ''} ${talSel === n.id ? 'sel' : ''}" data-id="${n.id}" aria-label="${esc(n.name)} ${r}/${n.max}"><span>${esc(n.name)}</span><b>${r}/${n.max}</b></button>`; }).join('')}</section>`).join('');
   const n = talSel && nodeById(talSel);
   if (n) { const r = h.talents?.[n.id] || 0, why = canLearn(h, n.id);
-    $('talTip').innerHTML = `<b>${esc(n.name)}</b>${n.capstone ? ' <small class="capt">capstone</small>' : ''} <small>rank ${r}/${n.max}${n.req ? ` · needs ${n.req} pts in branch` : ''}</small><p>${esc(n.desc)}</p><button id="talLearn" class="cta" ${why ? 'disabled' : ''}>${why ? esc(why) : 'Learn'}</button>`;
+    $('talTip').innerHTML = `<b>${esc(n.name)}</b>${n.capstone ? ' <small class="capt">capstone</small>' : ''} <small>rank ${r}/${n.max}${n.req ? ` · needs ${n.req} pts in branch` : ''}</small><p>${esc(n.desc)}</p><button id="talLearn" class="cta" ${why ? 'disabled' : ''}>${why ? esc(why) : 'Learn'}</button>${codexExtra(h, n)}`;
+    wireCodexExtra(h, n);
     $('talLearn').onclick = async () => { if (learn(h, n.id)) { log(`System notice: talent learned — ${n.name} (${(h.talents[n.id])}/${n.max}).`); await be.saveSave(save); render(); openTalents(); } };
   } else $('talTip').innerHTML = '<p class="sub">Tap a node to see what it does. Later nodes unlock after you spend points in that branch.</p>';
-  $('talRespec').textContent = rc ? `Respec · ${fmt(rc)}g` : 'Respec · free once'; $('talRespec').disabled = save.gold < rc || !Object.keys(h.talents || {}).length;
+  $('talRespec').textContent = rc ? `Respec · ${fmt(rc)}g` : gmValid ? 'Respec · free (staff)' : 'Respec · free once'; $('talRespec').disabled = save.gold < rc || !Object.keys(h.talents || {}).length;
   $('talRespec').onclick = async () => { if (respec(save, f)) { log('System notice: talents reset. All points refunded.'); talSel = null; await be.saveSave(save); render(); openTalents(); } };
   $('talTree').onclick = e => { const b = e.target.closest('.tnode'); if (b) { talSel = b.dataset.id; openTalents(); } };
   if (!$('talents').open) $('talents').showModal();
@@ -306,11 +316,13 @@ async function gmFloorChecks() {
   if (gmValid && h.equip?.weapon?.gm && h.equip.weapon.floor !== f) h.equip.weapon = eventide(f, legendaryWeaponDps(f)); // Legendary parity follows the floor
   if (gmValid && h.cls === GM_CLASS && f !== lastFloorSeen) {
     const last = JSON.parse(localStorage.getItem('logout.v1.gmAnn') || 'null');
-    if (shouldAnnounce(last, f, Date.now())) { localStorage.setItem('logout.v1.gmAnn', JSON.stringify({ floor: f, at: Date.now() })); bigNotice(`The Architect has entered Floor ${f}.`); log(`System notice: The Architect has entered Floor ${f}.`, '#ffd76a'); be.gmAnnounce?.(f); }
+    if (shouldAnnounce(last, f, Date.now())) { localStorage.setItem('logout.v1.gmAnn', JSON.stringify({ floor: f, at: Date.now() })); const line = cx(h, 'cx-herald') && save.herald ? save.herald : `The Architect has entered Floor ${f}.`; bigNotice(line); log(`System notice: ${line}`, '#ffd76a'); be.gmAnnounce?.(f); if (line !== `The Architect has entered Floor ${f}.`) be.gmMark?.('herald', f, save.herald).catch(() => {}); }
   }
   lastFloorSeen = f;
   const a = floor.announce, at = a ? Date.parse(a.at) : 0; // online: everyone on the floor sees the entrance (polled with the floor)
-  if (!gmValid && a && a.floor === f && at > lastAnnSeen && Date.now() - at < 10 * 60e3) { lastAnnSeen = at; bigNotice(`The Architect has entered Floor ${f}.`); }
+  const hm = floor.marks?.herald, herald = hm && hm.floor === f && Math.abs(Date.parse(hm.at) - at) < 60e3 ? hm.text : null;
+  if (!gmValid && a && a.floor === f && at > lastAnnSeen && Date.now() - at < 10 * 60e3) { lastAnnSeen = at; bigNotice(herald || `The Architect has entered Floor ${f}.`); }
+  seenMarks();
 }
 let gmTaps = 0;
 function renderGmSlot() {
@@ -336,6 +348,8 @@ function openSandboxUi() {
     $('sbHp').textContent = `${fmt(sbx.hp)} HP`; $('sbItems').innerHTML = sbx.items.map(it => itemCard(it)).join('') || '<p class="sub">No test loot yet.</p>'; $('sbLog').textContent = sbx.log.slice(-3).join(' · '); };
   $('sbFloor').value = sbx.floor; $('sbFloor').oninput = () => { sandboxFloor(sbx, +$('sbFloor').value); $('sbNum').textContent = sbx.floor; draw(); }; $('sbNum').textContent = sbx.floor;
   $('sbFight').onclick = () => { sandboxFight(sbx, 10); draw(); }; $('sbLoot').onclick = () => { sandboxLoot(sbx, 3); draw(); }; $('sbUnique').onclick = () => { sandboxLoot(sbx, 1, [0, 0, 0, 0, 0, 1]); draw(); };
+  let ed = $('sbEdit'); if (cx(save.heroes[0], 'cx-floorplan') && !ed) { ed = document.createElement('div'); ed.id = 'sbEdit'; ed.className = 'staffbox'; ed.innerHTML = `<b>Floorplan</b><label>HP × <input id="sbHpMul" type="number" min="0.1" max="10" step="0.1" value="1" style="max-width:80px"></label><select id="sbEl"><option value="">native element</option>${ELEMENTS.map(e => `<option>${e}</option>`).join('')}</select><button id="sbApply">Apply</button>`; $('sbLog').after(ed); }
+  if ($('sbApply')) $('sbApply').onclick = () => { sandboxEdit(sbx, { hpMul: $('sbHpMul').value, element: $('sbEl').value || null }); sbx.log.push(`Floorplan: HP ×${sbx.edit.hpMul}${sbx.edit.element ? ', ' + sbx.edit.element : ''}`); draw(); };
   d.onclose = () => { sbx = closeSandbox(sbx); }; draw(); if (!d.open) d.showModal();
 }
 const bossInfoName = f => { const i = bossInfo(f); return `${i.name}${i.kind !== 'generated' ? ' · special' : ''}`; };
@@ -393,4 +407,49 @@ async function openChat() {
     try { await be.chatPost(save.heroes[0].name, $('chatIn').value, meArg()); $('chatIn').value = ''; $('chatNote').textContent = ''; await pollChat(); } catch (err) { $('chatNote').textContent = 'Not sent: ' + err.message; } };
   if (!$('chat').open) $('chat').showModal(); renderChat(); await pollChat();
   clearInterval(chatTimer); chatTimer = setInterval(() => { if (!$('chat').open) clearInterval(chatTimer); else pollChat(); }, 4000);
+}
+
+// ---- The Architect's Codex: live hooks (staff only; every cx() check needs the GameMaster class and the learned node)
+let galaxy = null, lastEclipse = Date.now(), collapseUntil = 0, echoUntil = 0, lastFloorFor = null; const seenMark = {};
+function decreePctNow() { const h = save?.heroes?.[0]; if (cx(h, 'cx-final') || Date.now() < collapseUntil) return 6; const d6 = floor?.marks?.decree6; return d6 && Date.parse(d6.until) > Date.now() ? 6 : 5; }
+function renderCodexLook(h) {
+  galaxy = galaxy || mountGalaxy($('arena'), $('hero'));
+  galaxy.update({ on: gmValid && h.cls === GM_CLASS && h.look.aura === 'gm-aura', level: h.level, stars: cx(h, 'cx-constellation') ? Math.min(100, new Set(save.progress?.cleared || []).size) : 0, eyes: cx(h, 'cx-shape') });
+  if (cx(h, 'cx-dusk')) $('hero').style.filter = `drop-shadow(0 0 ${(1 + Math.min(50, h.level) / 10).toFixed(1)}px #ffd76a) drop-shadow(0 0 3px #9a5cff88)`; // Dusk Edge
+  const mine = gmValid && cx(h, 'cx-corner'), cm = floor.marks?.cornerstone, shown = mine || (cm && cm.floor === floor.floor);
+  let rn = $('rune'); if (shown && !rn) { rn = document.createElement('div'); rn.id = 'rune'; rn.textContent = '◈'; rn.title = 'The Architect was here'; $('arena').append(rn); } else if (!shown && rn) rn.remove();
+}
+function codexTick(p) {
+  const h = save.heroes[0]; if (!gmValid || !cx(h, 'cx-eclipse') || p.damage <= 0 || Date.now() - lastEclipse < 60000) return; lastEclipse = Date.now();
+  const twice = cx(h, 'cx-collapse'), dps = p.damage / Math.max(1, p.secs); for (let i = 0; i < (twice ? 2 : 1); i++) setTimeout(() => hitFx(Math.round(dps * 3)), i * 250); // visual: Eclipse is averaged into DPS (offline parity)
+  log(`Eclipse: a void strike for 300%${twice ? ', twice' : ''}.`, '#ffd76a');
+  if (twice) { collapseUntil = Date.now() + 10000; be.gmMark?.('decree6', floor.floor, 'collapse').catch(() => {}); }
+}
+function supernova() { const n = document.createElement('div'); n.className = 'supernova'; $('arena').append(n); setTimeout(() => n.remove(), 1700); }
+function codexFloorFell(f, next) {
+  const h = save.heroes[0]; if (!gmValid) return;
+  if (cx(h, 'cx-supernova')) { supernova(); be.gmMark?.('supernova', f).catch(() => {}); }
+  if (cx(h, 'cx-shape')) { bigNotice(`The Architect has shaped Floor ${f}.`); be.gmMark?.('shaped', f).catch(() => {}); }
+  if (cx(h, 'cx-echo')) echoUntil = Date.now() + 120000; // Decree lingers 2 min
+}
+function seenMarks() { // marks set by a server-role staff client; everyone on the floor sees them once
+  const m = floor.marks || {}, h = save.heroes[0];
+  for (const k of ['supernova', 'shaped']) { const x = m[k]; if (!x || seenMark[k] === x.at || Date.now() - Date.parse(x.at) > 120e3) continue; seenMark[k] = x.at; if (gmValid) continue; if (k === 'supernova') supernova(); else bigNotice(`The Architect has shaped Floor ${x.floor}.`); }
+  if (gmValid && cx(h, 'cx-final')) be.gmMark?.('decree6', floor.floor, 'final').catch(() => {});
+  if (gmValid && cx(h, 'cx-echo')) be.gmMark?.('echo', floor.floor).catch(() => {});
+  if (gmValid && cx(h, 'cx-corner') && be.isGm?.()) be.gmMark?.('cornerstone', floor.floor).catch(() => {});
+  if (lastFloorFor !== floor.floor) { if (lastFloorFor !== null && gmValid && cx(h, 'cx-prophecy')) { const nx = Math.min(floor.floor + 1, MAX_FLOOR); log(`Prophecy: the guardian of Floor ${nx} will be ${bossInfo(nx).lootElement}.`, '#ffd76a'); } lastFloorFor = floor.floor; }
+}
+function codexExtra(h, n) {
+  if (!(h.talents?.[n.id] > 0)) return '';
+  if (n.id === 'cx-herald') return `<div class="staffbox"><input id="cxHerald" maxlength="80" placeholder="Your entrance line" value="${esc(save.herald || '')}"><button id="cxHeraldSave">Save line</button></div>`;
+  if (n.id === 'cx-destiny') { const left = save.destiny?.at ? DESTINY_MS - (Date.now() - save.destiny.at) : 0;
+    return `<div class="staffbox">${left > 0 ? `<span class="sub">Next choice in ${Math.ceil(left / 3600e3)}h${save.destiny?.element ? ` · chosen: ${esc(save.destiny.element)}` : ''}</span>` : `<select id="cxDestiny">${ELEMENTS.map(e => `<option>${esc(e)}</option>`).join('')}</select><button id="cxDestinySet">Choose</button>`}</div>`; }
+  if (n.id === 'cx-longnight') return `<div class="staffbox"><button id="cxSkin">${h.look.weaponColor === 'gm-unsheathed' ? 'Wear Eventide (void edge)' : 'Wear Eventide, Unsheathed'}</button></div>`;
+  return '';
+}
+function wireCodexExtra(h, n) {
+  if ($('cxSkin')) $('cxSkin').onclick = async () => { if (!gmValid) return; h.look.weaponColor = h.look.weaponColor === 'gm-unsheathed' ? 'gm-edge' : 'gm-unsheathed'; await be.saveSave(save); render(); openTalents(); };
+  if ($('cxHeraldSave')) $('cxHeraldSave').onclick = async () => { const c = cleanChat($('cxHerald').value, 80); if (!c.ok) { notice('Not allowed: ' + c.reason); return; } save.herald = c.text; await be.saveSave(save); notice('Entrance line saved'); };
+  if ($('cxDestinySet')) $('cxDestinySet').onclick = async () => { if (chooseDestiny(save, $('cxDestiny').value)) { log(`Shaper of Destiny: your next boss drop will be ${save.destiny.element}.`, '#ffd76a'); await be.saveSave(save); openTalents(); } };
 }
