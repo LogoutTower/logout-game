@@ -2,6 +2,7 @@
 // Only constructed when SUPABASE_URL and SUPABASE_ANON_KEY are set. Free-tier friendly: damage is batched and flushed every
 // 30s, the floor is polled every 30s, no realtime subscriptions. The client is injected so tests can use a mock.
 import { sanitizeSave } from './gm.js';
+import { boardWithStaff } from './ranks.js';
 export const FLUSH_MS = 30000, POLL_MS = 30000;
 const SIGN_STATEMENT = 'Sign in to $LOGOUT. This is a signature only: it does not send a transaction, move funds or share your keys.';
 /** Last-write-wins by updatedAt. Ties keep the local copy (the cloud copy may be a staff-stripped mirror of it). */
@@ -9,6 +10,9 @@ export function mergeSaves(local, cloud) {
   if (!cloud) return local || null; if (!local) return cloud;
   return (local.updatedAt || 0) >= (cloud.updatedAt || 0) ? local : cloud;
 }
+/** Auth errors that mean "this stored session can never work again" (deleted user, revoked or invalid refresh token). */
+export const isDeadSession = e => { const m = String(e?.message || ''), st = e?.status;
+  return /user not found|does not exist|invalid refresh token|refresh token not found|session.*(missing|not found)|invalid jwt|bad_jwt/i.test(m) || st === 401 || st === 403 || (st === 400 && /refresh/i.test(m)); };
 export class SupabaseBackend {
   name = 'supabase';
   constructor(client, { maxFloor = 10, cacheKey = 'logout.v1', storage = globalThis.localStorage, now = () => Date.now(), redirectTo = '' } = {}) {
@@ -17,11 +21,19 @@ export class SupabaseBackend {
   }
   async init() {
     let { data } = await this.sb.auth.getSession();
+    if (data?.session && await this._staleSession()) { // stored guest was deleted server-side (or its refresh token is dead): start a fresh guest; the local save is kept and merged in by loadSave
+      try { await this.sb.auth.signOut({ scope: 'local' }); } catch {} data = null; this.recovered = true;
+    }
     if (!data?.session) { const r = await this.sb.auth.signInAnonymously(); if (r.error) throw r.error; data = { session: r.data.session }; } // guest-first
     this.user = data.session.user; await this._profile();
     const seen = this.store.getItem(this.k + '.seenClear'); // clears since this browser last looked are credited; a brand-new guest starts at "now"
     if (seen != null) this.seenClear = +seen || 0;
     else { const { data: lc } = await this.sb.from('floor_clears').select('id').order('id', { ascending: false }).limit(1); this.seenClear = lc?.[0]?.id || 0; this.store.setItem(this.k + '.seenClear', String(this.seenClear)); }
+  }
+  /** True only when the server definitively rejects the stored session (4xx); network trouble is not "stale". */
+  async _staleSession() {
+    let r; try { r = await this.sb.auth.getUser(); } catch (e) { return isDeadSession(e); }
+    return !!(r?.error && isDeadSession(r.error)) || (!r?.error && !r?.data?.user);
   }
   async _profile() { const { data } = await this.sb.from('profiles').select('role, holder').eq('id', this.user.id).maybeSingle(); this.role = data?.role === 'gm' ? 'gm' : 'player'; this.holder = !!data?.holder; }
   isGm() { return this.role === 'gm'; } // server-decided; profiles.role cannot be self-assigned (see schema.sql)
@@ -38,7 +50,7 @@ export class SupabaseBackend {
     s.updatedAt = this.now(); this.store.setItem(this.k + '.save', JSON.stringify(s)); this._dirty = s;
     if (this.now() - (this._lastPush || 0) >= FLUSH_MS) await this._push(s);
   }
-  async _push(s) { this._lastPush = this.now(); this._dirty = null; const { ctx, ...data0 } = s; const data = JSON.parse(JSON.stringify(data0)); if (!this.isGm()) sanitizeSave(data, false); // no staff data reaches the server without the server role
+  async _push(s) { if (this.holdUploads) return; this._lastPush = this.now(); this._dirty = null; const { ctx, ...data0 } = s; const data = JSON.parse(JSON.stringify(data0)); if (!this.isGm()) sanitizeSave(data, false); // no staff data reaches the server without the server role
     try { await this.sb.from('saves').upsert({ user_id: this.user.id, data, updated_at: new Date(s.updatedAt || this.now()).toISOString() }); } catch (e) { this._dirty = s; } } // offline/rate-limited: retried on the next flush
   async getFloor() {
     if (!this.floor || this.now() - this.lastPoll >= POLL_MS) {
@@ -50,6 +62,7 @@ export class SupabaseBackend {
   }
   /** Batched: damage accumulates locally and is sent to submit_damage at most every FLUSH_MS. The server clamps it. */
   async submitDamage(playerName, amount, hero = {}) {
+    if (this.holdUploads) { const f = await this.getFloor(); return { ...f, advanced: false, accepted: 0, clears: [] }; } // local-only staff: nothing is sent
     this.pending += amount; this.meta = { name: playerName, level: hero.level || 1, gear: hero.gear || 0 }; // staff status is decided by the server role
     if (this.now() - this.lastFlush < FLUSH_MS) { const f = await this.getFloor(); return { ...f, advanced: false, accepted: amount, clears: [] }; }
     return this.flush();
@@ -69,11 +82,8 @@ export class SupabaseBackend {
   }
   async leaderboard(me = null) {
     const f = (await this.getFloor()).floor;
-    const { data, error } = await this.sb.from('damage').select('name, damage, is_staff').eq('floor', f).order('damage', { ascending: false }).limit(25);
-    const rows = (error ? [] : data || []).map(r => ({ name: r.name, damage: Number(r.damage), staff: !!r.is_staff }));
-    const ranked = rows.filter(r => !r.staff).map((r, i) => ({ ...r, rank: i + 1 })), top = ranked.slice(0, 10);
-    if (me && !top.some(r => r.name === me) && !rows.some(r => r.staff && r.name === me)) top.push(ranked.find(r => r.name === me) || { name: me, damage: 0, rank: ranked.length + 1 });
-    return [...rows.filter(r => r.staff).map(r => ({ ...r, rank: 0 })), ...top];
+    const { data, error } = await this.sb.from('damage').select('name, damage, is_staff').eq('floor', f).order('damage', { ascending: false }).limit(50);
+    return boardWithStaff((error ? [] : data || []).map(r => ({ name: r.name, damage: Number(r.damage), staff: !!r.is_staff })), me);
   }
   // ---- identity ("bind your identity"). Wallet = message signature only; never transactions, never keys, never funds.
   async bindWallet(wallet = globalThis.window?.phantom?.solana) {

@@ -28,6 +28,11 @@ export const isGmId = id => typeof id === 'string' && id.startsWith('gm-');
 /** Eventide: a Legendary-parity weapon of the given floor (base stat only, no Unique ability). */
 export const eventide = (floor, legendaryDps) => ({ id: EVENTIDE.id, gm: true, slot: 'weapon', rarity: 'legendary', floor, element: 'void', name: EVENTIDE.name, lore: EVENTIDE.lore, stats: { dps: legendaryDps }, affixes: [] });
 // ---- perks (active only while the staff flag/role is valid; save.ctx.gm is set at runtime, never trusted from storage)
+// ---- Who counts as staff right now. The ONE place to change policy:
+//  - drop the local passphrase unlock: set allowLocalUnlock to false (server role only)
+//  - add a staff-mode on/off toggle: pass staffMode from a saved preference
+export const STAFF_POLICY = { allowLocalUnlock: true };
+export const staffActive = ({ serverRole = false, localUnlock = false, staffMode = true } = {}) => !!staffMode && (!!serverRole || (STAFF_POLICY.allowLocalUnlock && !!localUnlock));
 export const GM_PERKS = { offlineCapH: 24, bag: 60, drain: 0, inn: 0, respec: 0, announceEveryMs: 10 * 60e3 };
 export const gmOn = save => !!save?.ctx?.gm;
 // ---- local unlock (only while online mode is off): SHA-256 of a passphrase vs config GM_PASS_HASH; empty hash = disabled
@@ -48,6 +53,7 @@ export function sanitizeSave(save, valid) {
 export function becomeGm(save, legendaryDps, floor) {
   const h = save.heroes[0]; if (h.cls !== GM_CLASS) h.prevCls = h.cls;
   h.cls = GM_CLASS; h.prevLook = h.prevLook || { ...h.look }; h.look = { ...h.look, ...GM_LOOK };
+  h.hp = null; // full HP (null resolves to max)
   const old = h.equip?.weapon; h.equip = h.equip || {}; if (old && !old.gm) save.inv.push(old); h.equip.weapon = eventide(floor, legendaryDps); h.talents = {};
 }
 export function leaveGm(save) {

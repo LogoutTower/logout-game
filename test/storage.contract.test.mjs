@@ -16,7 +16,8 @@ function mockClient({ role = 'player' } = {}) {
     return api; };
   const newUser = (anon) => { const u = { id: 'u' + (T.profiles.length + 1), is_anonymous: anon }; T.profiles.push({ id: u.id, role }); return u; };
   return { T, calls,
-    auth: { getSession: async () => ({ data: { session: user ? { user } : null } }), signInAnonymously: async () => { user = newUser(true); return { data: { session: { user } } }; },
+    auth: { getSession: async () => ({ data: { session: user ? { user } : null } }),
+      getUser: async () => { if (T.netDown) throw new TypeError('Load failed'); return user && !(T.deleted || []).includes(user.id) ? { data: { user } } : { data: { user: null }, error: { status: 403, message: 'User from sub claim in JWT does not exist' } }; }, signInAnonymously: async () => { user = newUser(true); return { data: { session: { user } } }; },
       signInWithWeb3: async ({ chain, statement }) => { calls.push(['web3', chain, statement]); user = newUser(false); return { data: { user, session: { user } } }; },
       updateUser: async ({ email }) => { calls.push(['updateUser', email]); return {}; }, signInWithOtp: async ({ email }) => { calls.push(['otp', email]); return {}; }, signOut: async () => { user = null; return {}; } },
     from: q,
@@ -92,3 +93,19 @@ assert.deepEqual(await holderStatus('Owner1', { mint: '' }), { enabled: false, h
 // ---- off by default: the live config never goes online until the flag is flipped
 assert.equal(onlineConfigured('', '', { online: 'all' }), false); assert.equal(onlineConfigured('u', 'k', { online: 'all' }), true);
 console.log('storage contract tests passed');
+
+// ---- stale guest: the stored anon session's user was deleted server-side (cleanup SQL) -> fresh guest, local save kept
+{
+  globalThis.localStorage = mem(); const c = mockClient();
+  const a = new SupabaseBackend(c, { storage: globalThis.localStorage }); await a.init(); const oldId = a.user.id;
+  const local = { version: 9, heroes: [{ name: 'Tess', level: 7, xp: 3, gold: 120 }], updatedAt: 1000 };
+  globalThis.localStorage.setItem('logout.v1.save', JSON.stringify(local));
+  c.T.deleted = [oldId]; c.T.saves = c.T.saves.filter(r => r.user_id !== oldId);
+  const b = new SupabaseBackend(c, { storage: globalThis.localStorage }); await b.init();
+  assert.notEqual(b.user.id, oldId, 'stale guest replaced by a fresh one'); assert.ok(b.recovered && b.isAnonymous());
+  const s = await b.loadSave(); assert.equal(s.heroes[0].name, 'Tess'); assert.equal(s.heroes[0].level, 7, 'local save kept');
+  assert.ok(c.T.saves.some(r => r.user_id === b.user.id && r.data.heroes[0].level === 7), 'local save uploaded to the fresh guest');
+  // a network blip while validating is NOT treated as a dead session
+  c.T.netDown = true; const d = new SupabaseBackend(c, { storage: globalThis.localStorage }); await d.init(); assert.equal(d.user.id, b.user.id); assert.ok(!d.recovered);
+  console.log('ok stale guest session recovers with local save');
+}

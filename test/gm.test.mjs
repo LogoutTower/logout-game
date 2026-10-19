@@ -74,3 +74,19 @@ clean(fs.readFileSync(new URL('../preview-bosses.html', import.meta.url), 'utf8'
   assert(sb.items.length === 20 && sb.items.every(i => i.sandbox && i.id.startsWith('sandbox-')), 'test items tagged'); const items = sb.items; sb = S.closeSandbox(sb); assert.equal(items.length, 0, 'removed on close');
   assert.equal(JSON.stringify(save), before, 'real save untouched'); assert.equal(globalThis.localStorage.getItem('logout.v1.world'), world, 'floor state untouched'); }
 console.log('gm tests passed');
+
+// ---- regression: local-unlock GM with online mode on (iPhone report: HP 1/192, "Worn down · DPS ½")
+{ const { effectiveDps, isWorn } = await import('../js/game.js'); const { SupabaseBackend } = await import('../js/supabase.js');
+  const s = gmSave(), h = s.heroes[0]; h.hp = 1; // drained before the unlock / by an older build
+  const full = { ...gmSave() }; full.heroes[0].hp = null;
+  assert.equal(effectiveDps(s), effectiveDps(full), 'no worn-down DPS penalty for staff even at 1 HP');
+  simulate(s, 1); assert.equal(h.hp, heroMaxHp(h), 'live tick restores staff to full HP'); assert(!isWorn(h));
+  h.hp = 1; s.lastTick = Date.now() - 6 * 3600e3; offlineProgress(s, Date.now()); assert.equal(h.hp ?? heroMaxHp(h), heroMaxHp(h), 'offline / background catch-up: full HP');
+  // nothing (save, name or damage) leaves the device while the staff unlock is local-only
+  const calls = [], sb = { auth: { getSession: async () => ({ data: { session: { user: { id: 'u1', is_anonymous: true } } } }), getUser: async () => ({ data: { user: { id: 'u1' } } }) },
+    from: () => { const a = { select: () => a, eq: () => a, order: () => a, limit: () => a, maybeSingle: async () => ({ data: null }), single: async () => ({ data: { id: 1, floor: 1, hp: 100, max_hp: 100, max_floor: 10 } }), then: r => r({ data: [] }), upsert: async row => (calls.push(['upsert', JSON.stringify(row)]), {}) }; return a; },
+    rpc: async (fn, a) => (calls.push(['rpc', fn, JSON.stringify(a)]), { data: { floor: 1, hp: 100, max_hp: 100 } }) };
+  const be = new SupabaseBackend(sb, { storage: mem() }); await be.init(); be.holdUploads = true; h.name = 'Nick';
+  await be._push(s); await be.saveSave(s); await be.submitDamage(h.name, 5000, { ...h, staff: true });
+  assert(!calls.some(c => c[0] === 'upsert' || c[1] === 'submit_damage'), 'no save push or damage submit'); assert(!JSON.stringify(calls).includes('Nick'), 'GM name never sent');
+  console.log('ok local-unlock staff online: full HP, no penalty, nothing uploaded'); }

@@ -1,5 +1,6 @@
 import { effectsOf, CLASSES, newHero, heroDps, levelCost, gearCost, accrue, offlineProgress, applyXp, heroHp, heroMaxHp, isWorn, effectiveDps, buffsOf, bossName, fmt, fmtDur, xpToNext } from './game.js';
-import { makeBackend } from './storage.js';
+import { makeBackend, onlineConfigured } from './storage.js';
+import { BUILD } from './build.js';
 import { priceFor, innCost, rest, shopStock, buy as shopBuy, soldOut, npcGrid } from './town.js';
 import { sprite } from './sprites.js';
 import { isSpecialSlot, bossInfo } from './floors.js';
@@ -7,7 +8,8 @@ import { treeOf, nodeById, canLearn, learn, freePoints, totalPoints, spentIn, re
 import { TRICKLE, trickleDrops, grantDrops, equipItem, salvageItem, salvageValue, rarityOf, statLabel, INV_SIZE, bagSize, GEAR_SLOTS } from './loot.js';
 import { GM_PASS_HASH, OFFLINE_CAP_HOURS, MAX_FLOOR, FEATURES, SOLANA_RPC, TOKEN_MINT, HOLDER_THRESHOLD } from '../config.js';
 import { featureOn } from './features.js';
-import { GM_CLASS, GM_SIGIL, EVENTIDE, gmOn, checkPass, sanitizeSave, becomeGm, leaveGm, eventide, shouldAnnounce } from './gm.js';
+import { boardWithStaff } from './ranks.js';
+import { staffActive, GM_CLASS, GM_SIGIL, EVENTIDE, gmOn, checkPass, sanitizeSave, becomeGm, leaveGm, eventide, shouldAnnounce } from './gm.js';
 import { openSandbox, sandboxFloor, sandboxFight, sandboxLoot, closeSandbox } from './sandbox.js';
 import { legendaryWeaponDps } from './loot.js';
 import { classOf } from './game.js';
@@ -49,10 +51,13 @@ function picker(el, slots, look, heroCls, progress, onPick) {
 
 async function boot() {
   $('maxf').textContent = MAX_FLOOR;
-  be = await makeBackend(); save = migrateSave(await be.loadSave()); if (save) delete save.ctx; // live-only context, never trusted from storage
-  gmValid = !!be.isGm?.() || await checkPass(localStorage.getItem('logout.v1.gm'), GM_PASS_HASH); // server role, or the local hash unlock (also online, until the role is granted)
+  be = await makeBackend(); const localUnlock = await checkPass(localStorage.getItem('logout.v1.gm'), GM_PASS_HASH);
+  gmValid = staffActive({ serverRole: !!be.isGm?.(), localUnlock }); // policy lives in gm.js
+  if (be.name === 'supabase') be.holdUploads = gmValid && !be.isGm(); // local-only staff: no save, name or damage ever leaves this device
+  save = migrateSave(await be.loadSave()); if (save) delete save.ctx; // live-only context, never trusted from storage
   if (save && sanitizeSave(save, gmValid)) { save = migrateSave(save); await be.saveSave(save); } // pasted staff ids are stripped
   if (!save) return showCreate();
+  if (gmValid) save.heroes[0].hp = null; // staff perk: always full HP
   { const f0 = (await be.getFloor()).floor, bi = bossInfo(f0); save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid }; } // offline maths sees the same floor context
   const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
   save.gold += p.gold; const ups = applyXp(save.heroes, p.xp); pending += p.damage;
@@ -159,10 +164,10 @@ function render() {
 }
 async function renderLb() {
   const h = save.heroes[0];
-  let rows = await be.leaderboard(h.name); if (localStaffOnly()) rows = [{ name: h.name, damage: localStaffDmg, staff: true, rank: 0 }, ...rows.filter(r => r.name !== h.name)];
+  let rows = await be.leaderboard(h.name); if (localStaffOnly()) rows = boardWithStaff([{ name: h.name, damage: localStaffDmg, staff: true }, ...rows.filter(r => r.name !== h.name && !r.staff)], null, 50).slice(0, 12); // local-only staff: shown, never sent
   $('lb').innerHTML = rows.map(r => {
     const me = r.name === h.name, pr = me ? { title: titleOf(h), color: nameColorOf(h) } : fakeProfile(r.name);
-    if (r.staff) return `<li class="staff" value="0"><small>Tower Staff</small><span class="gmname">${GM_SIGIL} ${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(me ? titleOf(h) : 'Tower Staff')}</span></li>`;
+    if (r.staff) return `<li class="staff" value="0"><small>Tower Staff · would rank #${r.wouldRank}</small><span class="gmname">${GM_SIGIL} ${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(me ? titleOf(h) : 'Tower Staff')}</span></li>`;
     return `<li class="${me ? 'me' : ''}" value="${r.rank}"><span style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span>${me && r.rank > 3 ? '<div class="climb">Climb: Train, Forge and equip loot to raise DPS. Top 3 on a kill earns rare rewards.</div>' : ''}</li>`;
   }).join('');
 }
@@ -231,7 +236,18 @@ $('tnext').onclick = () => tourShow(tourAt + 1); $('tback').onclick = () => tour
 const dockMQ = matchMedia('(max-width: 640px)'), dockHome = document.createComment('dock');
 function placeDock() { const d = $('dock'); if (dockMQ.matches) { if (d.parentNode !== document.body) { d.replaceWith(dockHome); document.body.append(d); } } else if (dockHome.parentNode) dockHome.replaceWith(d); }
 dockMQ.addEventListener('change', placeDock);
-boot();
+// ---- New-deploy check: GitHub Pages caches files for 10 min and phones keep tabs alive for days. version.json is fetched
+// with no-store; when it names a different build, save and reload once (sessionStorage guard stops a reload loop).
+async function checkDeploy() {
+  try { const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' }); if (!r.ok) return; const { build } = await r.json();
+    if (!build || build === BUILD || sessionStorage.getItem('logout.v1.reloadFor') === build) return;
+    sessionStorage.setItem('logout.v1.reloadFor', build); if (save && be) await be.saveSave(save); location.reload();
+  } catch { /* offline or blocked: keep playing */ }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDeploy(); });
+window.addEventListener('pageshow', e => { if (e.persisted) checkDeploy(); }); // restored from Safari's back-forward cache
+setInterval(checkDeploy, 5 * 60 * 1000);
+boot(); checkDeploy();
 
 // ---- Talents: glass-HUD tree, tap a node for its tooltip, Learn / Respec.
 let talSel = null;
@@ -257,17 +273,19 @@ let gmValid = false; const gmActive = () => gmValid;
 async function openSystem() {
   const online = be.name === 'supabase', canBind = featureOn(FEATURES, 'bindIdentity', gmActive()), anon = online && be.isAnonymous();
   const uid = online && be.user?.id ? `<p class="sub">Tower ID: <code id="towerId">${esc(be.user.id)}</code> <button id="copyId">Copy</button></p>` : '';
-  const status = !online ? 'Offline mode. Your progress lives in this browser only.' : anon ? 'Guest identity. Bind it to keep your progress across devices.' : 'Identity bound. Your progress is stored in the tower.';
-  $('sysBody').innerHTML = `<div class="sysnote"><p>${esc(status)}</p>${uid}
+  const status = !online ? 'Offline mode. Your progress lives in this browser only.' : (gmValid && !be.isGm()) ? 'Online · staff (local). Connected to the tower; your staff hero plays on this device only until the server role is granted.' : anon ? 'Guest identity. Bind it to keep your progress across devices.' : 'Identity bound. Your progress is stored in the tower.';
+  const why = !online && be.fallback ? `<p class="sub" id="sysWhy">Reason: ${esc(be.fallback)}</p>${onlineConfigured() ? '<button id="retryOnline">Try online again</button>' : ''}` : '';
+  $('sysBody').innerHTML = `<div class="sysnote"><p id="sysStatus">${esc(status)}</p>${why}${uid}<p class="sub">Build ${esc(BUILD)}</p>
     ${canBind ? `<div class="bind ${online ? '' : 'off'}"><h3>Bind your identity</h3>
       <button id="bindWallet" class="cta" ${online ? '' : 'disabled'}>Sign in with Solana (Phantom)</button>
       <p class="sub">Signature only. $LOGOUT asks your wallet to sign a short message. It never requests a transaction, never sees your keys and never touches your funds.</p>
       <div class="mail"><input id="bindEmail" type="email" placeholder="email for a magic link" ${online ? '' : 'disabled'} autocomplete="email"><button id="bindMail" ${online ? '' : 'disabled'}>Send link</button></div>
-      ${online ? '' : '<p class="sub">Online mode is switched off on this server.</p>'}</div>` : ''}
+      ${online ? '' : `<p class="sub">${onlineConfigured() ? 'Binding needs the tower connection (see the reason above).' : 'Online mode is switched off on this server.'}</p>`}</div>` : ''}
     ${save?.holder ? '<div class="slot2"><b>Holder perk</b> · extra hero slot <span class="sub">(coming soon)</span><div class="emptyslot">+</div></div>' : ''}
     <button class="logout" disabled title="Unlocks on Floor 100">LOG OUT</button><p class="sub center">Log out unlocks on Floor 100.</p>
     <details class="settings"><summary>Settings</summary>${online ? '<button id="sever">Sever link (switch account)</button><p class="sub">Disconnects this browser from the bound identity. Your bound progress stays safe in the tower.</p>' : '<p class="sub">Nothing to sever: this browser is not linked to an online identity.</p>'}<div id="gmSlot"></div></details></div>`;
   const msg = m => { log(`System notice: ${m}`); notice(m); };
+  if ($('retryOnline')) $('retryOnline').onclick = () => location.reload();
   if ($('bindWallet')) $('bindWallet').onclick = async () => { try { const s = await be.bindWallet(); if (s) save = migrateSave(s);
       const pk = window.phantom?.solana?.publicKey?.toString?.(); const hs = await holderStatus(pk, { rpc: SOLANA_RPC, mint: TOKEN_MINT, threshold: HOLDER_THRESHOLD }); if (hs.enabled) save.holder = hs.holder;
       await be.saveSave(save); msg('identity bound to your wallet'); render(); openSystem(); } catch (e) { msg(`binding failed: ${e.message || e}`); } };
@@ -301,7 +319,7 @@ function renderGmSlot() {
       ${h.cls === GM_CLASS ? `<button id="gmLeave">Return to ${esc(h.prevCls || 'Vanguard')}</button>` : '<button id="gmBecome" class="cta">Take the Architect\'s form</button>'}
       ${featureOn(FEATURES, 'sandbox', true) ? '<button id="gmSandbox">Sandbox</button>' : ''}${localStorage.getItem('logout.v1.gm') ? '<button id="gmLock">Lock staff access</button>' : ''}${online && !be.isGm() ? '<p class="sub">Local staff unlock: your damage stays on this device (never sent to the shared floor or ranked) until the server role is granted.</p>' : ''}</div>`
     : `<div class="staffbox"><input id="gmPass" type="password" autocomplete="off" placeholder="access phrase"><button id="gmTry">Verify</button></div>`;
-  if ($('gmTry')) $('gmTry').onclick = async () => { const p = $('gmPass').value; if (await checkPass(p, GM_PASS_HASH)) { localStorage.setItem('logout.v1.gm', p); gmValid = true; save.ctx.gm = true; notice('Staff access verified'); renderGmSlot(); render(); } else notice('Access denied'); };
+  if ($('gmTry')) $('gmTry').onclick = async () => { const p = $('gmPass').value; if (staffActive({ localUnlock: await checkPass(p, GM_PASS_HASH) })) { localStorage.setItem('logout.v1.gm', p); gmValid = true; if (be.name === 'supabase' && !be.isGm()) be.holdUploads = true; save.heroes[0].hp = null; save.ctx.gm = true; notice('Staff access verified'); renderGmSlot(); render(); } else notice('Access denied'); };
   if ($('gmBecome')) $('gmBecome').onclick = async () => { becomeGm(save, legendaryWeaponDps(floor.floor), floor.floor); lastFloorSeen = 0; gmFloorChecks(); await be.saveSave(save); render(); renderLb(); renderGmSlot(); };
   if ($('gmLeave')) $('gmLeave').onclick = async () => { leaveGm(save); save = migrateSave(save); await be.saveSave(save); render(); renderLb(); renderGmSlot(); };
   if ($('gmLock')) $('gmLock').onclick = async () => { localStorage.removeItem('logout.v1.gm'); gmValid = false; sanitizeSave(save, false); save = migrateSave(save); save.ctx = {}; await be.saveSave(save); render(); renderGmSlot(); };

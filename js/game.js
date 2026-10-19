@@ -67,10 +67,11 @@ export const layerMul = save => { const e = effectsOf(save.heroes[0]), c = save.
   if (t.layerPct && (c.bossPct ?? 1) < FX.lastLayer.below) m *= 1 + t.layerPct / 100;
   if (t.elementPct && w && c.element && w.element === c.element) m *= 1 + t.elementPct / 100;
   return m; };
-export const effectiveDps = save => totalDps(save.heroes) * (isWorn(save.heroes[0]) ? lowMulOf(save.heroes[0]) : 1) * (buffsOf(save).elixir > 0 ? ELIXIR.mul : 1) * layerMul(save);
+export const effectiveDps = save => totalDps(save.heroes) * (!save.ctx?.gm && isWorn(save.heroes[0]) ? lowMulOf(save.heroes[0]) : 1) * (buffsOf(save).elixir > 0 ? ELIXIR.mul : 1) * layerMul(save);
 /** Simulate `secs` of fighting (live or offline: same rules). Splits time at HP-threshold and buff-expiry breakpoints.
  *  Mutates hero HP and buff timers; returns float { dmg, gold, xp, lowSecs }. */
 export function simulate(save, secs) {
+  if (save.ctx?.gm) save.heroes[0].hp = heroMaxHp(save.heroes[0]); // staff: no drain, never worn down (also restores HP drained before the unlock)
   const h = save.heroes[0], max = heroMaxHp(h), b = buffsOf(save), e = effectsOf(h), tb = talentBonus(h), raw = max / DRAIN_SECS * (e.has('lifesteal') ? FX.lifesteal : 1) * (e.has('drain') ? FX.drain : 1);
   const drain = save.ctx?.gm ? 0 : Math.max(raw * 0.1, raw * (1 - tb.drainPct / 100) - tb.regenPct / 100 * max / 60); // talents: slower drain + regen
   const base = totalDps(save.heroes) * layerMul(save), lowMul = lowMulOf(h), hearth = e.has('hearth');

@@ -1,5 +1,6 @@
 // Backend abstraction: LocalBackend (simulated shared tower) or SupabaseBackend.
 import { floorBossHp } from './game.js';
+import { boardWithStaff } from './ranks.js';
 import { MAX_FLOOR, SUPABASE_URL, SUPABASE_ANON_KEY, FEATURES } from '../config.js';
 // Pre-restyle handles, renamed in older saved worlds so leaderboards stay in-theme.
 const LEGACY = ['xX_Reaper', 'mossgirl', 'NoRespawn', 'kaito.exe', 'LastLight', 'Wren', 'gl1tch', 'Ophelia', 'tankmom', 'Byte'];
@@ -30,21 +31,32 @@ export class LocalBackend {
     const advanced = this._adv(w); const clears = w.clears; w.clears = []; this._sw(w); return { floor: w.floor, hp: w.hp, maxHp: floorBossHp(w.floor), advanced, accepted: amount, clears };
   }
   async leaderboard(me = null) { // staff rows first (rank 0, never ranked), then top 10, plus the player's own row if outside it
-    const w = this._w(), st = w.staff || {}, rows = Object.entries(w.dmg).map(([name, damage]) => ({ name, damage, staff: !!st[name] }));
-    const all = rows.filter(r => !r.staff).sort((a, b) => b.damage - a.damage).map((r, i) => ({ ...r, rank: i + 1 })), staff = rows.filter(r => r.staff).map(r => ({ ...r, rank: 0 }));
-    const top = all.slice(0, 10); if (me && !st[me] && !top.some(r => r.name === me)) top.push(all.find(r => r.name === me) || { name: me, damage: 0, rank: all.length + 1 }); return [...staff, ...top]; }
+    const w = this._w(), st = w.staff || {}; return boardWithStaff(Object.entries(w.dmg).map(([name, damage]) => ({ name, damage, staff: !!st[name] })), me); }
 }
 
 /** Online only when configured AND flagged on; any failure falls back to the local backend so the game always starts. */
 export const onlineConfigured = (url = SUPABASE_URL, key = SUPABASE_ANON_KEY, flags = FEATURES) => !!(url && key && flags?.online === 'all');
 const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+export const ONLINE_TIMEOUT_MS = 15000; // slow mobile networks need headroom for sign-in + first floor read
+/** Plain-words reason the game is playing locally; shown in the System panel. */
+export function fallbackReason(e, { configured = onlineConfigured(), storageOk = true } = {}) {
+  if (!configured) return 'Online mode is switched off on this server.';
+  if (!storageOk) return 'This browser is blocking site storage (private browsing or a storage setting), so the tower cannot keep you signed in.';
+  const m = String(e?.message || e || ''), st = e?.status || e?.code;
+  if (st === 429 || /rate limit|too many/i.test(m)) return 'The tower is rate-limiting new guest sign-ins from this network. Try again in a little while.';
+  if (/timeout/i.test(m)) return 'The tower did not answer in time (slow or blocked connection).';
+  if (/fetch|network|load failed|import/i.test(m)) return 'Could not reach the tower (network error or a content blocker).';
+  return 'Online sign-in failed: ' + m.slice(0, 120);
+}
+const storageWorks = () => { try { localStorage.setItem('logout.v1.probe', '1'); localStorage.removeItem('logout.v1.probe'); return true; } catch { return false; } };
 export async function makeBackend() {
-  if (onlineConfigured()) {
+  let reason = null; const storageOk = storageWorks();
+  if (onlineConfigured() && storageOk) {
     try {
-      const [{ createClient }, { SupabaseBackend }] = await Promise.all([import('https://esm.sh/@supabase/supabase-js@2'), import('./supabase.js')]);
+      const [{ createClient }, { SupabaseBackend }] = await Promise.all([import('./vendor/supabase.js'), import('./supabase.js')]); // self-hosted: no third-party CDN to block or stall
       const b = new SupabaseBackend(createClient(SUPABASE_URL, SUPABASE_ANON_KEY), { maxFloor: MAX_FLOOR, redirectTo: location.origin + location.pathname });
-      await withTimeout((async () => { await b.init(); await b.getFloor(); })(), 10000); return b; // sign-in + first floor read must succeed, else play locally
-    } catch (e) { console.warn('Online mode unavailable, playing offline:', e?.message || e); }
-  }
-  const b = new LocalBackend(); await b.init(); return b;
+      await withTimeout((async () => { await b.init(); await b.getFloor(); })(), ONLINE_TIMEOUT_MS); return b; // sign-in + first floor read must succeed, else play locally
+    } catch (e) { reason = fallbackReason(e); console.warn('Online mode unavailable, playing offline:', e?.message || e); }
+  } else reason = fallbackReason(null, { storageOk });
+  const b = new LocalBackend(); b.fallback = reason; await b.init(); return b;
 }
