@@ -33,7 +33,7 @@ clean([C.CATALOG, C.SLOTS, C.CREATION_SLOTS, Object.keys(CLASSES), TREES], 'cata
 for (let f = 1; f <= PLAN_FLOORS; f++) clean(bossInfo(f), 'boss plan');
 clean(fs.readFileSync(new URL('../preview-bosses.html', import.meta.url), 'utf8'), 'preview page');
 // ---- combat parity: base DPS and HP equal the average of the three classes; Eventide = Legendary base of the floor, no ability
-{ const s = gmSave(), h = s.heroes[0]; delete h.equip.weapon; const others = Object.keys(CLASSES).map(c => { const x = newHero('x', c); x.level = h.level; x.gear = h.gear; return x; });
+{ const s = gmSave(), h = s.heroes[0]; delete h.equip.weapon; delete h.equip.armor; /* base parity; staff items are Legendary-base parity (checked below) */ const others = Object.keys(CLASSES).map(c => { const x = newHero('x', c); x.level = h.level; x.gear = h.gear; return x; });
   const avg = f => others.reduce((a, x) => a + f(x), 0) / others.length;
   assert(Math.abs(heroDps(h) - avg(heroDps)) < 0.01, `dps parity ${heroDps(h)} vs ${avg(heroDps)}`); assert(Math.abs(heroMaxHp(h) - avg(heroMaxHp)) <= 1, 'hp parity');
   const e = G.eventide(30, L.legendaryWeaponDps(30)); assert.equal(e.name, 'Eventide, the Final Shape'); assert(e.lore.startsWith('System notice: this object has no origin'));
@@ -102,3 +102,26 @@ console.log('gm tests passed');
   for (let i = 0; i < 2000; i++) { const it = L2.rollItem(rng(90000 + i), 1 + i % 100, 'void', i, [0, 0, 0, 0, 0, 1]); assert(!it.gm && it.stamp !== G2.STAFF_STAMP && it.name !== ev.name); } }
 console.log('gm display-as-Unique checks passed');
 
+// ---- Vesperveil as a real staff ARMOR item
+{ const G3 = await import('../js/gm.js'), L3 = await import('../js/loot.js'), T3 = await import('../js/town.js'), GM3 = await import('../js/game.js'), C3 = await import('../js/cosmetics.js');
+  const v = G3.vesperveil(30, L3.legendaryArmorPct(30)); assert.equal(v.slot, 'armor'); assert.equal(v.show, 'unique'); assert.equal(v.rarity, 'legendary'); assert.equal(v.stamp, 'Forged before Floor 1');
+  assert.equal(v.stats.dpsPct, Math.round((3 + 30 / 8) * 3), 'Legendary-parity armor base'); assert(!v.ability && !v.drawback && !v.serial); assert(v.staffPower.startsWith('The Unwritten Hour')); assert.equal(v.name, G3.VESPERVEIL.label);
+  assert(!T3.sellable(v), 'not sellable'); const s0 = { inv: [v], gold: 0, heroes: [GM3.newHero('A', 'Blade')] }; assert.equal(L3.salvageItem(s0, 0), 0); assert.equal(s0.inv.length, 1, 'not salvageable');
+  // becoming GM equips it; leaving strips it; old armor goes back to the bag
+  const s = C3.migrateSave({ version: 2, heroes: [GM3.newHero('K', 'Blade')], gold: 0, lastTick: 0, progress: { cleared: [], top3: [], rank1: 0 } }); const own = L3.forgeUnique(5, 'fire', 'stillness', 'dull'); s.heroes[0].equip.armor = own;
+  G3.becomeGm(s, L3.legendaryWeaponDps(7), 7, L3.legendaryArmorPct(7)); assert(G3.wearsVesperveil(s.heroes[0])); assert(s.inv.includes(own)); assert.equal(s.heroes[0].look.outfitStyle, 'gm-coat');
+  assert.equal(s.heroes[0].equip.weapon.id, 'gm-eventide'); assert.equal(GM3.effectsOf(s.heroes[0]).size, 0, 'no Unique effects from staff items');
+  s.ctx = { gm: true }; const uw = L3.forgeUnique(5, 'fire', 'tenth', 'whisper'); s.inv.push(uw); assert(L3.equipItem(s, s.inv.length - 1)); assert(G3.wearsVesperveil(s.heroes[0]), 'exempt from one-Unique (Unique weapon next to Vesperveil)');
+  G3.leaveGm(s); assert.equal(s.heroes[0].equip.armor, null); assert(!G3.wearsVesperveil(s.heroes[0]));
+  // migration of an older GM save (Eventide only) + parity follows floor; no duplicate when it sits in the bag
+  const m = C3.migrateSave({ version: 2, heroes: [GM3.newHero('K', 'Blade')], gold: 0, lastTick: 0, progress: { cleared: [], top3: [], rank1: 0 } }); G3.becomeGm(m, 10, 3); m.heroes[0].equip.armor = null;
+  G3.gmGear(m, 9, L3.legendaryWeaponDps(9), L3.legendaryArmorPct(9)); assert(G3.wearsVesperveil(m.heroes[0])); assert.equal(m.heroes[0].equip.armor.floor, 9); assert.equal(m.heroes[0].equip.weapon.floor, 9);
+  m.inv.push(m.heroes[0].equip.armor); m.heroes[0].equip.armor = null; G3.gmGear(m, 11, 1, L3.legendaryArmorPct(11)); assert.equal(m.inv.filter(i => i.id === G3.VESPER_ID).length, 1); assert(!m.heroes[0].equip.armor, 'unequipped stays unequipped'); assert.equal(m.inv.find(i => i.id === G3.VESPER_ID).floor, 11);
+  // sanitize strips it without a valid unlock
+  const z = C3.migrateSave({ version: 2, heroes: [GM3.newHero('K', 'Blade')], gold: 0, lastTick: 0, progress: { cleared: [], top3: [], rank1: 0 } }); G3.becomeGm(z, 10, 3); z.inv.push(G3.vesperveil(3, 9)); assert(G3.sanitizeSave(z, false));
+  assert(!z.heroes[0].equip.armor && !z.inv.some(i => i.gm), 'stripped');
+  // never generated: pools and 2000 Unique rolls
+  assert(![...L3.ABILITIES, ...L3.ARMOR_ABILITIES].some(a => a.id === G3.VESPER_ID)); for (let i = 0; i < 2000; i++) { const it = L3.rollItem(rng(123000 + i), 1 + i % 100, 'void', i, [0, 0, 0, 0, 0, 1]); assert(!it.gm && it.id !== G3.VESPER_ID && !/Vesperveil/.test(it.name)); }
+  // The Unwritten Hour keys off presence/armor (set by the client) and stays in parity
+  const p = GM3.newHero('P', 'Blade'); const sv = { heroes: [p], ctx: { bossPct: 0.05, gmPresent: true } }; const on = GM3.effectiveDps(sv); sv.ctx.gmPresent = false; assert(Math.abs(on / GM3.effectiveDps(sv) - 1.05) < 1e-9); }
+console.log('vesperveil armor checks passed');

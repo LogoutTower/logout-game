@@ -33,6 +33,23 @@ export const isGmId = id => typeof id === 'string' && id.startsWith('gm-');
 // ability/drawback/serial, never in a pool or the Unique generator, outside the one-Unique rule and never sellable.
 export const STAFF_STAMP = 'Forged before Floor 1';
 export const eventide = (floor, legendaryDps) => ({ id: EVENTIDE.id, gm: true, slot: 'weapon', rarity: 'legendary', show: 'unique', stamp: STAFF_STAMP, floor, element: 'void', name: EVENTIDE.name, lore: EVENTIDE.lore, stats: { dps: legendaryDps }, affixes: [] });
+/** Vesperveil as a real ARMOR item: Legendary-parity armor % DPS for the floor (base stat only), Unique display, staff-only. */
+export const VESPER_ID = 'gm-vesperveil';
+export const vesperveil = (floor, legendaryArmorPct) => ({ id: VESPER_ID, gm: true, slot: 'armor', rarity: 'legendary', show: 'unique', stamp: STAFF_STAMP, floor, element: 'void',
+  name: VESPERVEIL.label, lore: VESPERVEIL.lore, staffPower: VESPERVEIL.ability, stats: { dpsPct: legendaryArmorPct }, affixes: [] });
+export const wearsVesperveil = h => h?.equip?.armor?.id === VESPER_ID;
+/** Keep the staff hero's two staff items equipped at the current floor's parity (also migrates older GM saves without the armor). */
+export function gmGear(save, floor, legendaryDps, legendaryArmorPct) {
+  const h = save.heroes[0]; if (h.cls !== GM_CLASS) return false; h.equip = h.equip || {}; save.inv = save.inv || []; let ch = false;
+  for (const [slot, id, make] of [['weapon', EVENTIDE.id, () => eventide(floor, legendaryDps)], ['armor', VESPER_ID, () => vesperveil(floor, legendaryArmorPct)]]) {
+    const bi = save.inv.findIndex(it => it?.id === id);
+    if (h.equip[slot]?.id === id) { if (h.equip[slot].floor !== floor) { h.equip[slot] = make(); ch = true; } } // parity follows the floor
+    else if (bi >= 0) { if (save.inv[bi].floor !== floor) { save.inv[bi] = make(); ch = true; } } // unequipped by choice: refresh in the bag
+    else { const o = h.equip[slot]; if (o && !o.gm) save.inv.push(o); h.equip[slot] = make(); ch = true; } // missing (older GM save): equip it
+  }
+  if (wearsVesperveil(h) && h.look?.outfitStyle !== 'gm-coat') { h.look = { ...(h.look || {}), outfitStyle: 'gm-coat' }; ch = true; } // the coat look follows the equipped armor
+  return ch;
+}
 // ---- perks (active only while the staff flag/role is valid; save.ctx.gm is set at runtime, never trusted from storage)
 // ---- Who counts as staff right now. The ONE place to change policy:
 //  - drop the local passphrase unlock: set allowLocalUnlock to false (server role only)
@@ -57,14 +74,14 @@ export function sanitizeSave(save, valid) {
   return changed;
 }
 /** Turn the active hero into the staff hero (keeps level, gold and progress; remembers the class to go back to). */
-export function becomeGm(save, legendaryDps, floor) {
+export function becomeGm(save, legendaryDps, floor, legendaryArmorPct = Math.round((3 + floor / 8) * 3)) {
   const h = save.heroes[0]; if (h.cls !== GM_CLASS) h.prevCls = h.cls;
   h.cls = GM_CLASS; h.prevLook = h.prevLook || { ...h.look }; h.look = { ...h.look, ...GM_LOOK };
   h.hp = null; // full HP (null resolves to max)
-  const old = h.equip?.weapon; h.equip = h.equip || {}; if (old && !old.gm) save.inv.push(old); h.equip.weapon = eventide(floor, legendaryDps); if (!Object.keys(h.talents || {}).some(isCodexId)) { h.prevTalents = { ...(h.talents || {}) }; h.talents = {}; } // Codex replaces the class tree; current level's points, free respec
+  const old = h.equip?.weapon; h.equip = h.equip || {}; if (old && !old.gm) save.inv.push(old); h.equip.weapon = eventide(floor, legendaryDps); const oa = h.equip.armor; if (oa && !oa.gm) save.inv.push(oa); h.equip.armor = vesperveil(floor, legendaryArmorPct); if (!Object.keys(h.talents || {}).some(isCodexId)) { h.prevTalents = { ...(h.talents || {}) }; h.talents = {}; } // Codex replaces the class tree; current level's points, free respec
 }
 export function leaveGm(save) {
-  const h = save.heroes[0]; if (h.cls !== GM_CLASS) return; h.cls = CLASSES[h.prevCls] ? h.prevCls : 'Vanguard'; h.look = { ...(h.prevLook || {}) }; delete h.prevLook; if (h.equip?.weapon?.gm) h.equip.weapon = null; h.talents = { ...(h.prevTalents || {}) }; delete h.prevTalents;
+  const h = save.heroes[0]; if (h.cls !== GM_CLASS) return; h.cls = CLASSES[h.prevCls] ? h.prevCls : 'Vanguard'; h.look = { ...(h.prevLook || {}) }; delete h.prevLook; if (h.equip?.weapon?.gm) h.equip.weapon = null; if (h.equip?.armor?.gm) h.equip.armor = null; h.talents = { ...(h.prevTalents || {}) }; delete h.prevTalents;
 }
 /** Entrance announcement rate limit: once per floor per 10 minutes. */
 export function shouldAnnounce(last, floor, now) { return !(last && last.floor === floor && now - last.at < GM_PERKS.announceEveryMs); }

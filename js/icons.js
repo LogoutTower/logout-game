@@ -20,7 +20,7 @@ export const SHAPES = {
 };
 const WEAPON_BY_WORD = [[/greatsword|longbrand|brand/i, 'greatsword'], [/glaive|halberd|warglaive|warpick|cleaver/i, 'axe'], [/staff|spellstaff/i, 'staff'], [/spear|fangspear|starhook/i, 'spear'], [/fang/i, 'dagger'], [/blade|edge|sabre|runeblade|thornblade/i, 'sword']];
 export function iconShape(it) {
-  if (it.gm || it.id === 'gm-eventide') return 'katana'; // the staff blade reuses its own cosmetic silhouette
+  if (it.gm && it.slot === 'weapon' || it.id === 'gm-eventide') return 'katana'; // the staff blade reuses its own cosmetic silhouette
   if (it.slot === 'armor') return 'armor';
   if (it.slot === 'trinket') return H(it.id) % 2 ? 'ring' : 'amulet';
   for (const [re, s] of WEAPON_BY_WORD) if (re.test(it.name || '')) return s;

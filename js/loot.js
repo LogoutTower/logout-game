@@ -169,9 +169,11 @@ export function equipItem(save, invIndex) {
 }
 /** One-Unique rule on load: if two Uniques are somehow equipped, the armor goes back to the bag. */
 export function enforceOneUnique(save) { const e = save?.heroes?.[0]?.equip; if (e?.weapon?.rarity === 'unique' && e?.armor?.rarity === 'unique') { save.inv.push(e.armor); e.armor = null; return true; } return false; }
-export function salvageItem(save, invIndex) { const it = save.inv[invIndex]; if (!it) return 0; const g = salvagePay(save, it); save.inv.splice(invIndex, 1); save.gold += g; return g; }
+export function salvageItem(save, invIndex) { const it = save.inv[invIndex]; if (!it || it.gm || String(it.id).startsWith('gm-')) return 0; /* staff items can't be salvaged */ const g = salvagePay(save, it); save.inv.splice(invIndex, 1); save.gold += g; return g; }
 /** Base DPS of a Legendary weapon on floor f (parity reference for the staff weapon). */
 export const legendaryWeaponDps = f => +(1.5 * scale(f) * 3).toFixed(1);
+/** Base % DPS of a Legendary armor on floor f (parity reference for Vesperveil). */
+export const legendaryArmorPct = f => Math.round((3 + f / 8) * 3);
 export { AFFIXES, scale as gearScale, ELEMENT_WORD, U_PRE, U_BASE, U_EPI };
 
 // ---- Codex hooks (staff only; talentBonus/hero class gate them, so they are inert for everyone else)
