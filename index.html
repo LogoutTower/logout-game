@@ -1,0 +1,33 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>$LOGOUT — Idle Tower</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" type="image/png" href="assets/favicon.png"><link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="description" content="System notice: log out disabled. Climb the tower.">
+<meta property="og:title" content="$LOGOUT"><meta property="og:description" content="System notice: log out disabled. Floor 1 is open.">
+<meta property="og:image" content="assets/banner.png"><meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="$LOGOUT"><meta name="twitter:image" content="assets/banner.png"></head><body>
+<div class="sky"><div class="tower"></div></div>
+<header><img class="banner" src="assets/banner.png" alt="$LOGOUT banner"><h1><img class="logo" src="assets/logo.png" alt="">$LOGOUT</h1><p class="sub">System notice: log out disabled · Logout returns when Floor 10 falls</p></header>
+<main>
+ <section id="create" class="panel win hidden"><h2>Identity required</h2><p class="sub">You woke in the tower. The exit button is grey. The system wants a name.</p>
+  <input id="hname" maxlength="16" placeholder="Name yourself">
+  <div id="classes"></div><div class="wrow"><div id="cpreview" class="preview"></div><div id="cpick"></div></div><button id="start" class="cta">Accept · Floor 1 is open</button></section>
+ <section id="game" class="hidden">
+  <div class="panel win" id="bosspanel">
+   <div class="plate"><div class="bname" id="bname"></div><div class="bsub" id="floor"></div></div>
+   <div class="gauge"><div class="layers" id="layers"></div><div class="gbar"><div id="hpfill"></div><i class="ticks"></i></div><span id="hptext"></span></div>
+   <div id="arena"><div class="torch l"></div><div class="torch r"></div><div id="hero" class="sprite"></div><div id="boss" class="sprite boss"></div><div id="fx"></div></div>
+  </div>
+  <div class="row">
+   <div class="panel win"><div class="hudtop"><div id="hname2"></div><div class="lv" id="hlv"></div></div><div class="segrow"><span>HP</span><div class="seg" id="hhp"></div></div><div class="segrow"><span>XP</span><div class="seg xp" id="hxp"></div></div><div id="stats"></div>
+    <div class="btns"><button id="lvl" class="rb" title="Train">⚔</button><button id="gear" class="rb" title="Forge">⚒</button><button id="wardrobeBtn" class="rb" title="Wardrobe">✧</button></div><div class="blabels"><span id="lvlL"></span><span id="gearL"></span><span>Wardrobe</span></div></div>
+   <div class="panel win"><h2>Top Damage · this floor</h2><ol id="lb"></ol></div>
+  </div>
+  <div class="panel win"><h2>Chronicle</h2><div class="log" id="log"></div></div>
+ </section>
+</main>
+<dialog id="wardrobe" class="win"><h2>Wardrobe <small>· cosmetic only</small></h2><div class="wrow"><div><div id="wpreview" class="preview big"></div><div id="wname"></div></div><div id="wpick"></div></div><button onclick="this.closest('dialog').close()">Close</button></dialog>
+<div id="notices"></div><div id="cleared"><span>FLOOR CLEARED</span><small id="clearedSub"></small></div>
+<dialog id="away" class="win"><h2>System notice · while you were away</h2><div id="awaytxt"></div><button onclick="this.closest('dialog').close()">Resume</button></dialog>
+<script type="module" src="js/main.js"></script></body></html>
