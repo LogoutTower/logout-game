@@ -44,4 +44,14 @@ for (const role of ['anon', 'authenticated']) { const r = await as(role, `select
 assert.equal((await as('anon', `select pg_typeof(public.waitlist_count())::text t`)).rows[0].t, 'bigint');
 await as('anon', `select public.join_waitlist($1, '')`, ['count.me@example.org']); assert.equal(Number((await as('anon', `select public.waitlist_count() n`)).rows[0].n), await count(), 'count follows signups');
 await db.exec(`truncate public.waitlist`); assert.equal(Number((await as('anon', `select public.waitlist_count() n`)).rows[0].n), 0, 'empty list counts 0');
+// welcome bookkeeping (supabase/waitlist-welcome.sql): claim once, release on failure, mark on success; service role only
+await db.exec(`do $$ begin if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role nologin; end if; end $$; grant usage on schema public to service_role;`);
+{ const w = fs.readFileSync(new URL('../supabase/waitlist-welcome.sql', import.meta.url), 'utf8'); await db.exec(w); await db.exec(w); }
+await as('anon', `select public.join_waitlist($1, '')`, ['welcome.me@example.org']); const wid = (await db.query(`select id from public.waitlist where email = 'welcome.me@example.org'`)).rows[0].id;
+const claim = async () => (await as('service_role', `select public.waitlist_claim_welcome($1) e`, [wid])).rows[0].e;
+assert.equal(await claim(), 'welcome.me@example.org'); assert.equal(await claim(), null, 'in flight: no second claim');
+await as('service_role', `select public.waitlist_mark_welcome($1, false)`, [wid]); assert.equal(await claim(), 'welcome.me@example.org', 'released after a failed send');
+await as('service_role', `select public.waitlist_mark_welcome($1, true)`, [wid]); assert.ok((await db.query(`select welcomed_at from public.waitlist where id = $1`, [wid])).rows[0].welcomed_at, 'welcomed_at set');
+await db.exec(`update public.waitlist set welcome_claimed_at = now() - interval '1 hour' where id = ${Number(wid)}`); assert.equal(await claim(), null, 'never again once welcomed');
+for (const role of ['anon', 'authenticated']) await fails(as(role, `select public.waitlist_claim_welcome($1)`, [wid]), /permission denied/, `${role} cannot claim`);
 console.log('waitlist (pglite) tests passed');
