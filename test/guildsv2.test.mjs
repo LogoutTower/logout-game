@@ -8,7 +8,7 @@ const { LocalBackend } = await import('../js/storage.js');
 const { bannerIcon, hallArt } = await import('../js/banner.js');
 const { FEATURES } = await import('../config.js');
 const err = async p => { try { await p; } catch (e) { return e.message; } return null; };
-assert.equal(FEATURES.guildsV2, 'off', 'guildsV2 stays off live until the v2 addendum has run'); assert.equal(FEATURES.guilds, 'all');
+assert.equal(FEATURES.guildsV2, 'all', 'guildsV2 live since the v2 addendum ran'); assert.equal(FEATURES.guilds, 'all');
 // ---- rules
 assert.equal(R.levelOf(0), 1); assert.equal(R.levelOf(20000), 2); assert.equal(R.levelOf(1e12), R.LEVEL_CAP); assert.equal(R.slotsOf(1), 30); assert.equal(R.slotsOf(R.LEVEL_CAP), 50); assert.equal(R.slotsOf(99), 50);
 assert.equal(R.bonusPctOf(0), 2); assert.equal(R.bonusPctOf(3), 5); assert.equal(R.bonusPctOf(9), 5, 'bonus capped at 5%');
