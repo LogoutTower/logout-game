@@ -12,6 +12,7 @@ import { checkGuild, GUILD_CAP, GUILD_BUFF } from './guilds.js';
 import { cleanChat, CHAT_MAX } from './chatfilter.js';
 import { boardWithStaff, wouldRankLabel } from './ranks.js';
 import { gmGear, wearsVesperveil, STAFF_STAMP, VESPERVEIL, staffActive, GM_CLASS, GM_SIGIL, EVENTIDE, gmOn, checkPass, sanitizeSave, becomeGm, leaveGm, eventide, shouldAnnounce } from './gm.js';
+import { initUI, go as goTab, townPane, syncHall, setDot, setHeroLabels, heroTab } from './ui.js';
 import { openSandbox, sandboxFloor, sandboxFight, sandboxLoot, closeSandbox, sandboxEdit } from './sandbox.js';
 import { enforceOneUnique, legendaryArmorPct, legendaryWeaponDps, rerollItem, chooseDestiny, DESTINY_MS } from './loot.js';
 import { cx, CODEX, isCodex } from './codex.js';
@@ -37,10 +38,10 @@ const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 let lootLines = [];
 let be, save, floor, pending = 0, recent = { dmg: 0, gold: 0, xp: 0 }, quietSync = true, cls = 'Vanguard', draftLook = defaultLook('Vanguard'), toastT;
 const log = (m, color) => { const d = document.createElement('div'); d.textContent = m; if (m.startsWith('System notice')) d.className = 'rune'; if (color) { d.style.color = color; d.className = 'loot'; } if (color === '#7ff6ff') d.className = 'loot uniq'; $('log').prepend(d); };
-function notice(m, color, item = null) { const n = document.createElement('div'); n.className = 'notice' + (color === '#7ff6ff' ? ' uniq' : ''); if (color) n.style.borderColor = color; if (color && cx(save?.heroes?.[0], 'cx-reader')) { n.classList.add('glow-rare'); n.style.setProperty('--glow', color); } /* Thread-Reader */ n.innerHTML = `<small>◈ System notice</small>${item ? ico(item) : ''}<span${color ? ` style="color:${color}"` : ''}>${esc(m)}</span>`; $('notices').append(n); setTimeout(() => n.remove(), color === '#7ff6ff' ? 7000 : 3200); }
+function notice(m, color, item = null) { const n = document.createElement('div'); n.className = 'notice' + (color === '#7ff6ff' ? ' uniq' : ''); if (color) n.style.borderColor = color; if (color && cx(save?.heroes?.[0], 'cx-reader')) { n.classList.add('glow-rare'); n.style.setProperty('--glow', color); } /* Thread-Reader */ n.innerHTML = `<small>◈ System notice</small>${item ? ico(item) : ''}<span${color ? ` style="color:${color}"` : ''}>${esc(m)}</span>`; $('notices').append(n); setTimeout(() => n.remove(), color === '#7ff6ff' ? 6000 : 4000); }
 const sessionStart = Date.now(); let hits = 0, lastWhisper = Date.now();
 const WHISPERS = ['The weapon hums a floor number you have not reached.', 'Something in the blade asks whether you remember logging in.', 'A whisper: "the guardian is afraid of you."', 'The weapon murmurs your name, then someone else\'s.', 'A voice from the steel: "one more floor."'];
-function floorCleared(f) { $('clearedSub').textContent = `${bossName(f)} has fallen`; const c = $('cleared'); c.classList.remove('show'); void c.offsetWidth; c.classList.add('show'); }
+function floorCleared(f) { const n = document.createElement('div'); n.className = 'notice cleared'; n.innerHTML = `<small>◈ Floor cleared</small><span>${esc(bossName(f))} has fallen</span>`; $('notices').append(n); setTimeout(() => n.remove(), 4000); }
 const LAYERS = 5;
 const hpColor = pct => pct > 0.5 ? '#5cff9a' : pct > 0.2 ? '#ffd84f' : '#ff3355';
 function hitFx(dmg, mine = true) {
@@ -120,8 +121,12 @@ async function startGame(fresh = false) {
   $('game').classList.remove('hidden');
   floor = await be.getFloor(); log(`${save.heroes[0].name} awoke on Floor ${floor.floor}. The guardian stirs.`); log('System notice: log out disabled.');
   if (fresh) { notice('Log out disabled'); setTimeout(() => notice(`Floor ${floor.floor} is open`), 900); } // no replayed notices on reload
-  $('lvl').onclick = () => buy('level'); $('gear').onclick = () => buy('gear'); $('wardrobeBtn').onclick = openWardrobe;
-  $('townBtn').onclick = openTown; $('helpBtn').onclick = () => tourShow(0); $('bagBtn').onclick = openBag; $('sysBtn').onclick = openSystem; $('guildBtn').onclick = openGuild; $('mapBtn').onclick = openMap; $('chatBtn').onclick = openChat; $('guildAct').hidden = !featureOn(FEATURES, 'guilds', gmValid); $('chatAct').hidden = !featureOn(FEATURES, 'chat', gmValid); $('talBtn').onclick = () => { talSel = null; openTalents(); }; placeDock();
+  $('lvl').onclick = () => buy('level'); $('gear').onclick = () => buy('gear');
+  initUI({ gear: () => $('gearSheet').showModal(), bag: openBag, talents: () => { talSel = null; openTalents(); }, wardrobe: openWardrobe, town: openTown, guild: openGuild });
+  $('helpBtn').onclick = () => { $('more').close(); tourShow(0); }; $('sysBtn').onclick = openSystem; $('mapBtn').onclick = openMap; $('floorBtn').onclick = openMap; $('chatBtn').onclick = openChat;
+  $('lbBtn').onclick = () => $('lbSheet').showModal(); $('top3').onclick = () => $('lbSheet').showModal(); $('logBtn').onclick = () => $('logSheet').showModal(); $('sbBtn').onclick = openSandboxUi;
+  $('tabGuild').hidden = !featureOn(FEATURES, 'guilds', gmValid); $('chatBtn').hidden = !featureOn(FEATURES, 'chat', gmValid);
+  $('topbar').classList.remove('hidden'); $('tabbar').classList.remove('hidden'); setInterval(badgePoll, 30000); setTimeout(badgePoll, 4000);
   setInterval(tick, 1000); setInterval(sync, 5000); render(); renderLb();
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
@@ -176,15 +181,21 @@ function render() {
   H('stats').innerHTML = `${classOf(h.cls).icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${effectiveDps(save).toFixed(1)}</b> · HP <b>${Math.round(heroHp(h))}/${heroMaxHp(h)}</b> · Gold <b>${fmt(save.gold)}</b>`;
   H('lvlL').textContent = `Train ${fmt(levelCost(h))}g`; $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`; $('lvl').disabled = save.gold < levelCost(h);
   H('equipped').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip?.[s]; return `<span class="eq" style="${it ? `color:${rarityOf(shownRarity(it)).color}` : ''}">${s[0].toUpperCase() + s.slice(1)}: ${it ? esc(it.name) : '—'}</span>`; }).join('');
-  { const fp = treeOf(h.cls).length ? freePoints(h) : 0; const tb = $('talBadge'); if (tb.hidden !== !(fp > 0)) tb.hidden = !(fp > 0); if (tb.textContent !== String(fp)) tb.textContent = fp; }
-  H('bagL').textContent = `Bag ${save.inv.length}/${bagSize(save)}`; $('gear').title = 'Forge: temper your weapon, +15% damage per tier';
+  { const fp = treeOf(h.cls).length ? freePoints(h) : 0, bs = bagSize(save), full = save.inv.length >= bs - 2; setHeroLabels({ bag: `Bag ${save.inv.length}/${bs}`, talents: isCodex(h) ? 'Codex' : fp > 0 ? `Talents · ${fp}` : 'Talents', talentsDot: fp > 0, bagDot: full });
+    setDot('dotHero', fp > 0 || full, [fp > 0 ? `${fp} talent point${fp > 1 ? 's' : ''} to spend` : '', full ? (save.inv.length >= bs ? 'Bag full' : 'Bag nearly full') : ''].filter(Boolean).join(' · '));
+    H('hdps').textContent = `DPS ${effectiveDps(save).toFixed(1)}`; H('goldTop').textContent = `⛁ ${fmt(save.gold)}`; H('floorTxt').innerHTML = `Floor ${floor.floor}/<span id="maxf">${MAX_FLOOR}</span>`;
+    $('ftick').style.width = `${Math.min(100, ((floor.floor - 1) + (1 - floor.hp / floor.maxHp)) / MAX_FLOOR * 100).toFixed(1)}%`; $('floorBtn').setAttribute('aria-label', `Floor ${floor.floor} of ${MAX_FLOOR}: open the tower map`);
+    $('sbBtn').hidden = !(gmValid && featureOn(FEATURES, 'sandbox', true)); }
+  $('gear').title = 'Forge: temper your weapon, +15% damage per tier';
   H('gearL').textContent = `Forge ${fmt(gearCost(h))}g`; $('gear').disabled = save.gold < gearCost(h);
 }
 async function renderLb() {
   const h = save.heroes[0];
   let rows = await be.leaderboard(h.name); if (localStaffOnly()) rows = boardWithStaff([{ name: h.name, damage: localStaffDmg, staff: true }, ...(rows.players || rows).filter(r => r.name !== h.name && !r.staff)], null, 10); // local-only staff: shown, never sent
   await refreshTags(); const badge = n => gv2On() && gTags[n] ? bannerBadge(gTags[n].banner, gTags[n].tag) : '';
-  $('lb').innerHTML = rows.map(r => {
+  const top = (rows.players || rows).filter(r => !r.staff).slice(0, 3), mine = (rows.players || rows).find(r => r.name === h.name && !r.staff);
+  $('top3').innerHTML = `<span class="t3h">Top damage</span>${top.map((r, i) => `<span class="t3 ${r.name === h.name ? 'me' : ''}"><b>${i + 1}</b>${badge(r.name)}${esc(r.name)} <small>${fmt(r.damage)}</small></span>`).join('') || '<span class="sub">No hits yet</span>'}${mine && mine.rank > 3 ? `<span class="t3 me"><b>${mine.rank}</b>you</span>` : ''}`;
+  $('lb').innerHTML = $('lbSide').innerHTML = rows.map(r => {
     const me = r.name === h.name, pr = me ? { title: titleOf(h), color: nameColorOf(h) } : fakeProfile(r.name);
     if (r.staff) return `<li class="staff" value="0"><small>${esc(wouldRankLabel(r))}</small><span class="gmname">${GM_SIGIL} ${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(me ? titleOf(h) : 'Tower Staff')}</span></li>`;
     return `<li class="${me ? 'me' : ''}" value="${r.rank}">${badge(r.name)}<span style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span>${me && r.rank > 3 ? '<div class="climb">Climb: Train, Forge and equip loot to raise DPS. Top 3 on a kill earns rare rewards.</div>' : ''}</li>`;
@@ -244,10 +255,12 @@ function openBag() {
 // ---- intro walkthrough (System notice voice). Seen flag lives in the save; the ? button reopens it.
 const TOUR = [
   { t: 'You fight on your own', x: 'Your hero attacks the floor guardian automatically, every second, even while you are offline. Close the tab; the tower keeps count.', el: () => $('arena') },
-  { t: 'Gold and XP', x: 'Every hit pays out: 10% of your damage becomes gold and 5% becomes XP. Fill the XP bar to level up and hit harder.', el: () => $('stats') },
-  { t: 'Train · Forge · Wardrobe', x: 'Train spends gold on a level. Forge tempers your gear for +15% damage per tier. Wardrobe changes your look (cosmetic only). Bag holds boss loot; Town has an inn to heal and a shop.', el: () => $('dock') },
-  { t: 'One guardian, whole server', x: 'Everyone in the tower shares this boss. Top damage when it falls earns titles, name colours and other rewards.', el: () => $('lb').closest('.panel') },
+  { t: 'Gold and XP', x: 'Every hit pays out: 10% of your damage becomes gold (top bar) and 5% becomes XP. Fill the XP bar to level up and hit harder.', el: () => $('hstrip') },
+  { t: 'Town: Train · Forge', x: 'Train spends gold on a level. Forge tempers your weapon for +15% damage per tier. Town also has the shop, selling and an inn to heal.', el: () => $('tabTown') },
+  { t: 'Hero', x: 'Gear, Bag (boss loot), Talents and Wardrobe (cosmetic only). A dot means unspent talent points or a nearly full bag.', el: () => $('tabHero') },
+  { t: 'One guardian, whole server', x: 'Everyone in the tower shares this boss. Top damage when it falls earns titles, name colours and other rewards. Tap the strip for the full board.', el: () => matchMedia('(min-width: 1000px)').matches ? $('side') : $('top3') },
   { t: 'Layers', x: 'The guardian\'s HP comes in layers: each diamond is one full HP bar. Break every layer to clear the floor and open the stair.', el: () => $('layers').closest('.gauge') },
+  { t: 'More', x: 'Tower Map (or tap the floor up top), leaderboard, floor chat, your chronicle, System for sign-in and settings, and this guide.', el: () => $('tabMore') },
 ];
 let tourAt = -1;
 function tourShow(i) {
@@ -257,15 +270,12 @@ function tourShow(i) {
   $('tstep').textContent = `◈ System notice · ${i + 1} / ${TOUR.length}`; $('ttitle').textContent = s.t; $('ttext').textContent = s.x;
   $('tback').disabled = i === 0; $('tnext').textContent = i === TOUR.length - 1 ? 'Done' : 'Next';
   $('tour').classList.remove('hidden');
-  if (el) { el.classList.add('tour-hi'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  if (el) { el.classList.add('tour-hi'); el.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); }
 }
 function startTour() { const d = document.querySelector('dialog[open]'); if (d) return d.addEventListener('close', startTour, { once: true }); if (tourAt < 0 && !save.tutorialSeen) tourShow(0); }
 $('tnext').onclick = () => tourShow(tourAt + 1); $('tback').onclick = () => tourShow(Math.max(0, tourAt - 1)); $('tskip').onclick = () => tourShow(TOUR.length);
 
-// On phones the action bar becomes a fixed dock; it must live under <body> because the glass panel's backdrop-filter traps position:fixed.
-const dockMQ = matchMedia('(max-width: 640px)'), dockHome = document.createComment('dock');
-function placeDock() { const d = $('dock'); if (dockMQ.matches) { if (d.parentNode !== document.body) { d.replaceWith(dockHome); document.body.append(d); } } else if (dockHome.parentNode) dockHome.replaceWith(d); }
-dockMQ.addEventListener('change', placeDock);
+
 // ---- New-deploy check: GitHub Pages caches files for 10 min and phones keep tabs alive for days. version.json is fetched
 // with no-store; when it names a different build, save and reload once (sessionStorage guard stops a reload loop).
 async function checkDeploy() {
@@ -330,7 +340,7 @@ async function openSystem() {
 
 // ---- Staff (gm): entrance notice, Eventide upkeep, hidden unlock field, sandbox.
 let lastAnnSeen = 0, lastFloorSeen = 0;
-function bigNotice(m) { const n = document.createElement('div'); n.className = 'notice bigsys'; n.innerHTML = `<small>◈ System notice</small><span>${esc(m)}</span>`; document.body.append(n); setTimeout(() => n.remove(), 6000); }
+function bigNotice(m) { const n = document.createElement('div'); n.className = 'notice bigsys'; n.innerHTML = `<small>◈ System notice</small><span>${esc(m)}</span>`; document.body.append(n); setTimeout(() => n.remove(), 4500); }
 async function gmFloorChecks() {
   const h = save.heroes[0], f = floor.floor;
   if (gmValid) gmGear(save, f, legendaryWeaponDps(f), legendaryArmorPct(f)); // Eventide + Vesperveil: Legendary parity follows the floor (also migrates older GM saves)
@@ -390,7 +400,7 @@ let gv2Info = null; const gv2On = () => featureOn(FEATURES, 'guildsV2', gmValid)
 let gTags = {}, gTagsAt = 0; const tagBanner = tag => Object.values(gTags).find(x => x.tag === tag)?.banner;
 async function refreshTags() { if (!gv2On() || Date.now() - gTagsAt < 30000) return; gTagsAt = Date.now(); try { gTags = await be.guildTags(floor.floor) || {}; } catch {} }
 async function openGuild() {
-  if (gv2On() && !localStaffOnly()) { try { gv2Info = await be.guildInfo(); } catch (e) { gv2Info = null; } }
+  if (gv2On() && !localStaffOnly()) { try { gv2Info = await be.guildInfo(); } catch (e) { gv2Info = null; } } guildSeen();
   if (gv2Info?.guild) { $('guildSub').textContent = `· [${gv2Info.guild.tag}] ${gv2Info.guild.name}`; renderGuildV2(gv2Info, { be, save, el: $('guildBody'), name: save.heroes[0].name, canPost: (be.canChat?.() ?? true) && !localStaffOnly(), staff: gmValid, log: m => log(`System notice: ${m}`), refresh: async () => { myGuild = await be.myGuild(); if (save.ctx) save.ctx.guild = !!myGuild; render(); await openGuild(); } }); if (!$('guild').open) $('guild').showModal(); return; }
   const blocked = localStaffOnly() ? '<p class="sub">Local staff unlock: guilds need the server role (nothing is sent from this device).</p>' : '';
   let board = []; try { board = await be.guildBoard(guildAll); } catch {}
@@ -424,14 +434,37 @@ async function pollChat() {
   if (chatFloor !== floor.floor) { chatFloor = floor.floor; chatLast = 0; chatMsgs.length = 0; }
   try { const n = await be.chatFetch(chatLast); for (const m of n) { chatMsgs.push(m); chatLast = Math.max(chatLast, m.id); } if (chatMsgs.length > 100) chatMsgs.splice(0, chatMsgs.length - 100); if (n.length) renderChat(); } catch {}
 }
+// ---- Badge dots (polled every 30s while visible; guild info at most once a minute): floor chat, guild chat, finished quests, join requests.
+let chatSeen = null, chatSeenFloor = null, gSeen = null, gSeenGuild = null, lastGPoll = 0; const gDots = { req: false, quest: false, chat: false };
+const questKey = i => `${i.week}:${(i.quests || []).filter(q => q.done).map(q => q.idx).join(',')}`;
+function syncMoreDot() { setDot('dotMore', !$('dotChat').hidden, 'New floor chat'); setDot('dotGuild', gDots.req || gDots.quest || gDots.chat, [gDots.req ? 'Join requests waiting' : '', gDots.quest ? 'Guild quest completed' : '', gDots.chat ? 'New guild chat' : ''].filter(Boolean).join(' · ')); }
+async function badgePoll() {
+  if (document.hidden || !save || !be || !floor) return; const me = save.heroes[0].name;
+  if (featureOn(FEATURES, 'chat', gmValid) && !$('chat').open && be.chatFetch) {
+    if (chatSeenFloor !== floor.floor) { chatSeenFloor = floor.floor; chatSeen = null; }
+    try { const n = await be.chatFetch(chatSeen || 0); if (chatSeen !== null && n.some(m => m.name !== me)) setDot('dotChat', true); chatSeen = Math.max(chatSeen || 0, ...n.map(m => m.id)); } catch {}
+  }
+  if (gv2On() && myGuild && !localStaffOnly() && !$('guild').open && Date.now() - lastGPoll > 59e3) {
+    lastGPoll = Date.now(); try { gv2Info = await be.guildInfo(); } catch {} const i = gv2Info;
+    if (i?.guild) {
+      if (gSeenGuild !== i.guild.id) { gSeenGuild = i.guild.id; gSeen = null; }
+      gDots.req = ['leader', 'officer'].includes(i.me?.role) && (i.requests || []).length > 0;
+      const qk = questKey(i), qs = localStorage.getItem('logout.v1.questSeen'); if (qs === null) localStorage.setItem('logout.v1.questSeen', qk); else gDots.quest = /:\d/.test(qk) && qk !== qs;
+      try { const n = await be.guildChatFetch(gSeen || 0); if (gSeen !== null && n.some(m => m.name !== me)) gDots.chat = true; gSeen = Math.max(gSeen || 0, ...n.map(m => m.id)); } catch {}
+    }
+  }
+  syncMoreDot();
+}
+function guildSeen() { gDots.chat = false; gDots.quest = false; if (gv2Info?.guild) localStorage.setItem('logout.v1.questSeen', questKey(gv2Info)); lastGPoll = 0; syncMoreDot(); }
 async function openChat() {
+  setDot('dotChat', false); syncMoreDot();
   $('chatSub').textContent = `· Floor ${floor.floor}`;
   const can = be.canChat() && !localStaffOnly();
   $('chatIn').disabled = $('chatSend').disabled = !can;
   $('chatNote').textContent = can ? `Max ${CHAT_MAX} characters, 1 message every 10 s. Links and addresses are blocked.` : localStaffOnly() ? 'Local staff unlock: chat needs the server role.' : 'Bind your identity (System) to post. You can still read.';
   $('chatForm').onsubmit = async e => { e.preventDefault(); const r = cleanChat($('chatIn').value); if (!r.ok) { $('chatNote').textContent = 'Not sent: ' + r.reason; return; }
     try { await be.chatPost(save.heroes[0].name, $('chatIn').value, meArg()); $('chatIn').value = ''; $('chatNote').textContent = ''; await pollChat(); } catch (err) { $('chatNote').textContent = 'Not sent: ' + err.message; } };
-  if (!$('chat').open) $('chat').showModal(); renderChat(); await pollChat();
+  if (!$('chat').open) $('chat').showModal(); renderChat(); await pollChat(); chatSeen = Math.max(chatSeen || 0, chatLast); chatSeenFloor = floor.floor;
   clearInterval(chatTimer); chatTimer = setInterval(() => { if (!$('chat').open) clearInterval(chatTimer); else pollChat(); }, 4000);
 }
 
@@ -499,8 +532,8 @@ async function openMap() {
 
 // ---- Guild Hall (Town room, guildsV2): cosmetic, grows with guild level and hall upgrades
 async function renderHall() {
-  const card = $('hallCard'); if (!gv2On() || !myGuild || localStaffOnly()) { card.hidden = true; return; }
-  try { gv2Info = await be.guildInfo(); } catch { gv2Info = null; } const g = gv2Info?.guild; if (!g) { card.hidden = true; return; }
+  const card = $('hallCard'); if (!gv2On() || !myGuild || localStaffOnly()) { card.hidden = true; syncHall(); return; }
+  try { gv2Info = await be.guildInfo(); } catch { gv2Info = null; } const g = gv2Info?.guild; if (!g) { card.hidden = true; syncHall(); return; }
   card.hidden = false; $('hallTitle').textContent = `[${g.tag}] ${g.name} · Guild Hall`; $('hallArt').style.backgroundImage = hallArt(g.level, g.hall, g.banner);
-  $('hallInfo').textContent = `Guild level ${g.level} · hall upgrade ${g.hall}/5 · bonus +${g.bonus_pct}% XP & gold. Upgrades are bought with bank gold in the Guild panel.`;
+  syncHall(); $('hallInfo').textContent = `Guild level ${g.level} · hall upgrade ${g.hall}/5 · bonus +${g.bonus_pct}% XP & gold. Upgrades are bought with bank gold in the Guild panel.`;
 }

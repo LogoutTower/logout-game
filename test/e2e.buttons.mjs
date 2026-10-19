@@ -12,6 +12,7 @@ await p.waitForSelector('#tour:not(.hidden)', { timeout: 1500 }); console.log('t
 await p.evaluate(() => { const s = JSON.parse(localStorage.getItem('logout.v1.save')); s.gold = 5000; s.lastTick = Date.now(); localStorage.setItem('logout.v1.save', JSON.stringify(s)); });
 await p.reload(); await p.waitForTimeout(1200);
 const read = () => p.evaluate(() => ({ lv: document.getElementById('hlv').textContent, stats: document.getElementById('stats').innerText.replace(/\n/g, ' ') }));
+await p.click('#tabTown'); await p.click('#townTabs [data-pane="train"]'); await p.waitForTimeout(400); // Train lives in Town now
 const box = await p.locator('#lvl').boundingBox(); let res = [];
 for (let i = 0; i < 5; i++) { await p.mouse.move(box.x + 25, box.y + 25); await p.mouse.down(); await p.waitForTimeout(150 + i * 230); await p.mouse.up(); res.push(await read()); }
 console.log(JSON.stringify(res.map(r => r.lv + ' | ' + r.stats.match(/Gold \S+/)[0])));
@@ -22,6 +23,7 @@ const same = await p.evaluate(async () => { const a = document.getElementById('l
 await p.evaluate(() => { const s = JSON.parse(localStorage.getItem('logout.v1.save')); s.tutorialSeen = false; s.lastTick = Date.now(); localStorage.setItem('logout.v1.save', JSON.stringify(s)); });
 await p.reload(); await p.waitForSelector('#tour:not(.hidden)', { timeout: 2000 }); await p.click('#tskip'); await p.reload(); await p.waitForTimeout(1500);
 assert(await p.locator('#tour.hidden').count() === 1, 'not again'); console.log('existing-save tour: once');
+await p.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close()));
 // leaderboard hint under own row
 console.log('climb hint:', await p.evaluate(() => document.querySelector('#lb li.me .climb')?.textContent || '(player in top 3)'));
 await b.close(); assert.deepEqual(errs, []); console.log('buttons/tour checks passed, no JS errors');
