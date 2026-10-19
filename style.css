@@ -156,3 +156,11 @@ header{padding-top:max(14px,env(safe-area-inset-top))}main{padding-left:max(12px
 .taltip{margin:12px 0;padding:10px 12px;border:1px solid var(--cy);border-radius:10px;background:rgba(10,4,24,.6);min-height:64px}.taltip p{margin:6px 0}.taltip .capt{color:var(--gold)}
 .talbtns{display:flex;gap:10px;justify-content:flex-end}
 @media(max-width:640px){.taltree{grid-template-columns:1fr}#talents{width:calc(100vw - 16px)}.taltip{position:sticky;bottom:52px;background:rgba(22,10,48,.97);z-index:2;box-shadow:0 -8px 20px #0a0418}.talbtns{position:sticky;bottom:0;background:rgba(30,15,65,.95);padding:6px 0}.talbtns button{flex:1}}
+
+/* System / identity */
+#system{max-width:520px;width:95vw}.sysnote p{margin:6px 0}.bind{border:1px solid var(--cy);border-radius:10px;padding:10px;margin:10px 0;background:rgba(10,4,24,.5)}.bind.off{opacity:.55}
+.bind h3{margin:0 0 8px;color:var(--cy);font-size:14px;letter-spacing:3px;text-transform:uppercase}.bind .cta{width:100%;min-height:44px}
+.mail{display:flex;gap:8px}.mail input{flex:1;min-height:44px;background:rgba(20,10,45,.8);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:0 10px}
+.logout{width:100%;min-height:48px;margin-top:10px;letter-spacing:6px;font-weight:700;opacity:.4;cursor:not-allowed}.center{text-align:center}
+.settings{margin-top:10px}.settings summary{cursor:pointer;color:var(--cy);min-height:44px;line-height:44px}
+.slot2{border:1px dashed var(--gold);border-radius:10px;padding:8px;margin:8px 0}.emptyslot{width:44px;height:44px;border:1px dashed var(--gold);border-radius:8px;display:grid;place-items:center;color:var(--gold);margin-top:6px}

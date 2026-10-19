@@ -1,0 +1,22 @@
+# Supabase setup ($LOGOUT online mode)
+
+Online mode stays **off** until these steps are done (`FEATURES.online: 'off'` in `config.js`). The game runs fully offline/local until then.
+
+1. **Run the schema.** Dashboard → SQL Editor → New query → paste all of `supabase/schema.sql` → Run. It is idempotent (tables `if not exists`, functions `create or replace`, policies dropped and recreated), so it is safe to run again after edits. RLS is enabled on every table (`profiles`, `saves`, `floor_state`, `damage`, `floor_clears`).
+2. **Auth providers** (Authentication → Sign In / Providers):
+   - **Anonymous sign-ins**: enable (guests get a server identity instantly).
+   - **Web3 Wallet → Solana**: enable (Sign in with Solana via Phantom; message signature only).
+   - **Email**: enable, with magic link / OTP. Keep "Confirm email" on.
+3. **URL configuration** (Authentication → URL Configuration): Site URL `https://logouttower.github.io/logout-game/`, and add the same URL under Redirect URLs.
+4. **Rate limits** (Authentication → Rate Limits): keep anonymous sign-ins low (e.g. 30 per hour per IP), email sends at the default (2–4 per hour), token refreshes default, Web3 sign-ins ~30 per 5 min per IP. Optionally turn on CAPTCHA for anonymous sign-ins if abuse shows up.
+5. **Grant the GM role** (SQL Editor, as project owner; nobody can self-assign it through the API):
+   `update public.profiles set role = 'gm' where id = '<auth user uuid>';`
+   Find the uuid under Authentication → Users after that account has signed in once.
+6. **Flip it on.** In `config.js` set `FEATURES.online` to `'all'` (URL and anon key are already filled in), commit and push.
+
+Notes on the server logic (see `submit_damage` in schema.sql):
+- Clients batch damage and call `submit_damage` at most every 30 s; the floor is polled every 30 s; no realtime subscriptions (free-tier friendly).
+- Damage is clamped to `elapsed seconds since the user's last submit (max 12h) × max plausible DPS`, where max plausible DPS = 6.5 × level factor × 1.15^forge × 4 (+50). Over-claims are trimmed, not rejected.
+- The floor advances atomically under a row lock, carrying overflow damage into the next floor, and writes a `floor_clears` row with the ranking. GM ("staff") damage counts toward the floor but is never ranked or rewarded.
+- `gm_present_until` and `gm_announce` on `floor_state` are only writable through `submit_damage` / `gm_presence` / `gm_announce`, which check `profiles.role = 'gm'` server-side. The announce is limited to once per floor per 10 min.
+- Logic tested locally with PGlite: `npm i @electric-sql/pglite && node test/schema.pglite.mjs`.

@@ -5,7 +5,9 @@ import { sprite } from './sprites.js';
 import { isSpecialSlot, bossInfo } from './floors.js';
 import { treeOf, nodeById, canLearn, learn, freePoints, totalPoints, spentIn, respec, respecCost } from './talents.js';
 import { TRICKLE, trickleDrops, grantDrops, equipItem, salvageItem, salvageValue, rarityOf, statLabel, INV_SIZE, GEAR_SLOTS } from './loot.js';
-import { OFFLINE_CAP_HOURS, MAX_FLOOR } from '../config.js';
+import { OFFLINE_CAP_HOURS, MAX_FLOOR, FEATURES, SOLANA_RPC, TOKEN_MINT, HOLDER_THRESHOLD } from '../config.js';
+import { featureOn } from './features.js';
+import { holderStatus } from './supabase.js';
 import { bossSprite, bossIsBig, heroSprite } from './sprites.js';
 import { SLOTS, CREATION_SLOTS, itemsFor, isUnlocked, unlockText, defaultLook, migrateSave, recordClear, equip, titleOf, nameColorOf, fakeProfile, byId, SAVE_VERSION } from './cosmetics.js';
 const $ = id => document.getElementById(id);
@@ -49,7 +51,7 @@ async function boot() {
   save.gold += p.gold; const ups = applyXp(save.heroes, p.xp); pending += p.damage;
   const offFloor = (await be.getFloor()).floor, trickled = trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
   if (p.secs > 30) {
-    const r = await be.submitDamage(h0.name, pending); pending = 0;
+    const r = await be.submitDamage(h0.name, pending, h0); pending = 0;
     lootLines = []; const got = handleClears(r.clears, true);
     $('awaytxt').innerHTML = `Log out disabled. You fought on for ${fmtDur(p.secs)}${p.capped ? ` (capped at ${cap}h)` : ''}${p.vigilUsed ? ' · Scroll of Vigil burned' : ''}<br>HP: ${Math.round(heroHp(h0))} / ${heroMaxHp(h0)}${p.lowSecs > 0 ? ` · worn down for ${fmtDur(p.lowSecs)} (DPS halved). Rest at the inn.` : ''}<br>Damage: ${fmt(p.damage)}<br>Gold: +${fmt(p.gold)}<br>XP: +${fmt(p.xp)}${ups.length ? `<br>Level ups: ${ups.length}` : ''}${r.advanced ? `<br>Floors cleared: ${r.advanced}. Floor ${r.floor} is open.` : ''}${got.length ? `<br>Cosmetics unlocked: ${got.map(i => esc(i.label)).join(', ')}` : ''}${lootLines.length || trickled.length ? `<br>Loot: ${[...lootLines, ...trickled.map(it => `<span style="color:${rarityOf(it.rarity).color}">${esc(it.name)}</span>`)].join(', ')}` : ''}`;
     $('away').showModal();
@@ -92,7 +94,7 @@ async function startGame(fresh = false) {
   floor = await be.getFloor(); log(`${save.heroes[0].name} awoke on Floor ${floor.floor}. The guardian stirs.`); log('System notice: log out disabled.');
   if (fresh) { notice('Log out disabled'); setTimeout(() => notice(`Floor ${floor.floor} is open`), 900); } // no replayed notices on reload
   $('lvl').onclick = () => buy('level'); $('gear').onclick = () => buy('gear'); $('wardrobeBtn').onclick = openWardrobe;
-  $('townBtn').onclick = openTown; $('helpBtn').onclick = () => tourShow(0); $('bagBtn').onclick = openBag; $('talBtn').onclick = () => { talSel = null; openTalents(); }; placeDock();
+  $('townBtn').onclick = openTown; $('helpBtn').onclick = () => tourShow(0); $('bagBtn').onclick = openBag; $('sysBtn').onclick = openSystem; $('talBtn').onclick = () => { talSel = null; openTalents(); }; placeDock();
   setInterval(tick, 1000); setInterval(sync, 5000); render(); renderLb();
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
@@ -111,7 +113,7 @@ function catchUp() { if (!save || !floor || Date.now() - lastCatchUp < 500) retu
 document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
 addEventListener('focus', catchUp); addEventListener('pageshow', catchUp);
 async function sync() {
-  const r = await be.submitDamage(save.heroes[0].name, pending); pending = 0;
+  const r = await be.submitDamage(save.heroes[0].name, pending, save.heroes[0]); pending = 0;
   if (recent.dmg > 0) { log(`You strike for ${fmt(recent.dmg)} · +${fmt(recent.gold)} gold · +${fmt(recent.xp)} XP`); recent = { dmg: 0, gold: 0, xp: 0 }; }
   const quiet = quietSync; quietSync = false; // clears that happened before this session are logged, not re-toasted
   if (r.advanced) { const f = r.floor - 1; log(`${bossName(f)} fell beneath many blades. The stair to Floor ${r.floor} lies open.`); log(`System notice: Floor ${r.floor} is open.`); floorCleared(f); setTimeout(() => notice(`Floor ${r.floor} is open`), 2400); }
@@ -238,4 +240,28 @@ function openTalents() {
   $('talRespec').onclick = async () => { if (respec(save, f)) { log('System notice: talents reset. All points refunded.'); talSel = null; await be.saveSave(save); render(); openTalents(); } };
   $('talTree').onclick = e => { const b = e.target.closest('.tnode'); if (b) { talSel = b.dataset.id; openTalents(); } };
   if (!$('talents').open) $('talents').showModal();
+}
+
+// ---- System / Identity panel. Guest-first; binding is opt-in and feature-flagged.
+let gmActive = () => !!be?.isGm?.();
+async function openSystem() {
+  const online = be.name === 'supabase', canBind = featureOn(FEATURES, 'bindIdentity', gmActive()), anon = online && be.isAnonymous();
+  const status = !online ? 'Offline mode. Your progress lives in this browser only.' : anon ? 'Guest identity. Bind it to keep your progress across devices.' : 'Identity bound. Your progress is stored in the tower.';
+  $('sysBody').innerHTML = `<div class="sysnote"><p>${esc(status)}</p>
+    ${canBind ? `<div class="bind ${online ? '' : 'off'}"><h3>Bind your identity</h3>
+      <button id="bindWallet" class="cta" ${online ? '' : 'disabled'}>Sign in with Solana (Phantom)</button>
+      <p class="sub">Signature only. $LOGOUT asks your wallet to sign a short message. It never requests a transaction, never sees your keys and never touches your funds.</p>
+      <div class="mail"><input id="bindEmail" type="email" placeholder="email for a magic link" ${online ? '' : 'disabled'} autocomplete="email"><button id="bindMail" ${online ? '' : 'disabled'}>Send link</button></div>
+      ${online ? '' : '<p class="sub">Online mode is switched off on this server.</p>'}</div>` : ''}
+    ${save?.holder ? '<div class="slot2"><b>Holder perk</b> · extra hero slot <span class="sub">(coming soon)</span><div class="emptyslot">+</div></div>' : ''}
+    <button class="logout" disabled title="Unlocks on Floor 100">LOG OUT</button><p class="sub center">Log out unlocks on Floor 100.</p>
+    <details class="settings"><summary>Settings</summary>${online ? '<button id="sever">Sever link (switch account)</button><p class="sub">Disconnects this browser from the bound identity. Your bound progress stays safe in the tower.</p>' : '<p class="sub">Nothing to sever: this browser is not linked to an online identity.</p>'}<div id="gmSlot"></div></details></div>`;
+  const msg = m => { log(`System notice: ${m}`); notice(m); };
+  if ($('bindWallet')) $('bindWallet').onclick = async () => { try { const s = await be.bindWallet(); if (s) save = migrateSave(s);
+      const pk = window.phantom?.solana?.publicKey?.toString?.(); const hs = await holderStatus(pk, { rpc: SOLANA_RPC, mint: TOKEN_MINT, threshold: HOLDER_THRESHOLD }); if (hs.enabled) save.holder = hs.holder;
+      await be.saveSave(save); msg('identity bound to your wallet'); render(); openSystem(); } catch (e) { msg(`binding failed: ${e.message || e}`); } };
+  if ($('bindMail')) $('bindMail').onclick = async () => { const em = $('bindEmail').value.trim(); if (!/^\S+@\S+\.\S+$/.test(em)) return notice('Enter a valid email'); try { await be.bindEmail(em); msg('magic link sent, check your inbox'); } catch (e) { msg(`binding failed: ${e.message || e}`); } };
+  if ($('sever')) $('sever').onclick = async () => { if (!confirm('Sever the link to this identity on this browser?')) return; await be.sever(); location.reload(); };
+  if (typeof renderGmSlot === 'function') renderGmSlot();
+  if (!$('system').open) $('system').showModal();
 }

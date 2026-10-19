@@ -1,6 +1,6 @@
 // Backend abstraction: LocalBackend (simulated shared tower) or SupabaseBackend.
 import { floorBossHp } from './game.js';
-import { MAX_FLOOR } from '../config.js';
+import { MAX_FLOOR, SUPABASE_URL, SUPABASE_ANON_KEY, FEATURES } from '../config.js';
 // Pre-restyle handles, renamed in older saved worlds so leaderboards stay in-theme.
 const LEGACY = ['xX_Reaper', 'mossgirl', 'NoRespawn', 'kaito.exe', 'LastLight', 'Wren', 'gl1tch', 'Ophelia', 'tankmom', 'Byte'];
 const FAKE = ['Eldrinn', 'Mossveil', 'Thornwick', 'Kaelith', 'Ravensong', 'Brightmoor', 'LyssDawn', 'Grimhallow', 'SableFen', 'Ironbough'];
@@ -34,5 +34,14 @@ export class LocalBackend {
     const top = all.slice(0, 10); if (me && !top.some(r => r.name === me)) top.push(all.find(r => r.name === me) || { name: me, damage: 0, rank: all.length + 1 }); return top; }
 }
 
-// Future: add SupabaseBackend with the same interface and select it here.
-export async function makeBackend() { const b = new LocalBackend(); await b.init(); return b; }
+/** Online only when configured AND flagged on; any failure falls back to the local backend so the game always starts. */
+export const onlineConfigured = (url = SUPABASE_URL, key = SUPABASE_ANON_KEY, flags = FEATURES) => !!(url && key && flags?.online === 'all');
+export async function makeBackend() {
+  if (onlineConfigured()) {
+    try {
+      const [{ createClient }, { SupabaseBackend }] = await Promise.all([import('https://esm.sh/@supabase/supabase-js@2'), import('./supabase.js')]);
+      const b = new SupabaseBackend(createClient(SUPABASE_URL, SUPABASE_ANON_KEY), { maxFloor: MAX_FLOOR, redirectTo: location.origin + location.pathname }); await b.init(); return b;
+    } catch (e) { console.warn('Online mode unavailable, playing offline:', e?.message || e); }
+  }
+  const b = new LocalBackend(); await b.init(); return b;
+}
