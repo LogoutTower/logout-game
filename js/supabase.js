@@ -1,12 +1,13 @@
 // SupabaseBackend: same interface as LocalBackend (init, loadSave, saveSave, getFloor, submitDamage, leaderboard) plus identity helpers.
 // Only constructed when SUPABASE_URL and SUPABASE_ANON_KEY are set. Free-tier friendly: damage is batched and flushed every
 // 30s, the floor is polled every 30s, no realtime subscriptions. The client is injected so tests can use a mock.
+import { sanitizeSave } from './gm.js';
 export const FLUSH_MS = 30000, POLL_MS = 30000;
 const SIGN_STATEMENT = 'Sign in to $LOGOUT. This is a signature only: it does not send a transaction, move funds or share your keys.';
-/** Last-write-wins by updatedAt. Ties keep the cloud copy. */
+/** Last-write-wins by updatedAt. Ties keep the local copy (the cloud copy may be a staff-stripped mirror of it). */
 export function mergeSaves(local, cloud) {
   if (!cloud) return local || null; if (!local) return cloud;
-  return (local.updatedAt || 0) > (cloud.updatedAt || 0) ? local : cloud;
+  return (local.updatedAt || 0) >= (cloud.updatedAt || 0) ? local : cloud;
 }
 export class SupabaseBackend {
   name = 'supabase';
@@ -18,6 +19,9 @@ export class SupabaseBackend {
     let { data } = await this.sb.auth.getSession();
     if (!data?.session) { const r = await this.sb.auth.signInAnonymously(); if (r.error) throw r.error; data = { session: r.data.session }; } // guest-first
     this.user = data.session.user; await this._profile();
+    const seen = this.store.getItem(this.k + '.seenClear'); // clears since this browser last looked are credited; a brand-new guest starts at "now"
+    if (seen != null) this.seenClear = +seen || 0;
+    else { const { data: lc } = await this.sb.from('floor_clears').select('id').order('id', { ascending: false }).limit(1); this.seenClear = lc?.[0]?.id || 0; this.store.setItem(this.k + '.seenClear', String(this.seenClear)); }
   }
   async _profile() { const { data } = await this.sb.from('profiles').select('role, holder').eq('id', this.user.id).maybeSingle(); this.role = data?.role === 'gm' ? 'gm' : 'player'; this.holder = !!data?.holder; }
   isGm() { return this.role === 'gm'; } // server-decided; profiles.role cannot be self-assigned (see schema.sql)
@@ -34,10 +38,12 @@ export class SupabaseBackend {
     s.updatedAt = this.now(); this.store.setItem(this.k + '.save', JSON.stringify(s)); this._dirty = s;
     if (this.now() - (this._lastPush || 0) >= FLUSH_MS) await this._push(s);
   }
-  async _push(s) { this._lastPush = this.now(); this._dirty = null; const { ctx, ...data } = s; await this.sb.from('saves').upsert({ user_id: this.user.id, data, updated_at: new Date(s.updatedAt || this.now()).toISOString() }); }
+  async _push(s) { this._lastPush = this.now(); this._dirty = null; const { ctx, ...data0 } = s; const data = JSON.parse(JSON.stringify(data0)); if (!this.isGm()) sanitizeSave(data, false); // no staff data reaches the server without the server role
+    try { await this.sb.from('saves').upsert({ user_id: this.user.id, data, updated_at: new Date(s.updatedAt || this.now()).toISOString() }); } catch (e) { this._dirty = s; } } // offline/rate-limited: retried on the next flush
   async getFloor() {
     if (!this.floor || this.now() - this.lastPoll >= POLL_MS) {
-      const { data } = await this.sb.from('floor_state').select('*').eq('id', 1).single(); this.lastPoll = this.now();
+      const { data, error } = await this.sb.from('floor_state').select('*').eq('id', 1).single(); this.lastPoll = this.now();
+      if (error || !data) { if (this.floor) return { ...this.floor, hp: this.floor.hp - this.pending }; throw error || new Error('floor unavailable'); } // keep the cached floor when the poll fails
       this.floor = { floor: data.floor, hp: Number(data.hp), maxHp: Number(data.max_hp), gmUntil: Date.parse(data.gm_present_until || 0) || 0, announce: data.gm_announce || null };
     }
     return { ...this.floor, hp: this.floor.hp - this.pending };
@@ -51,20 +57,20 @@ export class SupabaseBackend {
   async flush() {
     const amt = Math.floor(this.pending); this.pending -= amt; this.lastFlush = this.now(); if (this._dirty) await this._push(this._dirty);
     const { data, error } = await this.sb.rpc('submit_damage', { p_amount: amt, p_name: this.meta.name || 'Nameless', p_level: this.meta.level || 1, p_gear: this.meta.gear || 0 });
-    if (error) { this.pending += amt; throw error; }
+    if (error) { this.pending += amt; const f = await this.getFloor(); return { ...f, advanced: false, accepted: 0, clears: [], offline: true }; } // unreachable / rate-limited: keep the damage and retry next flush
     const before = this.floor?.floor; this.floor = { floor: data.floor, hp: Number(data.hp), maxHp: Number(data.max_hp), gmUntil: Date.parse(data.gm_present_until || 0) || 0, announce: data.gm_announce || null }; this.lastPoll = this.now();
     const clears = await this._clears();
     return { ...this.floor, advanced: data.floor !== before && before != null, accepted: Number(data.accepted), clears };
   }
   async _clears() { // floors cleared since we last looked: { floor, ranking (non-staff names), dmg {name: dmg}, maxHp }
-    const { data } = await this.sb.from('floor_clears').select('*').gt('id', this.seenClear).order('id'); const out = [];
-    for (const c of data || []) { this.seenClear = Math.max(this.seenClear, c.id); out.push({ floor: c.floor, ranking: c.ranking || [], dmg: c.dmg || {}, maxHp: Number(c.max_hp) }); }
+    const { data, error } = await this.sb.from('floor_clears').select('*').gt('id', this.seenClear).order('id'); const out = []; if (error) return out;
+    for (const c of data || []) { this.seenClear = Math.max(this.seenClear, c.id); this.store.setItem(this.k + '.seenClear', String(this.seenClear)); out.push({ floor: c.floor, ranking: c.ranking || [], dmg: c.dmg || {}, maxHp: Number(c.max_hp) }); }
     return out;
   }
   async leaderboard(me = null) {
     const f = (await this.getFloor()).floor;
-    const { data } = await this.sb.from('damage').select('name, damage, is_staff').eq('floor', f).order('damage', { ascending: false }).limit(25);
-    const rows = (data || []).map(r => ({ name: r.name, damage: Number(r.damage), staff: !!r.is_staff }));
+    const { data, error } = await this.sb.from('damage').select('name, damage, is_staff').eq('floor', f).order('damage', { ascending: false }).limit(25);
+    const rows = (error ? [] : data || []).map(r => ({ name: r.name, damage: Number(r.damage), staff: !!r.is_staff }));
     const ranked = rows.filter(r => !r.staff).map((r, i) => ({ ...r, rank: i + 1 })), top = ranked.slice(0, 10);
     if (me && !top.some(r => r.name === me) && !rows.some(r => r.staff && r.name === me)) top.push(ranked.find(r => r.name === me) || { name: me, damage: 0, rank: ranked.length + 1 });
     return [...rows.filter(r => r.staff).map(r => ({ ...r, rank: 0 })), ...top];

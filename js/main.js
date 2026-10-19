@@ -50,7 +50,7 @@ function picker(el, slots, look, heroCls, progress, onPick) {
 async function boot() {
   $('maxf').textContent = MAX_FLOOR;
   be = await makeBackend(); save = migrateSave(await be.loadSave()); if (save) delete save.ctx; // live-only context, never trusted from storage
-  gmValid = be.name === 'supabase' ? !!be.isGm?.() : await checkPass(localStorage.getItem('logout.v1.gm'), GM_PASS_HASH); // server role, or the local hash unlock
+  gmValid = !!be.isGm?.() || await checkPass(localStorage.getItem('logout.v1.gm'), GM_PASS_HASH); // server role, or the local hash unlock (also online, until the role is granted)
   if (save && sanitizeSave(save, gmValid)) { save = migrateSave(save); await be.saveSave(save); } // pasted staff ids are stripped
   if (!save) return showCreate();
   { const f0 = (await be.getFloor()).floor, bi = bossInfo(f0); save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid }; } // offline maths sees the same floor context
@@ -58,7 +58,7 @@ async function boot() {
   save.gold += p.gold; const ups = applyXp(save.heroes, p.xp); pending += p.damage;
   const offFloor = (await be.getFloor()).floor, trickled = trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
   if (p.secs > 30) {
-    const r = await be.submitDamage(h0.name, pending, h0); pending = 0;
+    const r = await submitDmg(h0.name, pending, h0); pending = 0;
     lootLines = []; const got = handleClears(r.clears, true);
     $('awaytxt').innerHTML = `Log out disabled. You fought on for ${fmtDur(p.secs)}${p.capped ? ` (capped at ${cap}h)` : ''}${p.vigilUsed ? ' · Scroll of Vigil burned' : ''}<br>HP: ${Math.round(heroHp(h0))} / ${heroMaxHp(h0)}${p.lowSecs > 0 ? ` · worn down for ${fmtDur(p.lowSecs)} (DPS halved). Rest at the inn.` : ''}<br>Damage: ${fmt(p.damage)}<br>Gold: +${fmt(p.gold)}<br>XP: +${fmt(p.xp)}${ups.length ? `<br>Level ups: ${ups.length}` : ''}${r.advanced ? `<br>Floors cleared: ${r.advanced}. Floor ${r.floor} is open.` : ''}${got.length ? `<br>Cosmetics unlocked: ${got.map(i => esc(i.label)).join(', ')}` : ''}${lootLines.length || trickled.length ? `<br>Loot: ${[...lootLines, ...trickled.map(it => `<span style="color:${rarityOf(it.rarity).color}">${esc(it.name)}</span>`)].join(', ')}` : ''}`;
     $('away').showModal();
@@ -121,7 +121,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) catc
 addEventListener('focus', catchUp); addEventListener('pageshow', catchUp);
 async function sync() {
   if (be.name === 'local') be.decree = gmValid;
-  const r = await be.submitDamage(save.heroes[0].name, pending, { ...save.heroes[0], staff: gmValid }); pending = 0;
+  const r = await submitDmg(save.heroes[0].name, pending, { ...save.heroes[0], staff: gmValid }); pending = 0;
   if (recent.dmg > 0) { log(`You strike for ${fmt(recent.dmg)} · +${fmt(recent.gold)} gold · +${fmt(recent.xp)} XP`); recent = { dmg: 0, gold: 0, xp: 0 }; }
   const quiet = quietSync; quietSync = false; // clears that happened before this session are logged, not re-toasted
   if (r.advanced) { const f = r.floor - 1; log(`${bossName(f)} fell beneath many blades. The stair to Floor ${r.floor} lies open.`); log(`System notice: Floor ${r.floor} is open.`); floorCleared(f); setTimeout(() => notice(`Floor ${r.floor} is open`), 2400); }
@@ -159,7 +159,8 @@ function render() {
 }
 async function renderLb() {
   const h = save.heroes[0];
-  $('lb').innerHTML = (await be.leaderboard(h.name)).map(r => {
+  let rows = await be.leaderboard(h.name); if (localStaffOnly()) rows = [{ name: h.name, damage: localStaffDmg, staff: true, rank: 0 }, ...rows.filter(r => r.name !== h.name)];
+  $('lb').innerHTML = rows.map(r => {
     const me = r.name === h.name, pr = me ? { title: titleOf(h), color: nameColorOf(h) } : fakeProfile(r.name);
     if (r.staff) return `<li class="staff" value="0"><small>Tower Staff</small><span class="gmname">${GM_SIGIL} ${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(me ? titleOf(h) : 'Tower Staff')}</span></li>`;
     return `<li class="${me ? 'me' : ''}" value="${r.rank}"><span style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span>${me && r.rank > 3 ? '<div class="climb">Climb: Train, Forge and equip loot to raise DPS. Top 3 on a kill earns rare rewards.</div>' : ''}</li>`;
@@ -255,8 +256,9 @@ function openTalents() {
 let gmValid = false; const gmActive = () => gmValid;
 async function openSystem() {
   const online = be.name === 'supabase', canBind = featureOn(FEATURES, 'bindIdentity', gmActive()), anon = online && be.isAnonymous();
+  const uid = online && be.user?.id ? `<p class="sub">Tower ID: <code id="towerId">${esc(be.user.id)}</code> <button id="copyId">Copy</button></p>` : '';
   const status = !online ? 'Offline mode. Your progress lives in this browser only.' : anon ? 'Guest identity. Bind it to keep your progress across devices.' : 'Identity bound. Your progress is stored in the tower.';
-  $('sysBody').innerHTML = `<div class="sysnote"><p>${esc(status)}</p>
+  $('sysBody').innerHTML = `<div class="sysnote"><p>${esc(status)}</p>${uid}
     ${canBind ? `<div class="bind ${online ? '' : 'off'}"><h3>Bind your identity</h3>
       <button id="bindWallet" class="cta" ${online ? '' : 'disabled'}>Sign in with Solana (Phantom)</button>
       <p class="sub">Signature only. $LOGOUT asks your wallet to sign a short message. It never requests a transaction, never sees your keys and never touches your funds.</p>
@@ -270,6 +272,7 @@ async function openSystem() {
       const pk = window.phantom?.solana?.publicKey?.toString?.(); const hs = await holderStatus(pk, { rpc: SOLANA_RPC, mint: TOKEN_MINT, threshold: HOLDER_THRESHOLD }); if (hs.enabled) save.holder = hs.holder;
       await be.saveSave(save); msg('identity bound to your wallet'); render(); openSystem(); } catch (e) { msg(`binding failed: ${e.message || e}`); } };
   if ($('bindMail')) $('bindMail').onclick = async () => { const em = $('bindEmail').value.trim(); if (!/^\S+@\S+\.\S+$/.test(em)) return notice('Enter a valid email'); try { await be.bindEmail(em); msg('magic link sent, check your inbox'); } catch (e) { msg(`binding failed: ${e.message || e}`); } };
+  if ($('copyId')) $('copyId').onclick = () => navigator.clipboard?.writeText(be.user.id).then(() => notice('Tower ID copied'), () => {});
   if ($('sever')) $('sever').onclick = async () => { if (!confirm('Sever the link to this identity on this browser?')) return; await be.sever(); location.reload(); };
   if (typeof renderGmSlot === 'function') renderGmSlot();
   if (!$('system').open) $('system').showModal();
@@ -293,10 +296,10 @@ let gmTaps = 0;
 function renderGmSlot() {
   const el = $('gmSlot'); if (!el) return; const online = be.name === 'supabase', h = save.heroes[0];
   $('system').querySelector('.settings summary').onclick = () => { if (++gmTaps >= 5) { gmTaps = 0; el.dataset.show = '1'; renderGmSlot(); } };
-  if (!gmValid && (online || !GM_PASS_HASH || el.dataset.show !== '1')) { el.innerHTML = ''; return; } // hidden unless revealed, and only while local mode has a hash set
+  if (!gmValid && (!GM_PASS_HASH || el.dataset.show !== '1')) { el.innerHTML = ''; return; } // hidden unless revealed, and only while local mode has a hash set
   el.innerHTML = gmValid ? `<div class="staffbox"><b class="gmname">${GM_SIGIL} Staff access</b>
       ${h.cls === GM_CLASS ? `<button id="gmLeave">Return to ${esc(h.prevCls || 'Vanguard')}</button>` : '<button id="gmBecome" class="cta">Take the Architect\'s form</button>'}
-      ${featureOn(FEATURES, 'sandbox', true) ? '<button id="gmSandbox">Sandbox</button>' : ''}${online ? '' : '<button id="gmLock">Lock staff access</button>'}</div>`
+      ${featureOn(FEATURES, 'sandbox', true) ? '<button id="gmSandbox">Sandbox</button>' : ''}${localStorage.getItem('logout.v1.gm') ? '<button id="gmLock">Lock staff access</button>' : ''}${online && !be.isGm() ? '<p class="sub">Local staff unlock: your damage stays on this device (never sent to the shared floor or ranked) until the server role is granted.</p>' : ''}</div>`
     : `<div class="staffbox"><input id="gmPass" type="password" autocomplete="off" placeholder="access phrase"><button id="gmTry">Verify</button></div>`;
   if ($('gmTry')) $('gmTry').onclick = async () => { const p = $('gmPass').value; if (await checkPass(p, GM_PASS_HASH)) { localStorage.setItem('logout.v1.gm', p); gmValid = true; save.ctx.gm = true; notice('Staff access verified'); renderGmSlot(); render(); } else notice('Access denied'); };
   if ($('gmBecome')) $('gmBecome').onclick = async () => { becomeGm(save, legendaryWeaponDps(floor.floor), floor.floor); lastFloorSeen = 0; gmFloorChecks(); await be.saveSave(save); render(); renderLb(); renderGmSlot(); };
@@ -316,3 +319,12 @@ function openSandboxUi() {
   d.onclose = () => { sbx = closeSandbox(sbx); }; draw(); if (!d.open) d.showModal();
 }
 const bossInfoName = f => { const i = bossInfo(f); return `${i.name}${i.kind !== 'generated' ? ' · special' : ''}`; };
+
+// A staff hero unlocked only by the local hash (no server role yet) never sends damage to the shared floor:
+// the server would rank it as a normal player. Its damage stays on this device and shows on a local Tower Staff line.
+let localStaffDmg = 0;
+const localStaffOnly = () => gmValid && be.name === 'supabase' && !be.isGm();
+async function submitDmg(name, amount, hero) {
+  if (localStaffOnly()) { localStaffDmg += amount; const f = await be.getFloor(); return { ...f, advanced: false, accepted: 0, clears: [] }; }
+  return be.submitDamage(name, amount, hero);
+}

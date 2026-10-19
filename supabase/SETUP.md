@@ -1,6 +1,6 @@
 # Supabase setup ($LOGOUT online mode)
 
-Online mode stays **off** until these steps are done (`FEATURES.online: 'off'` in `config.js`). The game runs fully offline/local until then.
+Online mode is **on** (`FEATURES.online: 'all'`). Set it back to `'off'` to return to local-only play. Any sign-in or network failure falls back to local play automatically.
 
 1. **Run the schema.** Dashboard → SQL Editor → New query → paste all of `supabase/schema.sql` → Run. It is idempotent (tables `if not exists`, functions `create or replace`, policies dropped and recreated), so it is safe to run again after edits. RLS is enabled on every table (`profiles`, `saves`, `floor_state`, `damage`, `floor_clears`).
 2. **Auth providers** (Authentication → Sign In / Providers):

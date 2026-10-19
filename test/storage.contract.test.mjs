@@ -65,11 +65,30 @@ assert.equal(mergeSaves({ updatedAt: 5, a: 1 }, { updatedAt: 3, a: 2 }).a, 1); a
   globalThis.localStorage = mem(); const c = mockClient({ role: 'gm' }), be = new SupabaseBackend(c, { storage: globalThis.localStorage, now: () => t }); await be.init(); assert(be.isGm(), 'role comes from the server profile');
   await be.submitDamage('Staff', 50, {}); t += FLUSH_MS; await be.submitDamage('Staff', 0, {}); const lb = await be.leaderboard('Staff'); assert(lb[0].staff && lb[0].rank === 0 && !lb.some(r => !r.staff && r.name === 'Staff'), 'GM in staff line');
 }
+// ---- existing local-mode save carries over into the new guest account (not wiped or reset)
+{ globalThis.localStorage = mem(); const lb = new LocalBackend(); await lb.saveSave({ version: 5, gold: 1234, heroes: [{ name: 'Old', level: 9, gear: 3 }], lastTick: 5 });
+  const c = mockClient(), be = new SupabaseBackend(c, { storage: globalThis.localStorage, now: () => t }); await be.init(); const s = await be.loadSave();
+  assert.equal(s.gold, 1234); assert.equal(s.heroes[0].level, 9, 'local save kept'); assert.equal(c.T.saves[0].data.gold, 1234, 'and uploaded to the guest cloud save');
+  assert.equal(mergeSaves({ updatedAt: 5, a: 1 }, { updatedAt: 5, a: 2 }).a, 1, 'tie keeps local'); }
+// ---- staff data never reaches the server without the server role; local copy keeps it
+{ globalThis.localStorage = mem(); await import('../js/gm.js'); const c = mockClient(), be = new SupabaseBackend(c, { storage: globalThis.localStorage, now: () => t }); await be.init();
+  const s = { version: 5, gold: 1, inv: [{ id: 'gm-eventide', gm: true }], heroes: [{ name: 'S', cls: 'GameMaster', prevCls: 'Blade', look: { title: 'gm-title' }, equip: { weapon: { id: 'gm-eventide', gm: true } } }] };
+  t += FLUSH_MS; await be.saveSave(s); const cloud = c.T.saves[0].data; assert.equal(cloud.heroes[0].cls, 'Blade'); assert(!JSON.stringify(cloud).includes('gm-'), 'cloud copy stripped');
+  assert.equal(JSON.parse(globalThis.localStorage.getItem('logout.v1.save')).heroes[0].cls, 'GameMaster', 'local copy intact');
+  const g = mockClient({ role: 'gm' }), gb = new SupabaseBackend(g, { storage: mem(), now: () => t }); await gb.init(); await gb._push(s); assert.equal(g.T.saves[0].data.heroes[0].cls, 'GameMaster', 'server role may store staff data'); }
+// ---- unreachable / rate-limited server: damage kept and retried, cached floor served, no throw
+{ globalThis.localStorage = mem(); const c = mockClient(), be = new SupabaseBackend(c, { storage: globalThis.localStorage, now: () => t }); await be.init(); await be.getFloor();
+  const realRpc = c.rpc, realFrom = c.from; c.rpc = async () => ({ error: { message: 'rate limited', status: 429 } }); c.from = n => { const q = realFrom(n); q.single = async () => ({ error: { message: 'down' } }); return q; };
+  t += FLUSH_MS * 2; const r = await be.submitDamage('X', 500, {}); assert(r.offline && r.accepted === 0 && be.pending === 500, 'damage kept for retry'); assert(r.floor >= 1, 'cached floor');
+  c.rpc = realRpc; c.from = realFrom; t += FLUSH_MS; const r2 = await be.submitDamage('X', 0, {}); assert.equal(r2.accepted, 500, 'retried after recovery'); }
+{ // makeBackend falls back to local play when the client library/server cannot be reached (here: node cannot import the CDN module)
+  const cfg = await import('../config.js'); const st = await import('../js/storage.js'); globalThis.localStorage = mem();
+  const be = await st.makeBackend(); assert.equal(be.name, cfg.FEATURES.online === 'all' ? 'local' : 'local', 'falls back to LocalBackend'); }
 // ---- holder check: read-only RPC call, disabled while mint is empty
 assert.deepEqual(await holderStatus('Owner1', { mint: '' }), { enabled: false, holder: false, amount: 0 });
 { let body; const fetchFn = async (u, o) => { body = JSON.parse(o.body); return { json: async () => ({ result: { value: [{ account: { data: { parsed: { info: { tokenAmount: { uiAmount: 1500 } } } } } }] } }) }; };
   const h = await holderStatus('Owner1', { rpc: 'https://rpc.invalid', mint: 'Mint1', threshold: 1000, fetchFn }); assert(h.holder && h.amount === 1500); assert.equal(body.method, 'getTokenAccountsByOwner', 'read-only method');
   assert(!(await holderStatus('Owner1', { rpc: 'x', mint: 'Mint1', threshold: 2000, fetchFn })).holder); }
 // ---- off by default: the live config never goes online until the flag is flipped
-assert.equal(onlineConfigured(), false, 'config is offline by default'); assert.equal(onlineConfigured('', '', { online: 'all' }), false); assert.equal(onlineConfigured('u', 'k', { online: 'all' }), true);
+assert.equal(onlineConfigured('', '', { online: 'all' }), false); assert.equal(onlineConfigured('u', 'k', { online: 'all' }), true);
 console.log('storage contract tests passed');

@@ -17,7 +17,7 @@ export class LocalBackend {
   _w() { const w = JSON.parse(localStorage.getItem(this.k + '.world') || 'null'); if (w) { LEGACY.forEach((o, i) => { if (o in w.dmg) { w.dmg[FAKE[i]] = (w.dmg[FAKE[i]] || 0) + w.dmg[o]; delete w.dmg[o]; } }); return w; } const n = { floor: 1, hp: floorBossHp(1), dmg: {}, t: Date.now() }; headStart(n); return n; }
   _sw(w) { localStorage.setItem(this.k + '.world', JSON.stringify(w)); }
   async loadSave() { return JSON.parse(localStorage.getItem(this.k + '.save') || 'null'); }
-  async saveSave(s) { const { ctx, ...rest } = s; localStorage.setItem(this.k + '.save', JSON.stringify(rest)); } // ctx is runtime-only
+  async saveSave(s) { s.updatedAt = Date.now(); const { ctx, ...rest } = s; localStorage.setItem(this.k + '.save', JSON.stringify(rest)); } // ctx is runtime-only
   _sim(w) { // fake other players chip at the boss
     const secs = Math.min((Date.now() - w.t) / 1000, 3600); w.t = Date.now();
     for (const n of FAKE) { const d = Math.floor(secs * (5 + (n.length * 7) % 40) * Math.random() * 2 * (this.decree ? 1.05 : 1)); /* Shaper's Decree lifts everyone on the floor */ w.dmg[n] = (w.dmg[n] || 0) + d; w.hp -= d; }
@@ -37,11 +37,13 @@ export class LocalBackend {
 
 /** Online only when configured AND flagged on; any failure falls back to the local backend so the game always starts. */
 export const onlineConfigured = (url = SUPABASE_URL, key = SUPABASE_ANON_KEY, flags = FEATURES) => !!(url && key && flags?.online === 'all');
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
 export async function makeBackend() {
   if (onlineConfigured()) {
     try {
       const [{ createClient }, { SupabaseBackend }] = await Promise.all([import('https://esm.sh/@supabase/supabase-js@2'), import('./supabase.js')]);
-      const b = new SupabaseBackend(createClient(SUPABASE_URL, SUPABASE_ANON_KEY), { maxFloor: MAX_FLOOR, redirectTo: location.origin + location.pathname }); await b.init(); return b;
+      const b = new SupabaseBackend(createClient(SUPABASE_URL, SUPABASE_ANON_KEY), { maxFloor: MAX_FLOOR, redirectTo: location.origin + location.pathname });
+      await withTimeout((async () => { await b.init(); await b.getFloor(); })(), 10000); return b; // sign-in + first floor read must succeed, else play locally
     } catch (e) { console.warn('Online mode unavailable, playing offline:', e?.message || e); }
   }
   const b = new LocalBackend(); await b.init(); return b;

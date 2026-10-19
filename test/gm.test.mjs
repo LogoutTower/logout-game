@@ -50,7 +50,7 @@ clean(fs.readFileSync(new URL('../preview-bosses.html', import.meta.url), 'utf8'
 // ---- unlock: SHA-256 passphrase vs GM_PASS_HASH; empty = disabled; config ships empty
 { const h = await G.sha256hex('test phrase'); assert(/^[0-9a-f]{64}$/.test(h));
   assert(await G.checkPass('test phrase', h)); assert(!(await G.checkPass('wrong', h))); assert(!(await G.checkPass('test phrase', '')), 'empty hash disables'); assert(!(await G.checkPass('', h)));
-  const cfg = fs.readFileSync(new URL('../config.js', import.meta.url), 'utf8'); assert(/GM_PASS_HASH = ''/.test(cfg), 'config ships with the unlock disabled'); }
+  const cfg = fs.readFileSync(new URL('../config.js', import.meta.url), 'utf8'); assert(/GM_PASS_HASH = '([0-9a-f]{64})?'/.test(cfg), 'GM_PASS_HASH is empty or a SHA-256 hex'); }
 // ---- paste-protection on load + equip refusal
 { const s = gmSave(); delete s.ctx; s.inv.push({ ...G.eventide(3, 1), id: 'gm-eventide' }); assert(G.sanitizeSave(s, false)); const h = s.heroes[0];
   assert.equal(h.cls, 'Blade', 'class restored'); assert(!Object.values(h.look).some(G.isGmId), 'look stripped'); assert(!h.equip.weapon, 'Eventide stripped'); assert(!s.inv.some(i => i.gm), 'bag stripped');
