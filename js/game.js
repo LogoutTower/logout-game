@@ -11,7 +11,16 @@ export function newHero(name, cls) {
   if (!CLASSES[cls]) throw new Error('bad class');
   return { id: Math.random().toString(36).slice(2, 10), name: String(name).slice(0, 20) || 'Nameless', cls, level: 1, xp: 0, gear: 0 };
 }
-export const heroDps = h => { const c = CLASSES[h.cls]; return +(c.atk * c.spd * (1 + 0.25 * (h.level - 1)) * (1 + 0.15 * h.gear)).toFixed(3); };
+/** Summed stats of equipped loot: { dps (flat), dpsPct, goldPct, xpPct, capH }. */
+export function gearBonus(h) {
+  const b = { dps: 0, dpsPct: 0, goldPct: 0, xpPct: 0, capH: 0 };
+  for (const it of Object.values(h?.equip || {})) if (it) for (const [k, v] of Object.entries(it.stats || {})) b[k] = (b[k] || 0) + v;
+  return b;
+}
+// Forge (h.gear) tempers the hero's weapon: +15% per tier. Equipped loot adds flat weapon DPS and % bonuses.
+export const heroDps = h => { const c = CLASSES[h.cls], g = gearBonus(h); return +((c.atk * c.spd * (1 + 0.25 * (h.level - 1)) + g.dps) * (1 + 0.15 * h.gear) * (1 + g.dpsPct / 100)).toFixed(3); };
+const goldMul = heroes => 1 + gearBonus(heroes[0]).goldPct / 100, xpMul = heroes => 1 + gearBonus(heroes[0]).xpPct / 100;
+export const offlineCap = (heroes, base = 12) => base + gearBonus(heroes[0]).capH;
 export const xpToNext = lvl => Math.round(50 * Math.pow(1.4, lvl - 1));
 export const levelCost = h => Math.round(40 * Math.pow(1.5, h.level - 1));
 export const gearCost = h => Math.round(60 * Math.pow(1.6, h.gear));
@@ -23,15 +32,15 @@ export function computeProgress(heroes, lastTick, now, capHours = 12) {
   const secs = Math.min(raw, capHours * 3600);
   const dps = totalDps(heroes);
   const damage = Math.floor(dps * secs);
-  return { secs, capped: raw > secs, damage, gold: Math.floor(damage * 0.1), xp: Math.floor(damage * 0.05) };
+  return { secs, capped: raw > secs, damage, gold: Math.floor(damage * 0.1 * goldMul(heroes)), xp: Math.floor(damage * 0.05 * xpMul(heroes)) };
 }
 /** Live accrual with fractional carry (fixes per-tick flooring that kept low-DPS heroes at 0 gold/XP). Mutates save.lastTick/save.carry. */
 export function accrue(save, now, capHours = 12) {
   const raw = Math.max(0, (now - save.lastTick) / 1000), secs = Math.min(raw, capHours * 3600);
   const c = save.carry || (save.carry = { dmg: 0, gold: 0, xp: 0 });
   const d = totalDps(save.heroes) * secs + c.dmg, damage = Math.floor(d); c.dmg = d - damage;
-  const g = damage * 0.1 + c.gold, gold = Math.floor(g); c.gold = g - gold;
-  const x = damage * 0.05 + c.xp, xp = Math.floor(x); c.xp = x - xp;
+  const g = damage * 0.1 * goldMul(save.heroes) + c.gold, gold = Math.floor(g); c.gold = g - gold;
+  const x = damage * 0.05 * xpMul(save.heroes) + c.xp, xp = Math.floor(x); c.xp = x - xp;
   save.lastTick = now;
   return { secs, capped: raw > secs, damage, gold, xp };
 }

@@ -102,3 +102,17 @@ header{padding-top:max(14px,env(safe-area-inset-top))}main{padding-left:max(12px
  #tour{bottom:calc(92px + env(safe-area-inset-bottom))}
  .notice{min-width:0;width:calc(100vw - 40px)}.tower{display:none}
 }
+
+/* loot */
+.equipped{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--mut);margin-top:6px}
+.log div.loot::before{content:'◆ ';color:inherit}
+#bag{max-width:760px;width:95vw;max-height:90vh;overflow:auto}.bagwrap{display:flex;gap:14px;flex-wrap:wrap}.bagwrap>div:first-child{flex:1;min-width:260px}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:8px}
+.cell{aspect-ratio:1;min-height:44px;margin:0;padding:0;font-size:20px;border:1px solid var(--rc,var(--line));box-shadow:inset 0 0 12px color-mix(in srgb,var(--rc,#000) 35%,transparent);color:var(--rc,var(--mut))}
+.cell:disabled{opacity:.25}.cell.sel{outline:2px solid #fff;outline-offset:1px}
+.eqrow{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.item{border:1px solid var(--rc,var(--line));border-radius:8px;padding:8px;background:rgba(10,4,24,.5);font-size:13px}.item small{display:block;color:var(--mut);font-size:11px;text-transform:capitalize;margin-bottom:3px}
+.item.mini{font-size:11px;padding:6px}.item.mini small{font-size:10px}.item.empty{color:var(--mut);text-transform:capitalize}
+.detail{flex:1;min-width:240px}.vs{text-align:center;font-size:11px;letter-spacing:3px;color:var(--mut);margin:6px 0;text-transform:uppercase}.delta{font-size:16px;margin:8px 0}
+.bagbtns{display:flex;gap:6px}.bagbtns button{flex:1;min-height:44px}
+@media(max-width:640px){#bag{width:calc(100vw - 16px)}.bagwrap{flex-direction:column}.eqrow{grid-template-columns:1fr}#bag>button{position:sticky;bottom:0;width:100%;background:rgba(30,15,65,.95)}}

@@ -21,8 +21,8 @@
    <div id="arena"><div class="torch l"></div><div class="torch r"></div><div id="hero" class="sprite"></div><div id="boss" class="sprite boss"></div><div id="fx"></div></div>
   </div>
   <div class="row">
-   <div class="panel win"><div class="hudtop"><div id="hname2"></div><div class="lv" id="hlv"></div></div><div class="segrow"><span>HP</span><div class="seg" id="hhp"></div></div><div class="segrow"><span>XP</span><div class="seg xp" id="hxp"></div></div><div id="stats"></div>
-    <nav class="btns" id="dock" aria-label="Actions"><div class="act"><button id="lvl" class="rb" title="Train" aria-label="Train">⚔</button><span id="lvlL">Train</span></div><div class="act"><button id="gear" class="rb" title="Forge" aria-label="Forge">⚒</button><span id="gearL">Forge</span></div><div class="act"><button id="wardrobeBtn" class="rb" title="Wardrobe" aria-label="Wardrobe">✧</button><span>Wardrobe</span></div><div class="act"><button id="helpBtn" class="rb" title="How to play" aria-label="How to play">?</button><span>Guide</span></div></nav></div>
+   <div class="panel win"><div class="hudtop"><div id="hname2"></div><div class="lv" id="hlv"></div></div><div class="segrow"><span>HP</span><div class="seg" id="hhp"></div></div><div class="segrow"><span>XP</span><div class="seg xp" id="hxp"></div></div><div id="stats"></div><div id="equipped" class="equipped"></div>
+    <nav class="btns" id="dock" aria-label="Actions"><div class="act"><button id="lvl" class="rb" title="Train" aria-label="Train">⚔</button><span id="lvlL">Train</span></div><div class="act"><button id="gear" class="rb" title="Forge" aria-label="Forge">⚒</button><span id="gearL">Forge</span></div><div class="act"><button id="wardrobeBtn" class="rb" title="Wardrobe" aria-label="Wardrobe">✧</button><span>Wardrobe</span></div><div class="act"><button id="bagBtn" class="rb" title="Bag" aria-label="Bag">⛁</button><span id="bagL">Bag</span></div><div class="act"><button id="helpBtn" class="rb" title="How to play" aria-label="How to play">?</button><span>Guide</span></div></nav></div>
    <div class="panel win"><h2>Top Damage · this floor</h2><ol id="lb"></ol></div>
   </div>
   <div class="panel win"><h2>Chronicle</h2><div class="log" id="log"></div></div>
@@ -30,6 +30,7 @@
 </main>
 <dialog id="wardrobe" class="win"><h2>Wardrobe <small>· cosmetic only</small></h2><div class="wrow"><div><div id="wpreview" class="preview big"></div><div id="wname"></div></div><div id="wpick"></div></div><button onclick="this.closest('dialog').close()">Close</button></dialog>
 <div id="tour" class="win hidden" role="dialog" aria-live="polite"><small class="tstep" id="tstep"></small><h3 id="ttitle"></h3><p id="ttext"></p><div class="tbtns"><button id="tskip">Skip</button><span></span><button id="tback">Back</button><button id="tnext" class="cta">Next</button></div></div>
+<dialog id="bag" class="win"><h2>Bag <small id="bagCount"></small></h2><div class="bagwrap"><div><div class="eqrow" id="eqrow"></div><div class="grid" id="bagGrid"></div></div><div class="detail" id="bagDetail"><p class="sub">Select an item to compare it with what you have equipped.</p></div></div><button onclick="this.closest('dialog').close()">Close</button></dialog>
 <div id="notices"></div><div id="cleared"><span>FLOOR CLEARED</span><small id="clearedSub"></small></div>
 <dialog id="away" class="win"><h2>System notice · while you were away</h2><div id="awaytxt"></div><button onclick="this.closest('dialog').close()">Resume</button></dialog>
 <script type="module" src="js/main.js"></script></body></html>

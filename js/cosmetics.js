@@ -1,5 +1,5 @@
 // Cosmetics: catalog, unlock rules, save migration, layered sprite grids. Pure (no DOM). No stat effects.
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 const I = (id, type, label, value, unlock = null, extra = {}) => ({ id, type, label, value, unlock, ...extra });
 export const CATALOG = [
   // skin tones
@@ -35,8 +35,16 @@ export const CATALOG = [
   I('nc-white', 'nameColor', 'Plain', '#e6dcff'), I('nc-cyan', 'nameColor', 'Cyan', '#3ff7ff'),
   I('nc-gold', 'nameColor', 'Choir Gold', '#ffd84f', { floor: 8 }), I('nc-exit', 'nameColor', 'Exit Green', '#5cff8a', { floor: 10 }),
   I('nc-pink', 'nameColor', 'Blood Pink', '#ff4fd8', { top3: 3 }),
+  // aura (rendered as a soft glow around the hero)
+  I('au-none', 'aura', 'None', ''),
+  // rare element-themed boss drops (2-5%)
+  I('oc-ember', 'outfitColor', 'Ember Weave', '#e0502a', { drop: 'fire' }), I('au-frost', 'aura', 'Frost Aura', '#9fd8ff', { drop: 'frost' }),
+  I('wc-voidshard', 'weaponColor', 'Voidshard', '#b06cff', { drop: 'void' }), I('hc-storm', 'hairColor', 'Stormlit', '#cfe0ff', { drop: 'storm' }),
+  I('tr-venom', 'trim', 'Venom Gilt', '#8ae04a', { drop: 'venom' }), I('au-holy', 'aura', 'Hallowed Aura', '#fff3a0', { drop: 'holy' }),
+  I('au-blood', 'aura', 'Blood Aura', '#ff3355', { drop: 'blood' }), I('nc-shadow', 'nameColor', 'Shadowglass', '#a8a0c8', { drop: 'shadow' }),
 ];
-export const SLOTS = ['skin', 'hairColor', 'hairStyle', 'outfitColor', 'outfitStyle', 'trim', 'weapon', 'weaponColor', 'title', 'nameColor'];
+export const DROP_COSMETICS = CATALOG.filter(i => i.unlock?.drop);
+export const SLOTS = ['skin', 'hairColor', 'hairStyle', 'outfitColor', 'outfitStyle', 'trim', 'weapon', 'weaponColor', 'aura', 'title', 'nameColor'];
 export const CREATION_SLOTS = ['skin', 'hairColor', 'hairStyle', 'outfitColor'];
 export const byId = id => CATALOG.find(i => i.id === id);
 export const itemsFor = (slot, cls) => CATALOG.filter(i => i.type === slot && (!i.cls || i.cls === cls));
@@ -45,12 +53,14 @@ export function unlockText(u) {
   if (u.floor) return `Clear Floor ${u.floor}`;
   if (u.top3) return u.top3 === 1 ? 'Top-3 damage on a floor kill' : `Top-3 damage on ${u.top3} floor kills`;
   if (u.rank1) return '#1 damage on a floor kill';
+  if (u.drop) return `Rare drop from ${u.drop} bosses`;
 }
 export function isUnlocked(item, progress) {
   const u = item.unlock; if (!u) return true;
   if (u.floor) return progress.cleared.includes(u.floor);
   if (u.top3) return progress.top3.length >= u.top3;
   if (u.rank1) return progress.rank1 >= u.rank1;
+  if (u.drop) return (progress.drops || []).includes(item.id);
   return false;
 }
 export const unlockedIds = progress => CATALOG.filter(i => isUnlocked(i, progress)).map(i => i.id);
@@ -66,7 +76,7 @@ export function recordClear(save, floor, rank, share = 1) {
 }
 export function defaultLook(cls) {
   const w = itemsFor('weapon', cls)[0].id;
-  return { skin: 'skin-2', hairColor: 'hc-ink', hairStyle: 'hs-short', outfitColor: 'oc-cyan', outfitStyle: 'os-tunic', trim: 'tr-steel', weapon: w, weaponColor: 'wc-steel', title: 't-trapped', nameColor: 'nc-white' };
+  return { skin: 'skin-2', hairColor: 'hc-ink', hairStyle: 'hs-short', outfitColor: 'oc-cyan', outfitStyle: 'os-tunic', trim: 'tr-steel', weapon: w, weaponColor: 'wc-steel', title: 't-trapped', nameColor: 'nc-white', aura: 'au-none' };
 }
 /** Choose an item if unlocked & valid for the class; returns true on success. */
 export function equip(save, id) {
@@ -80,6 +90,11 @@ export function migrateSave(s) {
     s.heroes.forEach(h => { h.look = { ...defaultLook(h.cls), ...(h.look || {}) }; });
     s.progress = s.progress || { cleared: [], top3: [], rank1: 0 };
     s.version = 2;
+  }
+  if (s.version < 3) { // v3: loot inventory, equipped gear, drop cosmetics, aura slot
+    s.inv = s.inv || []; s.lootSeq = s.lootSeq || 0; s.progress.drops = s.progress.drops || [];
+    s.heroes.forEach(h => { h.equip = h.equip || { weapon: null, armor: null, trinket: null }; h.look.aura = h.look.aura || 'au-none'; });
+    s.version = 3;
   }
   return s;
 }
