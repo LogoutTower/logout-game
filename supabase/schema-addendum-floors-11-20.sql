@@ -1,9 +1,9 @@
--- $LOGOUT addendum: FLOORS 11-20 (arc 2, The Frozen Clockspire). Idempotent: safe to run more than once. Run after schema.sql.
+-- $LOGOUT addendum: FLOORS 11-20 (arc 2, Rimegear Ascent). Idempotent: safe to run more than once. Run after schema.sql.
 -- 1) floor_hp(): arc 2+ multiplies the guardian's HP (×60 on floor 11, ×1.33 per floor, flat after floor 20). Mirrors js/floors.js
 --    (ARC_HP / floorBossHp). Floors 1-10 are unchanged, so the live floor's max_hp does not move.
 -- 2) floor_state.max_floor 10 → 20, and a floor already cleared at the old cap (hp 0 on floor 10) advances to floor 11 right away.
 -- 3) submit_damage() is NOT changed: the live clamp (schema-addendum-guilds-chat.sql) already allows the best Unique weapon of
---    floor min(current + 5, max_floor) with 8x headroom, via gear_scale(), so raising max_floor is enough for Clockspire gear.
+--    floor min(current + 5, max_floor) with 8x headroom, via gear_scale(), so raising max_floor is enough for arc 2 gear.
 -- Until this runs, the live server simply stays capped at floor 10; the client shows "the stair to Floor 11 is opening soon".
 create or replace function public.floor_base_hp(f int) returns bigint language sql immutable as $$
   select (round(20000 * exp(ln(1.6) * 10 * ln(1 + (f - 1) / 10.0)) / 100) * 100)::bigint $$;

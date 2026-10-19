@@ -1,4 +1,4 @@
-# Balance: floors 11-20 (arc 2, The Frozen Clockspire)
+# Balance: floors 11-20 (arc 2, Rimegear Ascent)
 
 All numbers come from js/floors.js (`ARC_HP`, `floorBossHp`) and match `floor_hp()` in supabase/schema-addendum-floors-11-20.sql (a pglite test checks parity for floors 1-30).
 
@@ -27,10 +27,10 @@ Arc 2 keeps the same soft-exponential base and the x2.5 milestone, then multipli
 
 One hero's daily damage depends on the time it is effectively fighting (live time plus up to 12 h offline per return) and its average DPS. Being worn down (DPS halved after about 12 min without the Inn) lowers the effective rate.
 
-- **Strong solo hero**, playing 24 h a day at about 400 effective DPS (Lv 30+, Clockspire Legendary/Unique gear): about 35M damage per day. Solo, arc 2 would take about 279 days. A single hero can't solo it overnight; it can't even solo floor 13 in one night (86M).
+- **Strong solo hero**, playing 24 h a day at about 400 effective DPS (Lv 30+, Rimegear Ascent Legendary/Unique gear): about 35M damage per day. Solo, arc 2 would take about 279 days. A single hero can't solo it overnight; it can't even solo floor 13 in one night (86M).
 - **Typical active hero**, about 120 effective DPS for about 20 h a day (two returns): about 8.6M per day.
 - **Community**, at 8.6M per hero per day: arc 2 is 1,134 hero-days of damage: about 11 days with 100 daily-active heroes (the target: 1 to 2+ weeks), about 23 days with 50, and about 4 days with 300. Retune `ARC_HP` if launch turnout is very different. Floors 11-14 fall within the first days; 17-20 are the long climb.
-- DPS grows during the arc, since Clockspire gear scales with the base curve: a floor-20 Legendary weapon gives +91 flat DPS before forge. That is why later floors grow x1.33 per floor on top of the base curve.
+- DPS grows during the arc, since Rimegear Ascent gear scales with the base curve: a floor-20 Legendary weapon gives +91 flat DPS before forge. That is why later floors grow x1.33 per floor on top of the base curve.
 
 **Retune in one place:** change `ARC_HP` in js/floors.js and `floor_arc_mul()` in the addendum together. The parity test fails if they drift.
 
@@ -38,7 +38,7 @@ One hero's daily damage depends on the time it is effectively fighting (live tim
 
 - floor_state.max_floor goes from 10 to 20.
 - If floor 10 is already cleared at the cap, the addendum advances it to floor 11 once.
-- submit_damage is unchanged: its clamp already allows the best Unique weapon of floor min(current + 5, max_floor) with 8x headroom. The pglite test shows an honest Lv30/+12 Clockspire build is not clipped and a 100x claim still is.
+- submit_damage is unchanged: its clamp already allows the best Unique weapon of floor min(current + 5, max_floor) with 8x headroom. The pglite test shows an honest Lv30/+12 arc 2 build is not clipped and a 100x claim still is.
 - **Before the SQL runs:** the server stays capped at 10. The client shows the floor 10 guardian at 0 HP with 'the stair to Floor 11 is opening soon'.
 
 ## Mechanics (live fights only; offline maths never apply them)

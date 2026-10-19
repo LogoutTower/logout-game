@@ -20,7 +20,7 @@ await db.exec(rd('schema-addendum-floors-11-20.sql')); await db.exec(rd('schema-
 for (let f = 1; f <= 30; f++) assert.equal(Number((await db.query(`select public.floor_hp($1) h`, [f])).rows[0].h), floorBossHp(f), `floor_hp(${f}) parity`);
 s = await st(); assert.equal(s.max_floor, 20); assert.equal(s.floor, 11, 'pending clear advanced to floor 11'); assert.equal(Number(s.max_hp), floorBossHp(11));
 assert.equal((await db.query(`select count(*)::int c from public.floor_clears where floor = 10`)).rows[0].c, 1, 'floor 10 clear recorded once');
-// ---- clamp: an honest Clockspire build is not clipped (gear_scale parity with js/loot.js scale too)
+// ---- clamp: an honest arc 2 build is not clipped (gear_scale parity with js/loot.js scale too)
 for (const f of [11, 15, 20]) assert(Math.abs((await db.query(`select public.gear_scale($1) g`, [f])).rows[0].g - gearScale(f)) / gearScale(f) < 0.02, `gear_scale ${f}`);
 const h = newHero('Ash', 'Blade'); h.level = 30; h.gear = 12; h.equip = { weapon: { slot: 'weapon', stats: { dps: +(1.5 * gearScale(16) * 3.6).toFixed(1), dpsPct: 14 } }, armor: { slot: 'armor', stats: { dpsPct: 30 } } };
 const dps = heroDps(h) * 1.25 * 1.3; // + Elixir and last-layer style bonuses

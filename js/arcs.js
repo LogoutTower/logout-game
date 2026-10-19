@@ -1,7 +1,7 @@
 // Arcs: every 10 floors share one SCENE (arena art, palette, props, ambient particles, battle strip, Tower Map band) and a NAME.
 // Keyed by Math.ceil(floor / 10). Later arcs (21-30 … 91-100) just add an entry; a missing arc falls back to the last defined one.
 // Names live ONLY here (ARC_NAMES) so they are easy to swap.
-export const ARC_NAMES = { 1: 'The Gatehold Keep', 2: 'The Frozen Clockspire' };
+export const ARC_NAMES = { 1: 'Gatefall Hold', 2: 'Rimegear Ascent' };
 export const ARCS = [
   { n: 1, scene: 'stone keep', props: 'torches', particles: 'dust',
     pal: { sky: '#2c1f4a', sky2: '#1a1030', deep: '#120a22', mortar: '#00000055', joint: '#00000044', strip1: '#3a2a5a', strip2: '#2a1d45', glow: '#ff9a2e', band: '#7a5ab8' } },

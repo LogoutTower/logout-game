@@ -85,7 +85,7 @@ export const BOSSES = [
     rect(21, 15, 3, 3, 'M');                                                                          // gauntlet on the grip line
   } },
 ];
-// ---- Arc 2 (floors 11-20): The Frozen Clockspire. Above the keep the tower turns to frozen brass, glass and stopped clocks.
+// ---- Arc 2 (floors 11-20): Rimegear Ascent. Above the keep the tower turns to frozen brass, glass and stopped clocks.
 // title / lore / mech / sig are read by floors.js (mechanics) and loot.js (signature drops).
 export const ARC2 = [
   { name: 'The Brass Sentinel', key: 'sentinel', noun: 'Sentinel', no: '', title: 'Keeper of the First Gear', element: 'storm', mech: 'casing',

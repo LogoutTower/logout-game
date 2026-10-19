@@ -66,7 +66,7 @@ const U_ABASE = ['Aegis', 'Warplate', 'Hauberk', 'Bulwark', 'Carapace', 'Shroud'
 const U_BASE = ['Thornblade', 'Greatsword', 'Halberd', 'Warglaive', 'Moonsabre', 'Runeblade', 'Warpick', 'Spellstaff', 'Fangspear', 'Cleaver', 'Longbrand', 'Starhook'];
 const U_EPI = ['the Ninth Bell', 'the Last Login', 'the Hollow Crown', 'the Quiet Server', 'the Unpatched Night', 'the Broken Compass', 'the Ashen Choir', 'the Final Layer',
   'the Lost Party', 'the Silent Admin', 'the Endless Queue', 'the Pale Dawn', 'the Severed Link', 'the Thousand Floors', 'the Empty Throne', 'the Frozen Clock'];
-// Arc 2 (Frozen Clockspire, floors 11+) adds its own epithets to the pool.
+// Arc 2 (Rimegear Ascent, floors 11+) adds its own epithets to the pool.
 const U_EPI2 = ['the Stopped Clock', 'the First Gear', 'the Long Winter', 'the Spent Hour', 'the Glass Pane', 'the Mainspring', 'the Rime Thread', 'the Thirteenth Chime'];
 const U_LORE = ['This weapon does not exist in the item database. It exists anyway.', 'Forged once. The template was deleted afterwards.', 'No other player will ever hold this exact item.',
   'Checksum mismatch. The tower decided to let you keep it.', 'It remembers the guardian it was taken from.', 'Drop table entry: [REDACTED]. Congratulations.'];
