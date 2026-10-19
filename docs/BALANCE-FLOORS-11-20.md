@@ -1,3 +1,17 @@
+# Caps, gold sinks and daily rewards (current)
+
+- **Level cap** = server floor + `LEVEL_CAP_OVER` (10), so Floor 1 → 11 and Floor 20 → 30. **Forge cap** = floor + `FORGE_CAP_OVER` (8). Both are in js/game.js, and `level_cap()` / `forge_cap()` in supabase/schema-addendum-caps.sql enforce them in the damage clamp. Staff (server role `gm`) is exempt and gets 2x XP (`GM_XP_MUL`).
+- **At the cap:** XP banks up to one full level, so the hero levels at once when the next floor opens. Offline time can never skip more than one level.
+- **Floors 5-10 HP retuned** for the cap: 19M, 29M, 37M, 46M, 62M, 128M (floors 1-4 and arc 2 unchanged). Rehearsal with 100 heroes, 30-minute rounds: Floor 10 at 19.5 h (the same as before the cap; the model's equivalent is about 18 h) and Floor 20 at 186 h, so **arc 2 takes about 6.9 days**.
+- **Gold sinks** add no combat power:
+  - **Tonics:** +10% XP, +10% gold or −20% HP drain, 30 min each, at most 2 h banked. Price is 400/400/250 × the floor tier: 400 g on Floor 1, about 8k on Floor 10, about 60k on Floor 20.
+  - **Tailor cosmetics:** 25k / 100k / 250k / 600k / 1.5M gold.
+  - **Guild bank:** quick-donate buttons (10/25/50% of gold) in Town → Goods.
+- **Daily streak:** resets at 00:00 UTC (7 PM CDT / 6 PM CST). The server claims it in `tick()`, once per account per UTC day. There is one streak save per calendar month.
+  - **Days 1-6:** 150/250/350/500/700/900 gold × floor tier, plus a tonic (days 2, 4, 6) or banked XP (days 3, 5) that respects the caps.
+  - **Day 7:** a chest with 2,000 gold × tier plus a chest-only cosmetic, or once those are owned, a rare/epic/legendary gear roll. It never gives a Unique, a staff item or tokens.
+  - **Rehearsal:** 800 claims over 7.75 days, up to day 7. Daily gold is about 7x what tonics absorb. That gold mostly piles up because the caps bind, so it has no effect on pacing.
+
 # Balance: launch pacing (supersedes the HP numbers further down)
 
 **Current numbers live in js/floors.js (`ARC1_HP`, `ARC_HP`, `floorBossHp`) and `floor_hp()` in supabase/schema-addendum-arc1-pacing.sql; pglite tests check parity for floors 1-30.** The older "HP curve" tables below describe the first arc 2 tuning (x60, x1.33) and are kept for history only.

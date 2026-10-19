@@ -23,7 +23,7 @@ export const baseHp = f => Math.round(HP0 * Math.exp(R * SOFT * Math.log(1 + (f 
 export const ARC_HP = { from: 11, start: 332, growth: 0.988, flatFrom: 20 };
 // Arc 1 (Gatefall Hold) launch-day pacing: explicit guardian HP for floors 1-10, tuned so ~100 fresh heroes clear Floor 10 about 18 h
 // after the gate opens (quick early floors, gentle climb, Floor 10 as a mini-wall). See docs/BALANCE-FLOORS-11-20.md. Mirrors floor_hp().
-export const ARC1_HP = [86000, 630000, 2400000, 7300000, 21000000, 33000000, 44000000, 55000000, 74000000, 150000000];
+export const ARC1_HP = [86000, 630000, 2400000, 7300000, 19000000, 29000000, 37000000, 46000000, 62000000, 128000000];
 export const arcHpMul = f => f < ARC_HP.from ? 1 : ARC_HP.start * Math.pow(ARC_HP.growth, Math.min(f, ARC_HP.flatFrom) - ARC_HP.from);
 export const floorBossHp = f => f < ARC_HP.from ? ARC1_HP[Math.max(1, f) - 1] : Math.round(baseHp(f) * (isMilestone(f) ? 2.5 : 1) * arcHpMul(f) / 1000) * 1000;
 // ---- seeded RNG

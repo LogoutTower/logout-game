@@ -86,7 +86,7 @@ export class SupabaseBackend {
         this.heads = { chat: d.cv || 0, guild: d.gv || 0 }; const me = args.p_name;
         const clears = (d.cl || []).map(([id, floor, mx, rank, dm]) => { this.seenClear = Math.max(this.seenClear, id); return { floor, rank: Number(rank), ranking: [], dmg: { [me]: Number(dm) }, maxHp: Number(mx) }; });
         if (clears.length) this.store.setItem(this.k + '.seenClear', String(this.seenClear));
-        return { ...this.floor, advanced: d.f !== before && before != null, accepted: Number(d.a), clears }; }
+        return { ...this.floor, advanced: d.f !== before && before != null, accepted: Number(d.a), clears, daily: d.dl || null }; }
       if (t.error && /tick|function|schema cache|PGRST202/i.test(t.error.message || '') && !/not signed in/.test(t.error.message || '')) this.noTick = true; // older server: classic path
       else if (t.error) { this.pending += amt; const f = await this.getFloor(); return { ...f, advanced: false, accepted: 0, clears: [], offline: true }; } }
     const { data, error } = await this.sb.rpc('submit_damage', args);
@@ -131,6 +131,7 @@ export class SupabaseBackend {
   async joinGuild(tag) { return this._rpc('guild_join', { p_tag: tag }); }
   async leaveGuild() { return this._rpc('guild_leave', {}); }
   // ---- Guilds v2 (FEATURES.guildsV2; needs supabase/schema-addendum-guilds-v2.sql). All writes are RPCs; the server decides.
+  async dailyStatus() { try { const { data, error } = await this.sb.rpc('daily_status'); return error ? null : data; } catch { return null; } } // only when the calendar opens
   async guildInfo() { return this._rpc('guild_info', {}); }
   async guildSetOpen(open) { return this._rpc('guild_set_open', { p_open: !!open }); }
   async guildInvite(user) { return this._rpc('guild_invite', { p_user: String(user || '').trim() || null }); }

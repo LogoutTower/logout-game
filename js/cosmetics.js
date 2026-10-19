@@ -37,6 +37,12 @@ export const CATALOG = [
   I('nc-pink', 'nameColor', 'Blood Pink', '#ff4fd8', { top3: 3 }),
   // aura (rendered as a soft glow around the hero)
   I('au-none', 'aura', 'None', ''),
+  // Tailor (gold only, js/sinks.js TAILOR): never staff items
+  I('nc-ember', 'nameColor', 'Ember', '#ff8a3d', { shop: 1 }), I('nc-frost', 'nameColor', 'Hoarfrost', '#9fe6ff', { shop: 1 }), I('nc-moss', 'nameColor', 'Moss', '#8fd47f', { shop: 1 }),
+  I('t-patron', 'title', 'Patron of the Hold', 'Patron of the Hold', { shop: 1 }), I('t-gearwright', 'title', 'Gearwright', 'Gearwright', { shop: 1 }), I('t-lamplighter', 'title', 'Lamplighter', 'Lamplighter', { shop: 1 }),
+  I('au-ember', 'aura', 'Ember Halo', '#ff8a3d', { shop: 1 }),
+  // day-7 login chest (js/daily.js CHEST_COSMETICS)
+  I('nc-dawn', 'nameColor', 'Dawnstreak', '#ffc6a0', { chest: 1 }), I('t-faithful', 'title', 'Faithful Climber', 'Faithful Climber', { chest: 1 }), I('au-dawn', 'aura', 'Dawn Halo', '#ffc6a0', { chest: 1 }),
   // rare element-themed boss drops (2-5%)
   I('oc-ember', 'outfitColor', 'Ember Weave', '#e0502a', { drop: 'fire' }), I('au-frost', 'aura', 'Frost Aura', '#9fd8ff', { drop: 'frost' }),
   I('wc-voidshard', 'weaponColor', 'Voidshard', '#b06cff', { drop: 'void' }), I('hc-storm', 'hairColor', 'Stormlit', '#cfe0ff', { drop: 'storm' }),
@@ -54,13 +60,15 @@ export function unlockText(u) {
   if (u.top3) return u.top3 === 1 ? 'Top-3 damage on a floor kill' : `Top-3 damage on ${u.top3} floor kills`;
   if (u.rank1) return '#1 damage on a floor kill';
   if (u.drop) return `Rare drop from ${u.drop} bosses`;
+  if (u.chest) return 'Day-7 login chest';
+  if (u.shop) return 'Sold by the Tailor (Town · Goods)';
 }
 export function isUnlocked(item, progress) {
   const u = item.unlock; if (!u) return true;
   if (u.floor) return progress.cleared.includes(u.floor);
   if (u.top3) return progress.top3.length >= u.top3;
   if (u.rank1) return progress.rank1 >= u.rank1;
-  if (u.drop) return (progress.drops || []).includes(item.id);
+  if (u.drop || u.shop || u.chest) return (progress.drops || []).includes(item.id);
   return false;
 }
 export const unlockedIds = progress => CATALOG.filter(i => isUnlocked(i, progress)).map(i => i.id);

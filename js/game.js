@@ -9,6 +9,7 @@ export const CLASSES = {
 export { floorBossHp, bossName, bossInfo } from './floors.js';
 import { mechDps, mechDrain } from './floors.js';
 import { talentBonus } from './talents.js';
+import { tonicMuls } from './sinks.js';
 export { talentBonus };
 
 // Staff class stats are registered by gm.js (kept out of CLASSES so it never appears in the class picker).
@@ -81,9 +82,10 @@ export const effectiveDps = save => totalDps(save.heroes) * (!save.ctx?.gm && is
 export function simulate(save, secs) {
   if (save.ctx?.gm) save.heroes[0].hp = heroMaxHp(save.heroes[0]); // staff: no drain, never worn down (also restores HP drained before the unlock)
   const h = save.heroes[0], max = heroMaxHp(h), b = buffsOf(save), e = effectsOf(h), tb = talentBonus(h), raw = max / DRAIN_SECS * (e.has('lifesteal') ? FX.lifesteal : 1) * (e.has('drain') ? FX.drain : 1) * (e.has('aegis') ? FX.aegis : 1) * (e.has('stillness') ? FX.stillness : 1) * (e.has('dodge') ? FX.dodgeDrain : 1);
-  const drain = save.ctx?.gm ? 0 : Math.max(raw * 0.1, raw * mechDrain(save.ctx) * (1 - tb.drainPct / 100) - tb.regenPct / 100 * max / 60); // talents: slower drain + regen
+  const drain = save.ctx?.gm ? 0 : Math.max(raw * 0.1, raw * mechDrain(save.ctx) * (1 - tb.drainPct / 100) * (b.hearth > 0 ? 1 - 0.20 * Math.min(1, b.hearth / Math.max(1, secs)) : 1) - tb.regenPct / 100 * max / 60); // talents: slower drain + regen
   const base = totalDps(save.heroes) * layerMul(save), lowMul = lowMulOf(h), hearth = e.has('hearth');
-  const gM = goldMul(save.heroes) * decreeMul(save) * guildMul(save), xM = xpMul(save.heroes) * decreeMul(save) * guildMul(save);
+  const tm = tonicMuls(save, Math.max(0, secs));
+  const gM = goldMul(save.heroes) * decreeMul(save) * guildMul(save) * tm.gold, xM = tm.xp * xpMul(save.heroes) * decreeMul(save) * guildMul(save) * (save.ctx?.gm ? GM_XP_MUL : 1); // staff: 2x XP
   let hp = heroHp(h), t = Math.max(0, secs), dmg = 0, gold = 0, xp = 0, lowSecs = 0;
   for (let guard = 0; t > 1e-9 && guard < 16; guard++) {
     const low = hp <= LOW_HP * max + 1e-9; let seg = t; const rs = e.has('restful') && b.rested > 0, dr = rs ? 0 : drain; // restful armor: no drain + regen while Well Rested
@@ -118,12 +120,22 @@ export function offlineProgress(save, now, baseCapHours = 12) {
   const vigilUsed = b.vigil > 0 && raw > (cap - b.vigil) * 3600; if (vigilUsed) b.vigil = 0;
   const r = accrue(save, now, cap, true); return { ...r, cap, vigilUsed };
 }
-export function applyXp(heroes, xp) {
+// ---- Level cap: the shared floor + LEVEL_CAP_OVER (Floor 1 → 11, Floor 10 → 20). Staff is never capped (gm flag from the existing
+// staff check). At the cap XP banks up to one full level (the bar fills, then stops), so a hero levels at once when the next floor opens
+// and offline time can never skip more than one level ahead. Mirrors the clamp in supabase/schema-addendum-level-cap.sql.
+export const LEVEL_CAP_OVER = 10; // the one knob: cap = floor + LEVEL_CAP_OVER
+export const FORGE_CAP_OVER = 8; // forge tier cap = floor + FORGE_CAP_OVER (Floor 1 → +9, Floor 10 → +18); staff exempt
+export const forgeCap = (floor, gm = false) => gm || !(floor > 0) ? Infinity : floor + FORGE_CAP_OVER;
+export const GM_XP_MUL = 2;    // staff only (ctx.gm comes from the existing staff check; never stored in a player save)
+export const levelCap = (floor, gm = false) => gm || !(floor > 0) ? Infinity : floor + LEVEL_CAP_OVER;
+export const atCap = (h, cap) => h.level >= cap;
+export function applyXp(heroes, xp, cap = Infinity) {
   if (!heroes.length) return [];
   const per = Math.floor(xp / heroes.length), ups = [];
   for (const h of heroes) {
     h.xp += per;
-    while (h.xp >= xpToNext(h.level)) { h.xp -= xpToNext(h.level); h.level++; ups.push(h.name); }
+    while (h.level < cap && h.xp >= xpToNext(h.level)) { h.xp -= xpToNext(h.level); h.level++; ups.push(h.name); }
+    if (h.level >= cap) h.xp = Math.min(h.xp, xpToNext(h.level)); // banked overflow: at most one level
   }
   return ups;
 }

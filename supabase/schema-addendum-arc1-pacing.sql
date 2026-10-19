@@ -5,7 +5,7 @@
 create or replace function public.floor_arc_mul(f int) returns double precision language sql immutable as $$
   select case when f < 11 then 1 else 332 * power(0.988, least(f, 20) - 11) end $$;
 create or replace function public.floor_hp(f int) returns bigint language sql immutable as $$
-  select case when f < 11 then (array[86000, 630000, 2400000, 7300000, 21000000, 33000000, 44000000, 55000000, 74000000, 150000000]::bigint[])[greatest(f, 1)]
+  select case when f < 11 then (array[86000, 630000, 2400000, 7300000, 19000000, 29000000, 37000000, 46000000, 62000000, 128000000]::bigint[])[greatest(f, 1)]
     else (round(public.floor_base_hp(f) * (case when f % 10 = 0 then 2.5 else 1 end) * public.floor_arc_mul(f) / 1000) * 1000)::bigint end $$;
 update public.floor_state set hp = round(hp::numeric * public.floor_hp(floor) / nullif(max_hp, 0))::bigint, max_hp = public.floor_hp(floor)
   where id = 1 and max_hp is distinct from public.floor_hp(floor);
