@@ -25,6 +25,16 @@ export function computeProgress(heroes, lastTick, now, capHours = 12) {
   const damage = Math.floor(dps * secs);
   return { secs, capped: raw > secs, damage, gold: Math.floor(damage * 0.1), xp: Math.floor(damage * 0.05) };
 }
+/** Live accrual with fractional carry (fixes per-tick flooring that kept low-DPS heroes at 0 gold/XP). Mutates save.lastTick/save.carry. */
+export function accrue(save, now, capHours = 12) {
+  const raw = Math.max(0, (now - save.lastTick) / 1000), secs = Math.min(raw, capHours * 3600);
+  const c = save.carry || (save.carry = { dmg: 0, gold: 0, xp: 0 });
+  const d = totalDps(save.heroes) * secs + c.dmg, damage = Math.floor(d); c.dmg = d - damage;
+  const g = damage * 0.1 + c.gold, gold = Math.floor(g); c.gold = g - gold;
+  const x = damage * 0.05 + c.xp, xp = Math.floor(x); c.xp = x - xp;
+  save.lastTick = now;
+  return { secs, capped: raw > secs, damage, gold, xp };
+}
 export function applyXp(heroes, xp) {
   if (!heroes.length) return [];
   const per = Math.floor(xp / heroes.length), ups = [];

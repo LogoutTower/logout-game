@@ -1,20 +1,20 @@
-import { CLASSES, newHero, heroDps, levelCost, gearCost, computeProgress, applyXp, bossName, fmt, fmtDur, xpToNext } from './game.js';
+import { CLASSES, newHero, heroDps, levelCost, gearCost, computeProgress, accrue, applyXp, bossName, fmt, fmtDur, xpToNext } from './game.js';
 import { makeBackend } from './storage.js';
 import { OFFLINE_CAP_HOURS, MAX_FLOOR } from '../config.js';
 import { bossSprite, bossIsBig, heroSprite } from './sprites.js';
 import { SLOTS, CREATION_SLOTS, itemsFor, isUnlocked, unlockText, defaultLook, migrateSave, recordClear, equip, titleOf, nameColorOf, fakeProfile, byId, SAVE_VERSION } from './cosmetics.js';
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
-let be, save, floor, pending = 0, cls = 'Vanguard', draftLook = defaultLook('Vanguard'), toastT;
+let be, save, floor, pending = 0, recent = { dmg: 0, gold: 0, xp: 0 }, quietSync = true, cls = 'Vanguard', draftLook = defaultLook('Vanguard'), toastT;
 const log = m => { const d = document.createElement('div'); d.textContent = m; if (m.startsWith('System notice')) d.className = 'rune'; $('log').prepend(d); };
 function notice(m) { const n = document.createElement('div'); n.className = 'notice'; n.innerHTML = `<small>◈ System notice</small>${esc(m)}`; $('notices').append(n); setTimeout(() => n.remove(), 3200); }
 function floorCleared(f) { $('clearedSub').textContent = `${bossName(f)} has fallen`; const c = $('cleared'); c.classList.remove('show'); void c.offsetWidth; c.classList.add('show'); }
 const LAYERS = 5;
 const hpColor = pct => pct > 0.5 ? '#5cff9a' : pct > 0.2 ? '#ffd84f' : '#ff3355';
-function hitFx(dmg) {
+function hitFx(dmg, mine = true) {
   const fx = $('fx'), b = $('boss'), r = b.getBoundingClientRect(), a = fx.getBoundingClientRect();
   const x = r.left - a.left + r.width / 2, y = r.top - a.top + r.height / 2;
-  const d = document.createElement('span'); d.className = 'dmg'; d.textContent = fmt(dmg); d.style.left = (x - 20 + Math.random() * 40) + 'px'; d.style.top = (y - 30) + 'px';
+  const d = document.createElement('span'); d.className = 'dmg' + (mine ? ' me' : ''); d.textContent = fmt(dmg); d.style.left = (x - 20 + Math.random() * 40) + 'px'; d.style.top = (y - 30) + 'px';
   const s = document.createElement('i'); s.className = 'slash'; s.style.left = (x - 60) + 'px'; s.style.top = y + 'px';
   fx.append(d, s); setTimeout(() => { d.remove(); s.remove(); }, 1000);
 }
@@ -52,7 +52,7 @@ function showCreate() {
   $('start').onclick = async () => {
     const h = newHero($('hname').value.trim(), cls); h.look = { ...draftLook };
     save = { version: SAVE_VERSION, heroes: [h], gold: 0, lastTick: Date.now(), progress: { cleared: [], top3: [], rank1: 0 } };
-    await be.saveSave(save); $('create').classList.add('hidden'); startGame();
+    await be.saveSave(save); $('create').classList.add('hidden'); startGame(true);
   };
 }
 function handleClears(clears = [], quiet = false) {
@@ -70,23 +70,25 @@ function openWardrobe() {
   picker($('wpick'), SLOTS, h.look, h.cls, save.progress, async id => { if (equip(save, id)) { await be.saveSave(save); render(); openWardrobe(); } });
   if (!$('wardrobe').open) $('wardrobe').showModal();
 }
-async function startGame() {
+async function startGame(fresh = false) {
   $('game').classList.remove('hidden');
   floor = await be.getFloor(); log(`${save.heroes[0].name} awoke on Floor ${floor.floor}. The guardian stirs.`); log('System notice: log out disabled.');
-  notice('Log out disabled'); setTimeout(() => notice(`Floor ${floor.floor} is open`), 700);
+  if (fresh) { notice('Log out disabled'); setTimeout(() => notice(`Floor ${floor.floor} is open`), 900); } // no replayed notices on reload
   $('lvl').onclick = () => buy('level'); $('gear').onclick = () => buy('gear'); $('wardrobeBtn').onclick = openWardrobe;
   setInterval(tick, 1000); setInterval(sync, 5000); render(); renderLb();
 }
 function tick() {
-  const now = Date.now(), p = computeProgress(save.heroes, save.lastTick, now, OFFLINE_CAP_HOURS);
-  save.lastTick = now; save.gold += p.gold; pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage);
-  if (applyXp(save.heroes, p.xp).length) log(`System notice: level ${save.heroes[0].level} reached.`);
+  const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS);
+  save.gold += p.gold; recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp; pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage);
+  if (applyXp(save.heroes, p.xp).length) { log(`System notice: level ${save.heroes[0].level} reached.`); notice(`Level ${save.heroes[0].level} reached`); }
   if (p.damage > 0) hitFx(p.damage); $('boss').classList.add('hit'); setTimeout(() => $('boss').classList.remove('hit'), 120); render();
 }
 async function sync() {
   const r = await be.submitDamage(save.heroes[0].name, pending); pending = 0;
+  if (recent.dmg > 0) { log(`You strike for ${fmt(recent.dmg)} · +${fmt(recent.gold)} gold · +${fmt(recent.xp)} XP`); recent = { dmg: 0, gold: 0, xp: 0 }; }
+  const quiet = quietSync; quietSync = false; // clears that happened before this session are logged, not re-toasted
   if (r.advanced) { const f = r.floor - 1; log(`${bossName(f)} fell beneath many blades. The stair to Floor ${r.floor} lies open.`); log(`System notice: Floor ${r.floor} is open.`); floorCleared(f); setTimeout(() => notice(`Floor ${r.floor} is open`), 2400); }
-  handleClears(r.clears);
+  handleClears(r.clears, quiet);
   floor = await be.getFloor(); await be.saveSave(save); render(); renderLb();
 }
 function buy(kind) {
@@ -103,7 +105,7 @@ function render() {
   $('layers').innerHTML = Array.from({ length: LAYERS }, (_, i) => `<i class="${i < lay ? 'on' : ''}"></i>`).join('');
   const c = hpColor(pct); $('hpfill').style.width = (lay ? inLayer * 100 : 0) + '%'; $('hpfill').style.background = `linear-gradient(90deg, ${c}aa, ${c})`; $('hpfill').style.color = c;
   $('hptext').textContent = `${fmt(floor.hp)} / ${fmt(floor.maxHp)} HP · ${lay}× layers`;
-  $('hname2').innerHTML = `<span style="color:${nameColorOf(h)}">${esc(h.name)}</span> <span class="ttl">${esc(titleOf(h))}</span>`; $('hlv').textContent = `LV ${h.level}`;
+  $('hname2').innerHTML = `<div style="color:${nameColorOf(h)}">${esc(h.name)}</div><div class="ttl">${esc(titleOf(h))}</div>`; $('hlv').textContent = `LV ${h.level}`;
   const hp = 0.85 + 0.15 * Math.abs(Math.sin(Date.now() / 3000)); $('hhp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < hp ? '' : 'off'}"></i>`).join('');
   const xp = h.xp / xpToNext(h.level); $('hxp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < xp ? '' : 'off'}"></i>`).join('');
   $('stats').innerHTML = `${CLASSES[h.cls].icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${heroDps(h).toFixed(1)}</b> · Gold <b>${fmt(save.gold)}</b>`;
@@ -112,9 +114,9 @@ function render() {
 }
 async function renderLb() {
   const h = save.heroes[0];
-  $('lb').innerHTML = (await be.leaderboard()).map(r => {
+  $('lb').innerHTML = (await be.leaderboard(h.name)).map(r => {
     const me = r.name === h.name, pr = me ? { title: titleOf(h), color: nameColorOf(h) } : fakeProfile(r.name);
-    return `<li class="${me ? 'me' : ''}"><span style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span></li>`;
+    return `<li class="${me ? 'me' : ''}" value="${r.rank}"><span style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span></li>`;
   }).join('');
 }
 boot();

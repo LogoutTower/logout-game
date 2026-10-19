@@ -29,7 +29,9 @@ export class LocalBackend {
     const w = this._w(); w.dmg[playerName] = (w.dmg[playerName] || 0) + amount; w.hp -= amount;
     const advanced = this._adv(w); const clears = w.clears; w.clears = []; this._sw(w); return { floor: w.floor, hp: w.hp, maxHp: floorBossHp(w.floor), advanced, accepted: amount, clears };
   }
-  async leaderboard() { const w = this._w(); return Object.entries(w.dmg).map(([name, damage]) => ({ name, damage })).sort((a, b) => b.damage - a.damage).slice(0, 10); }
+  async leaderboard(me = null) { // top 10, plus the player's own row (with rank) if they are outside it
+    const all = Object.entries(this._w().dmg).map(([name, damage]) => ({ name, damage })).sort((a, b) => b.damage - a.damage).map((r, i) => ({ ...r, rank: i + 1 }));
+    const top = all.slice(0, 10); if (me && !top.some(r => r.name === me)) top.push(all.find(r => r.name === me) || { name: me, damage: 0, rank: all.length + 1 }); return top; }
 }
 
 // Future: add SupabaseBackend with the same interface and select it here.
