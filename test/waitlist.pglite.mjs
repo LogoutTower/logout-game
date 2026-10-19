@@ -38,4 +38,10 @@ assert.equal(await count(), 30);
 await fails(as('anon', `select public.join_waitlist($1, '')`, ['late@flood.net']), /slow_down/, 'throttled');
 await db.exec(`update public.waitlist set created_at = now() - interval '2 minutes'`);
 assert.equal((await as('anon', `select public.join_waitlist($1, '') r`, ['late@flood.net'])).rows[0].r, 'ok', 'throttle clears after a minute');
+// public count: anon/authenticated get a bare bigint, no emails; also runs on its own (waitlist-count.sql)
+await db.exec(fs.readFileSync(new URL('../supabase/waitlist-count.sql', import.meta.url), 'utf8'));
+for (const role of ['anon', 'authenticated']) { const r = await as(role, `select public.waitlist_count() n`); assert.equal(Number(r.rows[0].n), await count(), `${role} sees the count`); assert.deepEqual(r.fields.map(f => f.name), ['n']); assert.ok(!/@/.test(JSON.stringify(r.rows)), 'no email leaks'); }
+assert.equal((await as('anon', `select pg_typeof(public.waitlist_count())::text t`)).rows[0].t, 'bigint');
+await as('anon', `select public.join_waitlist($1, '')`, ['count.me@example.org']); assert.equal(Number((await as('anon', `select public.waitlist_count() n`)).rows[0].n), await count(), 'count follows signups');
+await db.exec(`truncate public.waitlist`); assert.equal(Number((await as('anon', `select public.waitlist_count() n`)).rows[0].n), 0, 'empty list counts 0');
 console.log('waitlist (pglite) tests passed');

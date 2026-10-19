@@ -23,3 +23,4 @@ button:disabled{opacity:.5;cursor:default}
 .vh,.hp{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 @media (min-width:700px){.tw,.px{width:120px;height:256px}.tw{margin-bottom:36px}}
 @media (prefers-reduced-motion:reduce){.tw,.lamp{animation:none}}
+.cnt{margin:4px 0 0;font-size:11px;letter-spacing:.2em;color:#4c4758}.cnt[hidden]{display:none}
