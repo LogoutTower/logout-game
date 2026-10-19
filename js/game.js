@@ -7,6 +7,7 @@ export const CLASSES = {
 };
 // Boss names, HP curve and the 100-floor plan live in floors.js.
 export { floorBossHp, bossName, bossInfo } from './floors.js';
+import { mechDps, mechDrain } from './floors.js';
 import { talentBonus } from './talents.js';
 export { talentBonus };
 
@@ -72,6 +73,7 @@ export const layerMul = save => { const e = effectsOf(save.heroes[0]), c = save.
   const t = talentBonus(save.heroes[0]), w = save.heroes[0].equip?.weapon;
   if (t.layerPct && (c.bossPct ?? 1) < FX.lastLayer.below) m *= 1 + t.layerPct / 100;
   if (t.elementPct && w && c.element && w.element === c.element) m *= 1 + t.elementPct / 100;
+  m *= mechDps(c, w?.element); // floor signature mechanic (arc 2+), live context only
   return m; };
 export const effectiveDps = save => totalDps(save.heroes) * (!save.ctx?.gm && isWorn(save.heroes[0]) ? lowMulOf(save.heroes[0]) : 1) * (buffsOf(save).elixir > 0 ? ELIXIR.mul : 1) * layerMul(save) * ((save.ctx?.bossPct ?? 1) < 0.5 ? 1 + talentBonus(save.heroes[0]).lowBossPct / 100 : 1);
 /** Simulate `secs` of fighting (live or offline: same rules). Splits time at HP-threshold and buff-expiry breakpoints.
@@ -79,7 +81,7 @@ export const effectiveDps = save => totalDps(save.heroes) * (!save.ctx?.gm && is
 export function simulate(save, secs) {
   if (save.ctx?.gm) save.heroes[0].hp = heroMaxHp(save.heroes[0]); // staff: no drain, never worn down (also restores HP drained before the unlock)
   const h = save.heroes[0], max = heroMaxHp(h), b = buffsOf(save), e = effectsOf(h), tb = talentBonus(h), raw = max / DRAIN_SECS * (e.has('lifesteal') ? FX.lifesteal : 1) * (e.has('drain') ? FX.drain : 1) * (e.has('aegis') ? FX.aegis : 1) * (e.has('stillness') ? FX.stillness : 1) * (e.has('dodge') ? FX.dodgeDrain : 1);
-  const drain = save.ctx?.gm ? 0 : Math.max(raw * 0.1, raw * (1 - tb.drainPct / 100) - tb.regenPct / 100 * max / 60); // talents: slower drain + regen
+  const drain = save.ctx?.gm ? 0 : Math.max(raw * 0.1, raw * mechDrain(save.ctx) * (1 - tb.drainPct / 100) - tb.regenPct / 100 * max / 60); // talents: slower drain + regen
   const base = totalDps(save.heroes) * layerMul(save), lowMul = lowMulOf(h), hearth = e.has('hearth');
   const gM = goldMul(save.heroes) * decreeMul(save) * guildMul(save), xM = xpMul(save.heroes) * decreeMul(save) * guildMul(save);
   let hp = heroHp(h), t = Math.max(0, secs), dmg = 0, gold = 0, xp = 0, lowSecs = 0;

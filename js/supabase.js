@@ -15,7 +15,7 @@ export const isDeadSession = e => { const m = String(e?.message || ''), st = e?.
   return /user not found|does not exist|invalid refresh token|refresh token not found|session.*(missing|not found)|invalid jwt|bad_jwt/i.test(m) || st === 401 || st === 403 || (st === 400 && /refresh/i.test(m)); };
 export class SupabaseBackend {
   name = 'supabase';
-  constructor(client, { maxFloor = 10, cacheKey = 'logout.v1', storage = globalThis.localStorage, now = () => Date.now(), redirectTo = '' } = {}) {
+  constructor(client, { maxFloor = 20, cacheKey = 'logout.v1', storage = globalThis.localStorage, now = () => Date.now(), redirectTo = '' } = {}) {
     Object.assign(this, { sb: client, maxFloor, k: cacheKey, store: storage, now, redirectTo });
     this.pending = 0; this.lastFlush = 0; this.floor = null; this.lastPoll = 0; this.seenClear = 0; this.user = null; this.role = 'player'; this.meta = {};
   }

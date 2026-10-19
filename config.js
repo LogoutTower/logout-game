@@ -1,4 +1,4 @@
-export const MAX_FLOOR = 10;
+export const MAX_FLOOR = 20; // arcs 1-2 open (floors 1-20); the server cap is floor_state.max_floor (schema-addendum-floors-11-20.sql)
 export const OFFLINE_CAP_HOURS = 12;
 // ---- Online services. Used only when FEATURES.online is 'all' AND both values are set; otherwise offline/local mode (the game works exactly as before).
 export const SUPABASE_URL = 'https://wouftzosktizxjfvflsz.supabase.co';

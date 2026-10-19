@@ -66,6 +66,8 @@ const U_ABASE = ['Aegis', 'Warplate', 'Hauberk', 'Bulwark', 'Carapace', 'Shroud'
 const U_BASE = ['Thornblade', 'Greatsword', 'Halberd', 'Warglaive', 'Moonsabre', 'Runeblade', 'Warpick', 'Spellstaff', 'Fangspear', 'Cleaver', 'Longbrand', 'Starhook'];
 const U_EPI = ['the Ninth Bell', 'the Last Login', 'the Hollow Crown', 'the Quiet Server', 'the Unpatched Night', 'the Broken Compass', 'the Ashen Choir', 'the Final Layer',
   'the Lost Party', 'the Silent Admin', 'the Endless Queue', 'the Pale Dawn', 'the Severed Link', 'the Thousand Floors', 'the Empty Throne', 'the Frozen Clock'];
+// Arc 2 (Frozen Clockspire, floors 11+) adds its own epithets to the pool.
+const U_EPI2 = ['the Stopped Clock', 'the First Gear', 'the Long Winter', 'the Spent Hour', 'the Glass Pane', 'the Mainspring', 'the Rime Thread', 'the Thirteenth Chime'];
 const U_LORE = ['This weapon does not exist in the item database. It exists anyway.', 'Forged once. The template was deleted afterwards.', 'No other player will ever hold this exact item.',
   'Checksum mismatch. The tower decided to let you keep it.', 'It remembers the guardian it was taken from.', 'Drop table entry: [REDACTED]. Congratulations.'];
 export const uniqueSerial = (floor, r) => `F${floor}-${Math.floor(r() * 0x10000).toString(16).toUpperCase().padStart(4, '0')}`;
@@ -75,7 +77,7 @@ function makeUnique(r, floor, element, seq, ownedNames = [], force = {}) {
   const dr0 = force.dr ? DRAWBACKS.find(x => x.id === force.dr) : pick(r, okD), s = scale(floor);
   const dr = slot === 'armor' && dr0.id === 'whisper' ? { ...dr0, text: 'The armor whispers in the Chronicle (cosmetic)' } : dr0;
   let name, tries = 0;
-  do name = `${ELEMENT_WORD[element] || 'Tower'}${pick(r, U_PRE)} ${pick(r, slot === 'armor' ? U_ABASE : U_BASE)} of ${pick(r, U_EPI)}`; while (ownedNames.includes(name) && ++tries < 20);
+  do name = `${ELEMENT_WORD[element] || 'Tower'}${pick(r, U_PRE)} ${pick(r, slot === 'armor' ? U_ABASE : U_BASE)} of ${pick(r, floor > 10 ? [...U_EPI, ...U_EPI2] : U_EPI)}`; while (ownedNames.includes(name) && ++tries < 20);
   const stats = slot === 'armor' ? { dpsPct: Math.round((3 + floor / 8) * 3 * 1.2) } // ~20% above a Legendary armor of the same floor
     : { dps: +(1.5 * s * 3.6).toFixed(1), dpsPct: Math.round((6 + r() * 6) * 1.2) }; // above a Legendary of the same floor (mul 3 → 3.6)
   for (const src of [ab.stats, dr.stats]) for (const [k, v] of Object.entries(src || {})) stats[k] = (stats[k] || 0) + v;
@@ -120,11 +122,20 @@ export function rollItem(r, floor, element, seq = 0, weights = null, owned = [])
 }
 const pick = (r, a) => a[Math.floor(r() * a.length)];
 const hash = s => { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
+// Signature drops (arc 2+): an Epic or Legendary piece in a slot the guardian has a signature for becomes that named item half the time.
+// Same stats as the roll (no power creep); only the name, a flag and a lore line change.
+export const SIGNATURE_RARITIES = ['epic', 'legendary'];
+export function signature(r, floor, it) {
+  const sig = bossInfo(floor).sig || []; if (!sig.length || !SIGNATURE_RARITIES.includes(it.rarity)) return it;
+  const m = sig.find(x => x.slot === it.slot); if (!m || r() >= 0.5) return it;
+  return { ...it, name: m.name, signature: true, lore: `System notice: signature drop of ${bossInfo(floor).name}, Floor ${floor}.` };
+}
+export const signatureList = () => Array.from({ length: 100 }, (_, i) => bossInfo(i + 1)).flatMap(b => (b.sig || []).map(s => ({ floor: b.floor, boss: b.name, ...s })));
 /** Seeded drops for one boss kill. Same (heroId, floor, seq, share) always gives the same result. */
 export function rollDrops({ heroId = 'hero', floor, share, seq = 0, owned = [], ownedU = [], luck = 1 , elementOverride = null }) {
   const r = rng(hash(`${heroId}|${floor}|${seq}`)), element = elementOverride || bossInfo(floor).lootElement, special = isSpecialSlot(floor), items = [];
   const rolls = special ? 2 : 1;
-  for (let i = 0; i < rolls; i++) if (r() < Math.min(1, gearChance(share, floor) * luck)) items.push(rollItem(r, floor, element, `${seq}.${i}`, null, ownedU));
+  for (let i = 0; i < rolls; i++) if (r() < Math.min(1, gearChance(share, floor) * luck)) items.push(signature(r, floor, rollItem(r, floor, element, `${seq}.${i}`, null, ownedU)));
   let cosmetic = null;
   if (share > 0 && r() < (special ? COSMETIC_CHANCE.special : COSMETIC_CHANCE.normal)) { const c = DROP_COSMETICS.find(x => x.unlock.drop === element); if (c && !owned.includes(c.id)) cosmetic = c.id; }
   return { items, cosmetic, element };
@@ -174,7 +185,7 @@ export function salvageItem(save, invIndex) { const it = save.inv[invIndex]; if 
 export const legendaryWeaponDps = f => +(1.5 * scale(f) * 3).toFixed(1);
 /** Base % DPS of a Legendary armor on floor f (parity reference for Vesperveil). */
 export const legendaryArmorPct = f => Math.round((3 + f / 8) * 3);
-export { AFFIXES, scale as gearScale, ELEMENT_WORD, U_PRE, U_BASE, U_EPI };
+export { AFFIXES, scale as gearScale, ELEMENT_WORD, U_PRE, U_BASE, U_EPI, U_EPI2 };
 
 // ---- Codex hooks (staff only; talentBonus/hero class gate them, so they are inert for everyone else)
 /** Salvage payout incl. Second Draft (seeded chance to pay double). */

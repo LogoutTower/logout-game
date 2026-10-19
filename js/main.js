@@ -3,7 +3,8 @@ import { makeBackend, onlineConfigured } from './storage.js';
 import { BUILD } from './build.js';
 import { priceFor, innCost, rest, shopStock, buy as shopBuy, soldOut, npcGrid } from './town.js';
 import { sprite } from './sprites.js';
-import { isSpecialSlot, bossInfo } from './floors.js';
+import { isSpecialSlot, bossInfo, mechText } from './floors.js';
+import { arcOf, arcIndex, sceneOf, sceneVars } from './arcs.js';
 import { treeOf, nodeById, canLearn, learn, freePoints, totalPoints, spentIn, respec, respecCost } from './talents.js';
 import { TRICKLE, trickleDrops, grantDrops, equipItem, salvageItem, salvageValue, rarityOf, statLabel, INV_SIZE, bagSize, GEAR_SLOTS } from './loot.js';
 import { GM_PASS_HASH, OFFLINE_CAP_HOURS, MAX_FLOOR, FEATURES, SOLANA_RPC, TOKEN_MINT, HOLDER_THRESHOLD } from '../config.js';
@@ -119,7 +120,7 @@ function openWardrobe() {
 }
 async function startGame(fresh = false) {
   $('game').classList.remove('hidden');
-  floor = await be.getFloor(); log(`${save.heroes[0].name} awoke on Floor ${floor.floor}. The guardian stirs.`); log('System notice: log out disabled.');
+  floor = await be.getFloor(); arcCheck(); log(`${save.heroes[0].name} awoke on Floor ${floor.floor}. The guardian stirs.`); log('System notice: log out disabled.');
   if (fresh) { notice('Log out disabled'); setTimeout(() => notice(`Floor ${floor.floor} is open`), 900); } // no replayed notices on reload
   $('lvl').onclick = () => buy('level'); $('gear').onclick = () => buy('gear');
   initUI({ gear: () => $('gearSheet').showModal(), bag: openBag, talents: () => { talSel = null; openTalents(); }, wardrobe: openWardrobe, town: openTown, guild: openGuild });
@@ -131,7 +132,7 @@ async function startGame(fresh = false) {
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
 function tick() {
-  save.ctx = { gm: gmValid, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (floor.gmUntil || 0) > Date.now(), guild: !!myGuild && !myGuild.is_staff, guildPct: myGuild?.is_staff || gv2Info?.guild?.is_staff ? 0 : gv2Info?.guild?.bonus_pct ?? null, decreePct: decreePctNow(), decree: gmValid || (floor.gmUntil || 0) > Date.now() || echoUntil > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, sessionSecs: (Date.now() - sessionStart) / 1000 };
+  save.ctx = { gm: gmValid, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (floor.gmUntil || 0) > Date.now(), guild: !!myGuild && !myGuild.is_staff, guildPct: myGuild?.is_staff || gv2Info?.guild?.is_staff ? 0 : gv2Info?.guild?.bonus_pct ?? null, decreePct: decreePctNow(), decree: gmValid || (floor.gmUntil || 0) > Date.now() || echoUntil > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, mech: bossInfo(floor.floor).mech, sessionSecs: (Date.now() - sessionStart) / 1000 };
   { const uh = unwrittenHour(save.ctx), ar = $('arena'); if (ar.classList.contains('unwritten') !== uh) { ar.classList.toggle('unwritten', uh); ar.title = uh ? 'The Unwritten Hour: +5% damage until the guardian falls' : ''; } }
   const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS), fx = effectsOf(save.heroes[0]);
   if (fx.has('whisper') && Date.now() - lastWhisper > 120000) { lastWhisper = Date.now(); log(WHISPERS[Math.floor(Math.random() * WHISPERS.length)], '#b9a8ff'); }
@@ -154,8 +155,22 @@ async function sync() {
   const quiet = quietSync; quietSync = false; // clears that happened before this session are logged, not re-toasted
   if (r.advanced) { const f = r.floor - 1; log(`${bossName(f)} fell beneath many blades. The stair to Floor ${r.floor} lies open.`); log(`System notice: Floor ${r.floor} is open.`); floorCleared(f); setTimeout(() => notice(`Floor ${r.floor} is open`), 2400); codexFloorFell(f, r.floor); }
   handleClears(r.clears, quiet);
-  floor = await be.getFloor(); gmFloorChecks(); await be.saveSave(save); render(); renderLb();
+  floor = await be.getFloor(); arcCheck(); gmFloorChecks(); await be.saveSave(save); render(); renderLb();
 }
+// ---- Arc scenes (js/arcs.js): one scene per 10 floors, per-floor tint toward the guardian's element.
+let sceneFor = 0;
+function applyScene(f) {
+  if (sceneFor === f) return; sceneFor = f; const ar = $('arena'), bi = bossInfo(f), s = sceneOf(f, ELEMENT_GLOW[bi.lootElement]);
+  for (const [k, v] of sceneVars(s)) ar.style.setProperty(k, v);
+  Object.assign(ar.dataset, { arc: s.arc, props: s.props, particles: s.particles }); ar.classList.toggle('finale', !!bi.finale); ar.classList.toggle('special', isSpecialSlot(f));
+  for (const c of ['gear l', 'gear r', 'icicles']) if (!ar.querySelector('.' + c.replace(' ', '.'))) { const d = document.createElement('div'); d.className = c; d.setAttribute('aria-hidden', 'true'); ar.prepend(d); }
+  if (!$('amb')) { const d = document.createElement('div'); d.id = 'amb'; d.setAttribute('aria-hidden', 'true'); ar.prepend(d); }
+}
+const ELEMENT_GLOW = { fire: '#ff8a2e', frost: '#9fd8ff', void: '#9a5cff', storm: '#8aa8e8', venom: '#8ae04a', holy: '#f4e2a8', blood: '#e04a5a', shadow: '#5a5078' };
+// "Entering <arc>": once per device when the shared floor first reaches a new arc (silent on the very first visit).
+function arcCheck() { const a = arcIndex(floor.floor), k = 'logout.v1.arcSeen', seen = +localStorage.getItem(k) || 0;
+  if (seen && a > seen) { const n = arcOf(floor.floor).name; log(`System notice: Entering ${n}.`, '#9fd8ff'); setTimeout(() => notice(`Entering ${n}`, '#9fd8ff'), 3200); }
+  if (a > seen) localStorage.setItem(k, String(a)); }
 function buy(kind) {
   const h = save.heroes[0], c = kind === 'level' ? levelCost(h) : gearCost(h); if (save.gold < c) return;
   save.gold -= c; kind === 'level' ? h.level++ : h.gear++; log(kind === 'level' ? `${h.name} trained through the night and rose to level ${h.level}.` : `The forge rang out; ${h.name}'s gear was tempered to +${h.gear}.`);
@@ -164,9 +179,11 @@ function buy(kind) {
 function render() {
   const h = save.heroes[0];
   $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; $('boss').style.backgroundImage = bossSprite(floor.floor); $('boss').classList.toggle('big', bossIsBig(floor.floor));
-  const won = floor.floor >= MAX_FLOOR && floor.hp <= 0;
-  H('bname').textContent = won ? 'Log out enabled' : bossName(floor.floor);
-  H('floor').textContent = won ? 'System notice · the tower is silent' : `Guardian of Floor ${floor.floor} / ${MAX_FLOOR}`;
+  const won = floor.floor >= MAX_FLOOR && floor.hp <= 0, waiting = !won && floor.hp <= 0, bi = bossInfo(floor.floor), arc = arcOf(floor.floor); applyScene(floor.floor);
+  // end of content after the last open floor; 'waiting' = the server has not opened the next floor yet (e.g. its floor cap is still lower)
+  H('bname').textContent = won ? 'The spire falls silent' : bossName(floor.floor);
+  H('floor').textContent = won ? `System notice · Floor ${MAX_FLOOR + 1} is sealed. The next arc has not opened.` : waiting ? `System notice · the stair to Floor ${floor.floor + 1} is opening soon · ${arc.name}` : `${bi.title} · Floor ${floor.floor} / ${MAX_FLOOR} · ${arc.name}`;
+  $('floor').title = bi.lore ? bi.lore.replace(/^System notice: /, '') : '';
   const pct = floor.hp / floor.maxHp, lay = Math.ceil(pct * LAYERS - 1e-9), inLayer = pct * LAYERS - (lay - 1);
   H('layers').innerHTML = Array.from({ length: LAYERS }, (_, i) => `<i class="${i < lay ? 'on' : ''}"></i>`).join('');
   const c = hpColor(pct); $('hpfill').style.width = (lay ? inLayer * 100 : 0) + '%'; $('hpfill').style.background = `linear-gradient(90deg, ${c}aa, ${c})`; $('hpfill').style.color = c;
@@ -176,7 +193,7 @@ function render() {
   $('hhp').title = `HP ${Math.round(heroHp(h))} / ${heroMaxHp(h)}`;
   const b = buffsOf(save), mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   H('buffs').innerHTML = [worn ? '<span class="buff bad" title="Below 30% HP: DPS halved">Worn down · DPS ½</span>' : '', b.rested > 0 ? `<span class="buff" title="+15% gold and XP">Well Rested ${mmss(b.rested)}</span>` : '',
-    b.elixir > 0 ? `<span class="buff" title="+25% DPS">Fury ${mmss(b.elixir)}</span>` : '', b.vigil > 0 ? `<span class="buff" title="Offline cap raised once">Vigil +${b.vigil}h</span>` : '', unwrittenHour(save.ctx) ? '<span class="buff gold" title="Vesperveil: +5% damage for heroes on this floor until the guardian falls">The Unwritten Hour · +5%</span>' : '', h.cls === GM_CLASS && h.look.aura === 'gm-aura' ? (g => `<span class="buff gold" id="galaxyTier" title="${esc(g.desc)}">Galaxy · Tier ${g.tier} · ${esc(g.name)}</span>`)(galaxyTier(h.level)) : ''].join('');
+    b.elixir > 0 ? `<span class="buff" title="+25% DPS">Fury ${mmss(b.elixir)}</span>` : '', b.vigil > 0 ? `<span class="buff" title="Offline cap raised once">Vigil +${b.vigil}h</span>` : '', (m => m ? `<span class="buff mech" title="${esc(m)}">${esc(m.split(':')[0])}</span>` : '')(mechText(bossInfo(floor.floor).mech)), unwrittenHour(save.ctx) ? '<span class="buff gold" title="Vesperveil: +5% damage for heroes on this floor until the guardian falls">The Unwritten Hour · +5%</span>' : '', h.cls === GM_CLASS && h.look.aura === 'gm-aura' ? (g => `<span class="buff gold" id="galaxyTier" title="${esc(g.desc)}">Galaxy · Tier ${g.tier} · ${esc(g.name)}</span>`)(galaxyTier(h.level)) : ''].join('');
   const xp = h.xp / xpToNext(h.level); H('hxp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < xp ? '' : 'off'}"></i>`).join('');
   H('stats').innerHTML = `${classOf(h.cls).icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${effectiveDps(save).toFixed(1)}</b> · HP <b>${Math.round(heroHp(h))}/${heroMaxHp(h)}</b> · Gold <b>${fmt(save.gold)}</b>`;
   H('lvlL').textContent = `Train ${fmt(levelCost(h))}g`; $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`; $('lvl').disabled = save.gold < levelCost(h);
@@ -260,6 +277,7 @@ const TOUR = [
   { t: 'Hero', x: 'Gear, Bag (boss loot), Talents and Wardrobe (cosmetic only). A dot means unspent talent points or a nearly full bag.', el: () => $('tabHero') },
   { t: 'One guardian, whole server', x: 'Everyone in the tower shares this boss. Top damage when it falls earns titles, name colours and other rewards. Tap the strip for the full board.', el: () => matchMedia('(min-width: 1000px)').matches ? $('side') : $('top3') },
   { t: 'Layers', x: 'The guardian\'s HP comes in layers: each diamond is one full HP bar. Break every layer to clear the floor and open the stair.', el: () => $('layers').closest('.gauge') },
+  { t: 'Arcs', x: `Every ten floors is an arc with its own scene: Floors 1–10 are ${arcOf(1).name}, 11–${MAX_FLOOR} climb ${arcOf(11).name}. Clockspire guardians each have a signature mechanic (the chip under your buffs) and 1–2 signature drops. Floor 15 is special; Floor 20 is the finale.`, el: () => $('floorBtn') },
   { t: 'More', x: 'Tower Map (or tap the floor up top), leaderboard, floor chat, your chronicle, System for sign-in and settings, and this guide.', el: () => $('tabMore') },
 ];
 let tourAt = -1;
@@ -521,7 +539,7 @@ async function openMap() {
   $('mapProg').innerHTML = `<div class="mprog"><b>Floor ${pr.floor} / ${pr.top}</b><span>${pr.cleared} cleared${heroes != null ? ` · ${heroes} hero${heroes === 1 ? '' : 'es'} on this floor` : ''}</span>
     <div class="bar"><i style="width:${pr.pct.toFixed(1)}%"></i></div><small>Tower ${pr.pct.toFixed(0)}% · guardian HP ${fmt(floor.hp)} / ${fmt(floor.maxHp)}</small>
     <div class="bar hp"><i style="width:${(pr.bossPct * 100).toFixed(1)}%"></i></div><p class="sub">Logout returns when Floor ${TOWER_TOP} falls.</p></div>`;
-  $('mapTower').innerHTML = rows.map(r => `${r.f === TOWER_TOP ? '<div class="crown" aria-hidden="true">♛</div>' : ''}<button class="fl ${r.state}${r.crown ? ' top' : ''}${r.special ? ' sp' : ''}" data-f="${r.f}" ${r.state === 'cleared' ? '' : 'aria-disabled="true"'}>
+  $('mapTower').innerHTML = rows.map(r => `${r.f === TOWER_TOP ? '<div class="crown" aria-hidden="true">♛</div>' : ''}${r.f % 10 === 0 ? `<div class="band" style="--band:${r.band}"><span>${r.f - 9}–${r.f}</span> ${esc(r.arcName)}</div>` : ''}<button class="fl ${r.state}${r.crown ? ' top' : ''}${r.special ? ' sp' : ''}${r.finale ? ' fin' : ''}" style="--band:${r.band}" data-f="${r.f}" ${r.state === 'cleared' ? '' : 'aria-disabled="true"'}>
     <span class="fn">${r.f}</span><span class="fname">${esc(r.name)}${r.milestone && r.state !== 'undiscovered' ? ' <em>★</em>' : r.special && r.state !== 'undiscovered' ? ' <em>✦</em>' : ''}</span>
     <span class="fmeta">${r.state === 'cleared' ? (r.at ? `fell ${esc(when(r.at))}` : 'cleared') : r.state === 'current' ? `<b class="you">◆ You</b> ${Math.round(pr.bossPct * 100)}% HP` : ''}</span></button>`).join('');
   $('mapTower').onclick = e => { const b = e.target.closest('button.fl.cleared'); if (!b) return; const r = rows.find(x => x.f === +b.dataset.f), d = $('mapDetail');

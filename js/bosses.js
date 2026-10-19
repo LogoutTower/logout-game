@@ -85,6 +85,94 @@ export const BOSSES = [
     rect(21, 15, 3, 3, 'M');                                                                          // gauntlet on the grip line
   } },
 ];
+// ---- Arc 2 (floors 11-20): The Frozen Clockspire. Above the keep the tower turns to frozen brass, glass and stopped clocks.
+// title / lore / mech / sig are read by floors.js (mechanics) and loot.js (signature drops).
+export const ARC2 = [
+  { name: 'The Brass Sentinel', key: 'sentinel', noun: 'Sentinel', no: '', title: 'Keeper of the First Gear', element: 'storm', mech: 'casing',
+    lore: 'System notice: the first gear still turns. The Sentinel was built to stop anyone who notices.',
+    sig: [{ slot: 'armor', name: 'First Gear Casing' }, { slot: 'weapon', name: "Sentinel's Escapement" }],
+    pal: { B: '#c8a04a', D: '#7a5a2a', M: '#8a93a8', S: '#dfe6f0', F: '#9fd8ff', E: '#5ff6ff', k: K }, draw: ({ rect, ell, line, px }) => {
+    rect(10, 12, 12, 11, 'B'); ell(16, 17, 4, 4, 'D'); ell(16, 17, 2, 2, 'B'); for (const [x, y] of [[16, 12], [16, 22], [11, 17], [21, 17]]) px(x, y, 'D'); px(16, 17, 'E'); // gear chest
+    ell(16, 7, 4, 4, 'B'); rect(13, 7, 7, 1, 'k'); px(14, 7, 'E'); px(18, 7, 'E'); line(16, 1, 16, 3, 'D'); ell(16, 1, 1, 1, 'F');           // helm, key-wind
+    ell(8, 13, 3, 2, 'M'); ell(24, 13, 3, 2, 'M'); rect(6, 14, 3, 9, 'D'); rect(23, 14, 3, 9, 'D'); rect(5, 22, 4, 3, 'M');
+    line(26, 4, 26, 29, 'M'); rect(25, 2, 3, 3, 'S'); px(26, 1, 'S');                                                                        // spear
+    rect(11, 23, 4, 6, 'D'); rect(17, 23, 4, 6, 'D'); rect(10, 29, 5, 2, 'B'); rect(17, 29, 5, 2, 'B'); for (const x of [12, 19]) px(x, 25, 'F');
+  } },
+  { name: 'The Rime Weaver', key: 'weaver', noun: 'Weaver', no: 'wings,crown', title: 'Spinner of Still Frost', element: 'frost', mech: 'frostbite',
+    lore: 'System notice: every thread is a second that will not pass. Do not stand in the web too long.',
+    sig: [{ slot: 'trinket', name: 'Spool of Still Seconds' }],
+    pal: { B: '#3a78c8', L: '#9fd8ff', W: '#f0fbff', D: '#14284a', E: '#5ff6ff', k: K }, draw: ({ ell, line, px }) => {
+    for (const [x, y] of [[2, 2], [30, 2], [2, 30], [30, 30], [16, 1]]) line(16, 14, x, y, 'L'); for (const r of [6, 11]) for (let a = 0; a < 8; a++) px(16 + Math.round(r * Math.cos(a * 0.785)), 14 + Math.round(r * Math.sin(a * 0.785)), 'W');
+    for (const s of [-1, 1]) for (let i = 0; i < 4; i++) { const y = 15 + i * 3; line(16 + 4 * s, y, 16 + 10 * s, y - 4, 'D'); line(16 + 10 * s, y - 4, 16 + 13 * s, y + 4, 'D'); }
+    ell(16, 19, 6, 6, 'B'); ell(16, 19, 3, 4, 'L'); px(16, 18, 'W'); ell(16, 11, 4, 3, 'B'); for (const x of [14, 16, 18]) px(x, 10, 'E');
+  } },
+  { name: 'The Pendulum Knight', key: 'pendulum', noun: 'Pendulum Knight', no: 'wings', title: 'Swing of the Hour', element: 'shadow', mech: 'weak:holy',
+    lore: 'System notice: it strikes on the hour, every hour. Hallowed steel interrupts the count.',
+    sig: [{ slot: 'weapon', name: 'Hourstroke Pendulum' }, { slot: 'armor', name: 'Tick-Tock Brigandine' }],
+    pal: { P: '#2a2440', M: '#5a5078', S: '#c8d0e0', G: '#c8a85a', E: '#5ff6ff', k: K }, draw: ({ rect, ell, line, px }) => {
+    rect(1, 2, 30, 1, 'G'); line(16, 3, 26, 22, 'G'); ell(26, 24, 4, 3, 'S'); rect(23, 24, 7, 1, 'k');                                       // pendulum blade
+    rect(9, 11, 12, 18, 'P'); rect(11, 11, 8, 9, 'M'); ell(15, 6, 4, 5, 'M'); rect(12, 6, 7, 1, 'E'); line(15, 1, 15, 2, 'G');
+    ell(9, 12, 3, 2, 'M'); ell(21, 12, 3, 2, 'M'); line(21, 13, 24, 17, 'M', 2); rect(11, 29, 4, 2, 'M'); rect(16, 29, 4, 2, 'M'); px(15, 15, 'G'); px(15, 17, 'G');
+  } },
+  { name: 'The Cogwyrm', key: 'cogwyrm', noun: 'Cogwyrm', no: 'wings', title: 'Engine That Hungers', element: 'fire', mech: 'enrage',
+    lore: 'System notice: its boiler runs hotter as it breaks. The last layer burns.',
+    sig: [{ slot: 'weapon', name: 'Boilerheart Fang' }],
+    pal: { B: '#a8321a', L: '#ff8a2e', G: '#c8a04a', D: '#5a2a1a', W: '#ffe08a', E: '#fff3a0', k: K }, draw: ({ ell, line, px }) => {
+    const seg = [[25, 27], [19, 28], [12, 26], [8, 21], [11, 16], [17, 14], [22, 10], [20, 5]];
+    seg.forEach(([x, y], i) => { const r = 4 - Math.floor(i / 3); ell(x, y, r, r, 'B'); ell(x, y, Math.max(1, r - 2), Math.max(1, r - 2), 'G'); px(x, y, 'D'); px(x - r, y, 'L'); px(x + r, y, 'L'); });
+    ell(14, 5, 4, 3, 'B'); line(9, 6, 11, 7, 'W'); px(13, 4, 'E'); px(15, 3, 'E'); line(11, 3, 9, 1, 'G'); line(16, 2, 17, 0, 'G'); px(28, 30, 'L'); px(30, 29, 'W');
+  } },
+  { name: 'The Stilled Hour', key: 'hourglass', noun: 'Hourglass', no: 'wings,horns,crown', title: 'The Moment Between Moments', element: 'void', mech: 'stillHour', special: true,
+    lore: 'System notice: halfway up the spire, time stops to look at you. Strike while the sand is falling.',
+    sig: [{ slot: 'trinket', name: 'Grain of the Stilled Hour' }, { slot: 'armor', name: 'Mantle of Held Breath' }],
+    pal: { F: '#c8a85a', D: '#4a1d8a', G: '#9a5cff', S: '#e0c8ff', W: '#f4e2a8', E: '#ff4fd8', k: K }, draw: ({ rect, line, tri, px }) => {
+    rect(5, 2, 22, 3, 'F'); rect(5, 27, 22, 3, 'F'); for (const x of [6, 25]) rect(x, 5, 2, 22, 'F');
+    tri([9, 5], [23, 5], [16, 15], 'G'); tri([9, 26], [23, 26], [16, 16], 'G'); tri([11, 6], [21, 6], [16, 12], 'S'); tri([12, 26], [20, 26], [16, 21], 'W');
+    line(16, 13, 16, 22, 'W'); px(13, 8, 'E'); px(19, 8, 'E'); rect(14, 10, 5, 1, 'k'); for (const [x, y] of [[2, 10], [29, 14], [3, 22], [28, 24]]) px(x, y, 'E');
+  } },
+  { name: 'The Frostbound Matron', key: 'matron', noun: 'Matron', no: 'crown', title: 'Mother of the Long Winter', element: 'frost', mech: 'weak:fire',
+    lore: 'System notice: she keeps the spire cold so nothing in it can wake. Bring fire.',
+    sig: [{ slot: 'armor', name: 'Gown of the Long Winter' }],
+    pal: { R: '#3a78c8', L: '#9fd8ff', W: '#f0fbff', S: '#d8e8f4', D: '#14284a', E: '#5ff6ff', k: K }, draw: ({ rect, ell, line, flare, px }) => {
+    flare(12, 30, 16, 3, 11, 'R'); for (let x = 6; x <= 26; x += 3) line(x, 22, x - 1, 30, 'L'); line(16, 13, 16, 29, 'D');
+    for (const x of [10, 13, 16, 19, 22]) line(x, 4, x, 1 + (x % 2), 'W'); rect(10, 4, 13, 1, 'L');                                           // icicle crown
+    ell(16, 8, 4, 4, 'S'); px(14, 8, 'D'); px(18, 8, 'D'); px(14, 8, 'E'); px(18, 8, 'E'); line(12, 13, 4, 18, 'R', 2); line(20, 13, 28, 18, 'R', 2);
+    ell(3, 19, 2, 2, 'W'); ell(29, 19, 2, 2, 'W'); for (const [x, y] of [[2, 6], [29, 5], [4, 27], [28, 26]]) px(x, y, 'W');
+  } },
+  { name: 'The Gearhound', key: 'gearhound', noun: 'Gearhound', no: 'wings', title: 'It Runs Down Everything', element: 'blood', mech: 'enrage',
+    lore: 'System notice: wound tight and let loose. When it is nearly spent, it bites hardest.',
+    sig: [{ slot: 'weapon', name: 'Mainspring Jaw' }, { slot: 'trinket', name: 'Hound-Key' }],
+    pal: { B: '#8a1a2a', M: '#8a93a8', D: '#3a1018', G: '#c8a04a', W: '#f4ead8', E: '#ff3355', k: K }, draw: ({ rect, ell, line, tri, px }) => {
+    line(25, 18, 30, 9, 'M', 2); ell(30, 8, 1, 1, 'G'); ell(18, 19, 9, 5, 'B'); ell(18, 19, 3, 3, 'G'); px(18, 19, 'D'); for (const x of [12, 16, 20, 24]) px(x, 15, 'M');
+    rect(10, 22, 3, 8, 'M'); rect(14, 23, 3, 7, 'D'); rect(21, 22, 3, 8, 'M'); rect(25, 22, 3, 8, 'D');
+    ell(8, 14, 5, 4, 'B'); rect(1, 15, 6, 3, 'M'); tri([5, 11], [7, 4], [10, 11], 'M'); px(7, 13, 'E'); px(8, 13, 'E'); rect(1, 18, 6, 1, 'k'); for (const x of [2, 4, 6]) px(x, 18, 'W');
+  } },
+  { name: 'The Glass Seraph', key: 'glassseraph', noun: 'Glass Seraph', no: 'wings', title: 'Light Caught in the Pane', element: 'holy', mech: 'weak:void',
+    lore: 'System notice: it reflects every blow back into the light. Only the void leaves no reflection.',
+    sig: [{ slot: 'weapon', name: 'Paneshard Sabre' }, { slot: 'armor', name: 'Leaded Glass Aegis' }],
+    pal: { W: '#f4e2a8', L: '#fffbe8', G: '#c8a85a', P: '#9fd8ff', S: '#f1d1b5', E: '#ffffff', k: K }, draw: ({ ell, line, tri, flare, px }) => {
+    tri([14, 12], [1, 2], [3, 24], 'P'); tri([18, 12], [31, 2], [29, 24], 'P'); for (let i = 0; i < 4; i++) { line(14, 12, 1 + i * 2, 4 + i * 5, 'G'); line(18, 12, 31 - i * 2, 4 + i * 5, 'G'); }
+    flare(12, 30, 16, 2, 6, 'L'); line(16, 13, 16, 29, 'W'); ell(16, 8, 3, 3, 'S'); px(15, 8, 'k'); px(17, 8, 'k'); ell(16, 3, 5, 1, 'G'); ell(16, 3, 3, 0, '.'); px(16, 2, 'E');
+  } },
+  { name: 'The Keeper of Spent Hours', key: 'keeper', noun: 'Keeper', no: 'horns', title: 'Archivist of Lost Time', element: 'shadow', mech: 'frostbite',
+    lore: 'System notice: it keeps every hour you spent in the tower. It is not giving them back.',
+    sig: [{ slot: 'trinket', name: 'Ledger of Spent Hours' }],
+    pal: { R: '#2a2440', M: '#5a5078', F: '#e6dcc8', G: '#c8a85a', D: '#0c0a14', E: '#5ff6ff', k: K }, draw: ({ rect, ell, line, flare, px }) => {
+    flare(13, 30, 15, 4, 10, 'R'); for (let x = 6; x <= 24; x += 3) rect(x, 30, 1, 1, 'R'); line(15, 14, 15, 29, 'M');
+    ell(15, 8, 6, 6, 'G'); ell(15, 8, 5, 5, 'F'); line(15, 8, 15, 4, 'D'); line(15, 8, 18, 9, 'D'); for (const [x, y] of [[15, 3], [20, 8], [15, 13], [10, 8]]) px(x, y, 'D'); px(15, 8, 'E');
+    line(10, 16, 5, 22, 'R', 2); line(20, 16, 25, 21, 'R', 2); rect(24, 19, 5, 7, 'F'); for (const y of [21, 23]) rect(25, y, 3, 1, 'M'); px(4, 23, 'E');
+  } },
+  { name: 'The Unwound Sovereign', key: 'sovereign', noun: 'Sovereign', no: 'wings,horns,crown,plates', big: true, finale: true, title: 'Heart of the Clockspire', element: 'void', mech: 'overclock',
+    lore: 'System notice: the spire\'s mainspring has a crown. When it unwinds, everything in the arc runs fast: you, and it.',
+    sig: [{ slot: 'weapon', name: 'Mainspring of the Sovereign' }, { slot: 'armor', name: 'Crown-Gear Hauberk' }],
+    pal: { V: '#4a1d8a', D: '#120626', G: '#c8a04a', W: '#f4e2a8', S: '#9a5cff', F: '#9fd8ff', E: '#ff4fd8', k: K }, draw: ({ rect, ell, line, px }) => {
+    ell(16, 9, 11, 8, 'G'); ell(16, 9, 9, 6, 'D'); for (let a = 0; a < 12; a++) px(16 + Math.round(8 * Math.cos(a * 0.524)), 9 + Math.round(5 * Math.sin(a * 0.524)), 'W'); // clock-face crown
+    line(16, 9, 16, 5, 'E'); line(16, 9, 21, 10, 'E'); px(16, 9, 'W'); for (const x of [8, 12, 16, 20, 24]) { line(x, 1, x, 0, 'G'); px(x, 1, 'G'); }
+    rect(9, 17, 14, 11, 'V'); for (let y = 18; y < 27; y += 2) line(10, y, 21, y, 'S'); ell(16, 22, 3, 3, 'G'); px(16, 22, 'E');               // spring-wound torso
+    for (const s of [-1, 1]) { for (let i = 0; i < 5; i++) ell(16 + s * (10 + i), 18 + i * 2, 2, 1, i % 2 ? 'G' : 'S'); ell(16 + s * 14, 28, 2, 2, 'F'); }  // mainspring arms
+    rect(10, 28, 4, 3, 'D'); rect(18, 28, 4, 3, 'D');
+  } },
+];
 // Extra original base creatures (generated floors only; recoloured by element).
 export const EXTRA = [
   { key: 'beetle', noun: 'Beetle', no: '', pal: { B: '#3a6a5a', L: '#9ae0c8', D: '#1e3a32', H: '#c8d0b8', E: '#ffd84f', k: K }, draw: ({ rect, ell, line, px }) => {
@@ -133,7 +221,8 @@ export const EXTRA = [
     ell(16, 7, 5, 4, 'H'); ell(16, 8, 3, 3, 'S'); px(15, 8, 'E'); px(17, 8, 'E'); line(11, 6, 8, 3, 'H'); line(21, 6, 24, 3, 'H');
   } },
 ];
-export const SHAPES = Object.fromEntries([...BOSSES, ...EXTRA].map(b => [b.key, b]));
+export const SHAPES = Object.fromEntries([...BOSSES, ...ARC2, ...EXTRA].map(b => [b.key, b]));
+export const ARC2_KEYS = ARC2.map(b => b.key);
 export const HANDMADE = BOSSES.map(b => b.key);
 // Element palettes: every base colour is remapped by brightness onto a 4-step ramp; E becomes the element glow.
 export const ELEMENTS = {

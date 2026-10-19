@@ -30,6 +30,12 @@ for (let f = 1; f <= 100; f++) for (let b = 0; b < 6; b++) clean(T.shopStock(f, 
 clean([L.ABILITIES, L.ARMOR_ABILITIES, L.DRAWBACKS, L.U_PRE, L.U_BASE, L.U_ABASE, L.U_EPI, L.RARITIES, L.FORBIDDEN], 'Unique pools');
 for (let i = 0; i < 3000; i++) clean(L.rollItem(rng(70000 + i), 1 + (i % 100), 'void', i, [0, 0, 0, 0, 0, 1]), 'Unique weapons + armor');
 clean([C.CATALOG, C.SLOTS, C.CREATION_SLOTS, Object.keys(CLASSES), TREES], 'catalog/classes/trees');
+// floors 11-20 (arc 2): new bosses, signature drops, epithets, arc names and every drop path over many seeds
+{ const B = await import('../js/bosses.js'), A = await import('../js/arcs.js');
+  clean([B.ARC2.map(({ draw, ...b }) => b), L.U_EPI2, L.signatureList(), A.ARCS, A.ARC_NAMES], 'arc 2 pools');
+  for (let i = 0; i < 6000; i++) { const f = 11 + (i % 10); clean(L.rollDrops({ heroId: 'a' + i, floor: f, share: 1, seq: i, luck: 3 }), 'arc 2 rollDrops'); clean(L.rollItem(rng(90000 + i), f, bossInfo(f).lootElement, i, [0, 0, 0, 1, 1, 1]), 'arc 2 rollItem'); }
+  const sigs = new Set(); for (let i = 0; i < 6000; i++) for (const it of L.rollDrops({ heroId: 's' + i, floor: 11 + (i % 10), share: 1, seq: i, luck: 3 }).items) if (it.signature) sigs.add(it.name);
+  assert(sigs.size >= 10, `signature drops actually roll (${sigs.size})`); }
 for (let f = 1; f <= PLAN_FLOORS; f++) clean(bossInfo(f), 'boss plan');
 clean(fs.readFileSync(new URL('../preview-bosses.html', import.meta.url), 'utf8'), 'preview page');
 // ---- combat parity: base DPS and HP equal the average of the three classes; Eventide = Legendary base of the floor, no ability

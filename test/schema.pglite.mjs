@@ -44,5 +44,6 @@ assert.equal((await as(G, `select public.gm_announce(2) r`)).rows[0].r, true); a
 assert.equal((await as(G, `select public.gm_announce(3) r`)).rows[0].r, true, 'new floor allowed');
 // floor_hp mirrors js/floors.js
 const { floorBossHp } = await import('../js/floors.js');
-for (const f of [1, 2, 9, 10, 37, 100]) assert.equal(Number((await db.query(`select public.floor_hp(${f}) h`)).rows[0].h), floorBossHp(f), `floor_hp(${f})`);
+// Floors 11+ use the arc multiplier from schema-addendum-floors-11-20.sql; parity for those is checked in schema-floors-11-20.pglite.mjs.
+for (const f of [1, 2, 9, 10]) assert.equal(Number((await db.query(`select public.floor_hp(${f}) h`)).rows[0].h), floorBossHp(f), `floor_hp(${f})`);
 console.log('schema (pglite) tests passed');
