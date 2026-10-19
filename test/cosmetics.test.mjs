@@ -26,7 +26,7 @@ recordClear(s, 6, 0); assert(!equip(s, 'w-v-tower')); assert(equip(s, 'w-b-scyth
 // sprite grid sanity for every combo of shapes
 for (const cls of ['Vanguard', 'Blade', 'Arcanist']) for (const w of itemsFor('weapon', cls)) for (const hs of itemsFor('hairStyle')) for (const os of itemsFor('outfitStyle')) {
   const g = heroGrid({ ...defaultLook(cls), weapon: w.id, hairStyle: hs.id, outfitStyle: os.id }, cls);
-  assert.equal(g.rows.length, 16); g.rows.forEach(r => assert.equal(r.length, 16)); for (const ch of g.rows.join('')) assert(ch === '.' || g.pal[ch], `palette ${ch}`);
+  assert.equal(g.rows.length, 32); g.rows.forEach(r => assert.equal(r.length, 32)); assert(Object.values(g.pal).every(c => /^#[0-9a-f]{6}$/.test(c)), 'hex colours'); for (const ch of g.rows.join('')) assert(ch === '.' || g.pal[ch], `palette ${ch}`);
 }
 assert.deepEqual(fakeProfile('Byte'), fakeProfile('Byte')); assert.equal(unlockText({ floor: 3 }), 'Clear Floor 3');
 // minimum damage share gates rank unlocks
@@ -34,4 +34,13 @@ const t = fresh();
 assert(!recordClear(t, 1, 1, 0.01).some(i => ['t-first', 't-top'].includes(i.id)), 'low share: no rank unlocks');
 assert.deepEqual(t.progress.top3, []); assert.equal(t.progress.rank1, 0); assert(t.progress.cleared.includes(1));
 const got2 = recordClear(t, 2, 1, 0.05).map(i => i.id); assert(got2.includes('t-first') && got2.includes('t-top'));
+// every colour option shades to a valid 32x32 sprite
+for (const slot of ['skin', 'hairColor', 'outfitColor', 'trim', 'weaponColor']) for (const it of itemsFor(slot)) {
+  const g = heroGrid({ ...defaultLook('Blade'), [slot]: it.id }, 'Blade'); assert.equal(g.rows.length, 32); for (const ch of g.rows.join('')) assert(ch === '.' || g.pal[ch]);
+}
+// bosses: 10 valid 32x32 sprites, several distinct silhouettes
+const { bossGrid, bossShape } = await import('../js/sprites.js');
+const shapes = new Set();
+for (let f = 1; f <= 10; f++) { const g = bossGrid(f); assert.equal(g.rows.length, 32); g.rows.forEach(r => assert.equal(r.length, 32)); for (const ch of g.rows.join('')) assert(ch === '.' || g.pal[ch]); shapes.add(bossShape(f).rows.join('|')); }
+assert(shapes.size >= 4, 'at least 4 boss silhouettes');
 console.log('cosmetics tests passed');

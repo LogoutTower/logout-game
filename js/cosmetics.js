@@ -92,7 +92,9 @@ export function fakeProfile(name) {
   return { title: t[x % t.length].value, color: n[(x >>> 4) % n.length].value };
 }
 
-// ---------- layered 16x16 sprite ----------
+import { shade } from './pixel.js';
+// ---------- layered sprite: 16x16 layer grid, shaded/outlined to 32x32 ----------
+export const HERO_SIZE = 32;
 const BASE = [
   '................', '................', '......kkkk......', '.....kSSSSk.....', '.....kSeSek.....', '.....kSSSSk.....', '......kSSk......',
   '....kOOOOOOk....', '...SkOTOOTOkS...', '...S.kOOOOk.S...', '....kOOOOOOk....', '.....kTTTTk.....', '.....kk..kk.....', '.....bb..bb.....', '................', '................'];
@@ -107,8 +109,9 @@ const WEAPONS = { // [x,y,ch] lists drawn at the hero's right hand (col 12-15)
   orb: [[12,1,'W'],[13,1,'W'],[14,1,'W'],[12,2,'W'],[13,2,'p'],[14,2,'W'],[13,3,'w'],[13,4,'w'],[13,5,'w'],[13,6,'w'],[13,7,'w'],[13,8,'w'],[13,9,'w'],[13,10,'w']],
   wand: [[13,5,'W'],[14,4,'W'],[12,4,'W'],[13,3,'W'],[13,6,'w'],[13,7,'w'],[13,8,'w']],
 };
-/** Returns {rows: 16 strings, pal: char->colour} for a look + class. */
-export function heroGrid(look, cls) {
+/** Returns {rows: 32 strings of 32 chars, pal: char->colour} for a look + class. */
+export const heroGrid = (look, cls) => { const g = heroGrid16(look, cls); return shade(g.rows, g.pal); };
+export function heroGrid16(look, cls) {
   const g = BASE.map(r => [...r]), set = (x, y, c) => { if (x >= 0 && x < 16 && y >= 0 && y < 16) g[y][x] = c; };
   const style = byId(look.outfitStyle).value, hair = byId(look.hairStyle).value;
   if (style === 'robe') { for (let y = 11; y <= 13; y++) for (let x = 5; x <= 10; x++) set(x, y, y === 13 ? 'T' : 'O'); set(4, 12, 'k'); set(11, 12, 'k'); }
