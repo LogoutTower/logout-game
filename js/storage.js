@@ -26,7 +26,7 @@ export class LocalBackend {
     for (const n of FAKE) { const d = Math.floor(secs * (5 + (n.length * 7) % 40) * Math.random() * 2 * (this.decree ? 1 + (this.decreePct || 5) / 100 : 1)); /* Shaper's Decree lifts everyone on the floor */ w.dmg[n] = (w.dmg[n] || 0) + d; w.hp -= d; }
     this._adv(w);
   }
-  _adv(w) { let adv = 0; w.clears = w.clears || []; while (w.hp <= 0 && w.floor < MAX_FLOOR) { const over = -w.hp; w.clears.push({ floor: w.floor, ranking: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).filter(e => !(w.staff || {})[e[0]]).map(e => e[0]), dmg: { ...w.dmg }, maxHp: floorBossHp(w.floor) }); w.floor++; adv++; w.hp = floorBossHp(w.floor) - over; w.dmg = {}; headStart(w); } if (w.hp < 0) w.hp = 0; if (w.floor >= MAX_FLOOR && w.hp <= 0 && !w.final) { w.final = 1; w.clears.push({ floor: MAX_FLOOR, ranking: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).map(e => e[0]), dmg: { ...w.dmg }, maxHp: floorBossHp(w.floor) }); } return adv; }
+  _adv(w) { let adv = 0; w.clears = w.clears || []; while (w.hp <= 0 && w.floor < MAX_FLOOR) { const over = -w.hp; (w.hist = w.hist || []).push({ floor: w.floor, at: new Date().toISOString(), top: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).filter(e => !(w.staff || {})[e[0]])[0]?.[0] || null }); if (w.hist.length > 120) w.hist = w.hist.slice(-120); w.clears.push({ floor: w.floor, ranking: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).filter(e => !(w.staff || {})[e[0]]).map(e => e[0]), dmg: { ...w.dmg }, maxHp: floorBossHp(w.floor) }); w.floor++; adv++; w.hp = floorBossHp(w.floor) - over; w.dmg = {}; headStart(w); } if (w.hp < 0) w.hp = 0; if (w.floor >= MAX_FLOOR && w.hp <= 0 && !w.final) { w.final = 1; w.clears.push({ floor: MAX_FLOOR, ranking: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).map(e => e[0]), dmg: { ...w.dmg }, maxHp: floorBossHp(w.floor) }); } return adv; }
   async getFloor() { const w = this._w(); this._sim(w); this._sw(w); return { floor: w.floor, hp: w.hp, maxHp: floorBossHp(w.floor), marks: w.marks || {} }; }
   async gmMark(kind, floor, text = null) { const w = this._w(), m = w.marks || (w.marks = {}), p = m[kind]; if (kind !== 'decree6' && kind !== 'echo' && p && p.floor === floor && Date.now() - Date.parse(p.at) < 10 * 60e3) return false;
     m[kind] = { floor, at: new Date().toISOString(), text, until: kind === 'decree6' ? new Date(Date.now() + (text === 'final' ? 120e3 : 10e3)).toISOString() : undefined }; this._sw(w); return true; } // local: this browser only
@@ -34,6 +34,8 @@ export class LocalBackend {
     const w = this._w(); w.dmg[playerName] = (w.dmg[playerName] || 0) + amount; w.hp -= amount; w.staff = w.staff || {}; if (hero.staff) w.staff[playerName] = true; else delete w.staff[playerName];
     const advanced = this._adv(w); const clears = w.clears; w.clears = []; this._sw(w); return { floor: w.floor, hp: w.hp, maxHp: floorBossHp(w.floor), advanced, accepted: amount, clears };
   }
+  async floorHistory() { return this._w().hist || []; } // [{ floor, at, top }]
+  async floorHeroes() { return null; } // no head-count offline
   async leaderboard(me = null) { // staff rows first (rank 0, never ranked), then top 10, plus the player's own row if outside it
     const w = this._w(), st = w.staff || {}; return boardWithStaff(Object.entries(w.dmg).map(([name, damage]) => ({ name, damage, staff: !!st[name] })), me); }
 }

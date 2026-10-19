@@ -75,6 +75,11 @@ export class SupabaseBackend {
     const clears = await this._clears();
     return { ...this.floor, advanced: data.floor !== before && before != null, accepted: Number(data.accepted), clears };
   }
+  /** Tower Map history from floor_clears; [] if the table/read is unavailable (never throws). */
+  async floorHistory() { try { const { data, error } = await this.sb.from('floor_clears').select('floor, ranking, at').order('id', { ascending: false }).limit(300); if (error || !data) return [];
+    return data.map(r => ({ floor: r.floor, at: r.at, top: r.ranking?.[0] || null })); } catch { return []; } }
+  /** Heroes who dealt damage on this floor (cheap head count); null if unavailable. */
+  async floorHeroes(floor) { try { const { count, error } = await this.sb.from('damage').select('user_id', { count: 'exact', head: true }).eq('floor', floor); return error ? null : count; } catch { return null; } }
   async _clears() { // floors cleared since we last looked: { floor, ranking (non-staff names), dmg {name: dmg}, maxHp }
     const { data, error } = await this.sb.from('floor_clears').select('*').gt('id', this.seenClear).order('id'); const out = []; if (error) return out;
     for (const c of data || []) { this.seenClear = Math.max(this.seenClear, c.id); this.store.setItem(this.k + '.seenClear', String(this.seenClear)); out.push({ floor: c.floor, ranking: c.ranking || [], dmg: c.dmg || {}, maxHp: Number(c.max_hp) }); }

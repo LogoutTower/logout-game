@@ -17,6 +17,7 @@ import { enforceOneUnique, legendaryWeaponDps, rerollItem, chooseDestiny, DESTIN
 import { cx, CODEX, isCodex } from './codex.js';
 import { galaxyTier, mountGalaxy } from './galaxy.js';
 import { unwrittenHour } from './game.js';
+import { towerRows, towerProgress, TOWER_TOP } from './towermap.js';
 import { itemIcon } from './icons.js';
 import { sellPrice, sellable, toggleLock, sellItem, bulkPreview, sellBulk } from './town.js';
 const shownRarity = it => it?.gm ? 'unique' : it?.rarity; // staff items display as Unique (see gm.js)
@@ -117,7 +118,7 @@ async function startGame(fresh = false) {
   floor = await be.getFloor(); log(`${save.heroes[0].name} awoke on Floor ${floor.floor}. The guardian stirs.`); log('System notice: log out disabled.');
   if (fresh) { notice('Log out disabled'); setTimeout(() => notice(`Floor ${floor.floor} is open`), 900); } // no replayed notices on reload
   $('lvl').onclick = () => buy('level'); $('gear').onclick = () => buy('gear'); $('wardrobeBtn').onclick = openWardrobe;
-  $('townBtn').onclick = openTown; $('helpBtn').onclick = () => tourShow(0); $('bagBtn').onclick = openBag; $('sysBtn').onclick = openSystem; $('guildBtn').onclick = openGuild; $('chatBtn').onclick = openChat; $('guildAct').hidden = !featureOn(FEATURES, 'guilds', gmValid); $('chatAct').hidden = !featureOn(FEATURES, 'chat', gmValid); $('talBtn').onclick = () => { talSel = null; openTalents(); }; placeDock();
+  $('townBtn').onclick = openTown; $('helpBtn').onclick = () => tourShow(0); $('bagBtn').onclick = openBag; $('sysBtn').onclick = openSystem; $('guildBtn').onclick = openGuild; $('mapBtn').onclick = openMap; $('chatBtn').onclick = openChat; $('guildAct').hidden = !featureOn(FEATURES, 'guilds', gmValid); $('chatAct').hidden = !featureOn(FEATURES, 'chat', gmValid); $('talBtn').onclick = () => { talSel = null; openTalents(); }; placeDock();
   setInterval(tick, 1000); setInterval(sync, 5000); render(); renderLb();
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
@@ -467,4 +468,21 @@ function wireCodexExtra(h, n) {
   if ($('cxSkin')) $('cxSkin').onclick = async () => { if (!gmValid) return; h.look.weaponColor = h.look.weaponColor === 'gm-unsheathed' ? 'gm-edge' : 'gm-unsheathed'; await be.saveSave(save); render(); openTalents(); };
   if ($('cxHeraldSave')) $('cxHeraldSave').onclick = async () => { const c = cleanChat($('cxHerald').value, 80); if (!c.ok) { notice('Not allowed: ' + c.reason); return; } save.herald = c.text; await be.saveSave(save); notice('Entrance line saved'); };
   if ($('cxDestinySet')) $('cxDestinySet').onclick = async () => { if (chooseDestiny(save, $('cxDestiny').value)) { log(`Shaper of Destiny: your next boss drop will be ${save.destiny.element}.`, '#ffd76a'); await be.saveSave(save); openTalents(); } };
+}
+
+// ---- Tower Map + progress (shared floor_state + floor_clears history online, local history offline)
+async function openMap() {
+  const [hist, heroes] = await Promise.all([be.floorHistory?.().catch(() => []) ?? [], be.floorHeroes?.(floor.floor).catch(() => null) ?? null]);
+  const rows = towerRows({ current: floor.floor, maxFloor: MAX_FLOOR, history: hist }), pr = towerProgress({ current: floor.floor, hp: floor.hp, maxHp: floor.maxHp, maxFloor: MAX_FLOOR });
+  const when = at => at ? new Date(at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  $('mapProg').innerHTML = `<div class="mprog"><b>Floor ${pr.floor} / ${pr.top}</b><span>${pr.cleared} cleared${heroes != null ? ` · ${heroes} hero${heroes === 1 ? '' : 'es'} on this floor` : ''}</span>
+    <div class="bar"><i style="width:${pr.pct.toFixed(1)}%"></i></div><small>Tower ${pr.pct.toFixed(0)}% · guardian HP ${fmt(floor.hp)} / ${fmt(floor.maxHp)}</small>
+    <div class="bar hp"><i style="width:${(pr.bossPct * 100).toFixed(1)}%"></i></div><p class="sub">Logout returns when Floor ${TOWER_TOP} falls.</p></div>`;
+  $('mapTower').innerHTML = rows.map(r => `${r.f === TOWER_TOP ? '<div class="crown" aria-hidden="true">♛</div>' : ''}<button class="fl ${r.state}${r.crown ? ' top' : ''}${r.special ? ' sp' : ''}" data-f="${r.f}" ${r.state === 'cleared' ? '' : 'aria-disabled="true"'}>
+    <span class="fn">${r.f}</span><span class="fname">${esc(r.name)}${r.milestone && r.state !== 'undiscovered' ? ' <em>★</em>' : r.special && r.state !== 'undiscovered' ? ' <em>✦</em>' : ''}</span>
+    <span class="fmeta">${r.state === 'cleared' ? (r.at ? `fell ${esc(when(r.at))}` : 'cleared') : r.state === 'current' ? `<b class="you">◆ You</b> ${Math.round(pr.bossPct * 100)}% HP` : ''}</span></button>`).join('');
+  $('mapTower').onclick = e => { const b = e.target.closest('button.fl.cleared'); if (!b) return; const r = rows.find(x => x.f === +b.dataset.f), d = $('mapDetail');
+    d.hidden = false; d.innerHTML = `<i class="mthumb" style='background-image:${bossSprite(r.f).replace(/'/g, '%27')}'></i><div><b>Floor ${r.f} · ${esc(r.name)}</b><br>${r.at ? `Fell ${esc(when(r.at))}` : 'Cleared (time not recorded)'}<br>${r.top ? `Top damage: ${esc(r.top)}` : 'Top damage: not recorded'}</div>`; };
+  $('mapDetail').hidden = true; if (!$('map').open) $('map').showModal();
+  requestAnimationFrame(() => { const t = $('mapTower'), c = t.querySelector('.fl.current'); if (c) t.scrollTop = c.offsetTop - t.offsetTop - t.clientHeight / 2; $('map').scrollTop = 0; }); // scroll the tower only, keep the progress panel in view
 }

@@ -226,3 +226,20 @@ header{padding-top:max(14px,env(safe-area-inset-top))}main{padding-left:max(12px
 /* Vesperveil · The Unwritten Hour: the arena dims to a starlit night (static overlay; twinkle only without reduced motion) */
 #arena.unwritten::before{content:'';position:absolute;inset:0;z-index:2;pointer-events:none;background:radial-gradient(1px 1px at 12% 20%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 33% 12%,#ffd76a 50%,transparent 51%),radial-gradient(1px 1px at 58% 26%,#cfd8ff 50%,transparent 51%),radial-gradient(1px 1px at 77% 9%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 90% 30%,#ffd76a 50%,transparent 51%),radial-gradient(1px 1px at 45% 40%,#fff 50%,transparent 51%),linear-gradient(#05031acc,#0b0626aa 70%,transparent);animation:uhtw 4s ease-in-out infinite alternate}
 @keyframes uhtw{to{opacity:.75}}@media (prefers-reduced-motion:reduce){#arena.unwritten::before{animation:none}}
+/* Tower Map */
+#map{width:min(560px,calc(100vw - 16px))}.mprog{display:grid;gap:4px;margin-bottom:8px}.mprog span,.mprog small{color:var(--mut);font-size:12px}
+.mprog .bar{height:10px;border:1px solid var(--line);border-radius:3px;background:#0b0620;overflow:hidden}.mprog .bar i{display:block;height:100%;background:linear-gradient(90deg,#ffd76a,#ffb347)}.mprog .bar.hp i{background:linear-gradient(90deg,#ff3355,#ff7a59)}
+.mtower{position:relative;max-height:min(48dvh,520px);overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:6px;border:1px solid var(--line);border-radius:6px;
+  background:repeating-linear-gradient(0deg,#160c34 0 22px,#1d1042 22px 24px),#160c34;image-rendering:pixelated}
+.crown{text-align:center;font-size:28px;color:#ffd76a;text-shadow:0 0 8px #ffd76a88;line-height:1}
+.fl{display:grid;grid-template-columns:36px 1fr auto;align-items:center;gap:8px;width:100%;min-height:34px;padding:4px 8px;border:1px solid #3a2a66;border-radius:2px;background:#221545;color:#cfc6e8;font:inherit;font-size:12px;text-align:left;cursor:default}
+.fl .fn{font-family:'Press Start 2P',monospace;font-size:10px;color:#9a8cc8}.fl .fname em{font-style:normal;color:#ffd76a}.fl .fmeta{font-size:11px;color:var(--mut)}
+.fl.cleared{background:#3a2c10;border-color:#a8822e;color:#ffd76a;cursor:pointer}.fl.cleared .fn{color:#ffd76a}
+.fl.current{border-color:#ff3355;background:#3a0f2a;color:#fff;animation:flpulse 1.6s ease-in-out infinite}.fl .you{color:#7ff6ff}
+.fl.fog{background:repeating-linear-gradient(45deg,#2a2148 0 6px,#251c40 6px 12px);color:#7a6f9e;filter:blur(.2px);opacity:.75}
+.fl.undiscovered{background:#120a26;color:#4f4670;border-style:dashed;opacity:.6}
+.fl.top{border-left:3px solid #ffd76a;background-color:#2a1838}.fl.top.undiscovered{background:#1a0f2a}.fl.sp:not(.undiscovered){box-shadow:inset 3px 0 0 #b98cff}
+@keyframes flpulse{50%{box-shadow:0 0 10px #ff335599}}@media (prefers-reduced-motion:reduce){.fl.current{animation:none;box-shadow:0 0 8px #ff335566}}
+.mapdetail{display:flex;gap:10px;align-items:center;padding:8px;margin-bottom:8px;border:1px solid #a8822e;border-radius:4px;background:#2a1f0c;font-size:12px}
+.mthumb{width:56px;height:56px;flex:none;background-size:contain;background-repeat:no-repeat;background-position:center;image-rendering:pixelated}
+@media(max-width:640px){#dock{gap:0;padding-left:max(4px,env(safe-area-inset-left));padding-right:max(4px,env(safe-area-inset-right))}#dock .act{min-width:0;flex:1 1 0}#dock .rb{width:min(40px,8.6vw);height:min(40px,8.6vw);font-size:15px}#dock .act span{font-size:9px;max-width:100%;overflow:hidden;text-overflow:ellipsis}}
