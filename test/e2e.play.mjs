@@ -1,10 +1,11 @@
 // Browser regression (needs playwright-core + Chromium): node test/e2e.play.mjs [url] [ms]
 // Fresh profile, creates a hero, plays ~10s of real time, asserts gold, XP, damage and leaderboard presence.
-import assert from 'node:assert';
+import assert from 'node:assert'; import { TEAM_PASS_HASH } from '../config.js';
 const { chromium } = await import('playwright-core');
-const URL = process.argv[2] || 'http://127.0.0.1:8765/', WAIT = +(process.argv[3] || 11000);
+const URL = process.argv[2] || 'http://127.0.0.1:8765/app.html', WAIT = +(process.argv[3] || 11000);
 const browser = await chromium.launch({ executablePath: process.env.CHROME || `${process.env.HOME}/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome` });
-const page = await (await browser.newContext()).newPage(), errs = [];
+const bctx = await browser.newContext(); await bctx.addInitScript(h => localStorage.setItem('logout.v1.gate', h), TEAM_PASS_HASH); // past the pre-launch gate
+const page = await bctx.newPage(), errs = [];
 page.on('pageerror', e => errs.push(e.message)); page.on('console', m => m.type() === 'error' && errs.push(m.text()));
 await page.goto(URL + (URL.includes('?') ? '&' : '?') + 't=' + Date.now()); await page.waitForSelector('#create:not(.hidden)');
 await page.fill('#hname', 'Tester'); await page.click('#start'); await page.waitForTimeout(WAIT);

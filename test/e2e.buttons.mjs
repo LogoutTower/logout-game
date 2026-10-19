@@ -1,8 +1,9 @@
 // Browser regression (needs playwright-core + Chromium): node test/e2e.buttons.mjs [url]. Tour auto-open, purchase clicks + instant HUD, stable buttons.
-import { chromium } from 'playwright-core'; import assert from 'node:assert';
-const URL = process.argv[2] || 'http://127.0.0.1:8765/';
+import { chromium } from 'playwright-core'; import assert from 'node:assert'; import { TEAM_PASS_HASH } from '../config.js';
+const URL = process.argv[2] || 'http://127.0.0.1:8765/app.html';
 const b = await chromium.launch({ executablePath: process.env.HOME + '/.cache/ms-playwright/chromium-1248/chrome-linux64/chrome' });
-const p = await (await b.newContext({ viewport: { width: 900, height: 1000 } })).newPage(), errs = [];
+const bctx = await b.newContext({ viewport: { width: 900, height: 1000 } }); await bctx.addInitScript(h => localStorage.setItem('logout.v1.gate', h), TEAM_PASS_HASH); // past the pre-launch gate
+const p = await bctx.newPage(), errs = [];
 p.on('pageerror', e => errs.push(e.message)); p.on('console', m => m.type() === 'error' && errs.push(m.text()));
 // fresh profile: tour must auto-open right after creation
 await p.goto(URL + '?t=' + Date.now()); await p.waitForSelector('#create:not(.hidden)'); await p.fill('#hname', 'Tester'); await p.click('#start');

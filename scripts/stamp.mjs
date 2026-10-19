@@ -1,5 +1,5 @@
 // Cache-busting stamp: run before every commit (`node scripts/stamp.mjs`). GitHub Pages serves files with max-age=600,
-// so every module (and config.js / style.css) is pinned to a content-hash URL through an import map in index.html,
+// so every module (and config.js / style.css) is pinned to a content-hash URL through an import map in app.html (the game page; index.html is the pre-launch gate),
 // js/build.js carries the build id, and version.json (fetched with no-store) tells open tabs to reload on a new deploy.
 // test/stamp.test.mjs fails if the stamp is stale.
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
@@ -13,12 +13,16 @@ export function computeStamp() {
   v['js/build.js'] = h(buildJs);
   const imports = Object.fromEntries(Object.entries(v).map(([f, x]) => ['./' + f, `./${f}?v=${x}`]));
   const map = `<!--stamp--><script type="importmap">${JSON.stringify({ imports })}</script><!--/stamp-->`;
-  let html = readFileSync(root + 'index.html', 'utf8');
+  let html = readFileSync(root + 'app.html', 'utf8');
   html = html.includes('<!--stamp-->') ? html.replace(/<!--stamp-->[\s\S]*?<!--\/stamp-->/, map) : html.replace('</style>\n', '</style>\n' + map + '\n');
   html = html.replace(/href="style\.css(\?v=[0-9a-f]+)?"/, `href="style.css?v=${css}"`).replace(/src="js\/main\.js(\?v=[0-9a-f]+)?"/, `src="js/main.js?v=${v['js/main.js']}"`);
-  return { build, buildJs, html, version: JSON.stringify({ build }) + '\n' };
+  const cfg = readFileSync(root + 'config.js', 'utf8'), pick = re => (cfg.match(re) || [])[1] || '';
+  const G = { lock: /prelaunchLock:\s*true/.test(cfg), at: pick(/LAUNCH_AT = '([^']*)'/), h: [pick(/TEAM_PASS_HASH = '([0-9a-f]*)'/), pick(/GM_PASS_HASH = '([0-9a-f]*)'/)] };
+  const gate = `<!--gate--><script>var G=${JSON.stringify(G)};</script><!--/gate-->`, setGate = t => t.replace(/<!--gate-->[\s\S]*?<!--\/gate-->/, () => gate);
+  html = setGate(html); const gateHtml = setGate(readFileSync(root + 'index.html', 'utf8'));
+  return { build, buildJs, html, gateHtml, G, version: JSON.stringify({ build }) + '\n' };
 }
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop())) {
-  const s = computeStamp(); writeFileSync(root + 'js/build.js', s.buildJs); writeFileSync(root + 'index.html', s.html); writeFileSync(root + 'version.json', s.version);
+  const s = computeStamp(); writeFileSync(root + 'js/build.js', s.buildJs); writeFileSync(root + 'app.html', s.html); writeFileSync(root + 'index.html', s.gateHtml); writeFileSync(root + 'version.json', s.version);
   console.log('stamped build', s.build);
 }

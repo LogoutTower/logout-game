@@ -21,4 +21,4 @@ Later: `js/storage.js` is the backend seam (add a Supabase backend with the same
 
 ## Deploying
 
-Run `node scripts/stamp.mjs` before every commit. It pins every module, `config.js` and `style.css` to a content-hash URL (import map in `index.html`), writes `js/build.js` and `version.json`. GitHub Pages caches files for 10 minutes; open tabs check `version.json` (no-store) on focus and every 5 minutes and reload once onto a new build. `test/stamp.test.mjs` fails if the stamp is stale. supabase-js is self-hosted in `js/vendor/` (no CDN).
+Run `node scripts/stamp.mjs` before every commit. It pins every module, `config.js` and `style.css` to a content-hash URL (import map in `app.html`, the game page; `index.html` is the pre-launch gate), writes `js/build.js` and `version.json`. GitHub Pages caches files for 10 minutes; open tabs check `version.json` (no-store) on focus and every 5 minutes and reload once onto a new build. `test/stamp.test.mjs` fails if the stamp is stale. supabase-js is self-hosted in `js/vendor/` (no CDN).
