@@ -41,13 +41,28 @@ export const DRAWBACKS = [
   { id: 'jealous', text: 'Jealous: no trinket can be worn alongside it' },
   { id: 'heavy', text: '-5% DPS' },
 ];
+// Unique ARMOR: same rarity roll; when a Unique rolls it is a weapon or armor 50/50. Defensive / utility pool.
+export const ARMOR_ABILITIES = [
+  { id: 'thorns', text: 'Thorns: the guardian\'s blows rebound, +8% DPS' },
+  { id: 'aegis', text: 'Aegis proc: a ward blocks the drain for 1 min in every 5 (−20% HP drain on average)' },
+  { id: 'stillness', text: 'HP drains 35% slower' },
+  { id: 'restful', text: 'While Well Rested, regenerate 1% max HP per minute' },
+  { id: 'watch', text: '+1h offline cap', stats: { capH: 1 } },
+  { id: 'tithe', text: 'Tithe of Blows: every blow you take pays out, +15% gold', stats: { goldPct: 15 } },
+  { id: 'dodge', text: 'Dodge 10%: drain 10% slower and +3% DPS from footwork' },
+  { id: 'innkeep', text: 'Innkeepers trust this armor: Inn costs −40%' },
+];
 /** Pairs that would cancel out or stack on the same axis, so they are never rolled together. */
 export const FORBIDDEN = {
   lifesteal: ['drain'], steady: ['drain'], hearth: ['innTax', 'drain'], vigil: ['shortCap'], gold: ['poor'], ledger: ['poor'], scholar: ['dull'],
   lastLayer: ['heavy'], tenth: ['heavy'], momentum: ['heavy'], milestone: ['heavy'],
+  // armor: never against its own axis; 'jealous' (trinket lock) is weapon-only
+  thorns: ['heavy', 'jealous'], aegis: ['drain', 'jealous'], stillness: ['drain', 'jealous'], restful: ['drain', 'innTax', 'jealous'], watch: ['shortCap', 'jealous'],
+  tithe: ['poor', 'jealous'], dodge: ['drain', 'heavy', 'jealous'], innkeep: ['innTax', 'jealous'],
 };
 export const allowedPair = (a, d) => !(FORBIDDEN[a] || []).includes(d);
 const U_PRE = ['sung', 'bound', 'wrought', 'touched', 'born', 'kissed', 'veined', 'hewn'];
+const U_ABASE = ['Aegis', 'Warplate', 'Hauberk', 'Bulwark', 'Carapace', 'Shroud', 'Cuirass', 'Brigandine'];
 const U_BASE = ['Thornblade', 'Greatsword', 'Halberd', 'Warglaive', 'Moonsabre', 'Runeblade', 'Warpick', 'Spellstaff', 'Fangspear', 'Cleaver', 'Longbrand', 'Starhook'];
 const U_EPI = ['the Ninth Bell', 'the Last Login', 'the Hollow Crown', 'the Quiet Server', 'the Unpatched Night', 'the Broken Compass', 'the Ashen Choir', 'the Final Layer',
   'the Lost Party', 'the Silent Admin', 'the Endless Queue', 'the Pale Dawn', 'the Severed Link', 'the Thousand Floors', 'the Empty Throne', 'the Frozen Clock'];
@@ -55,20 +70,24 @@ const U_LORE = ['This weapon does not exist in the item database. It exists anyw
   'Checksum mismatch. The tower decided to let you keep it.', 'It remembers the guardian it was taken from.', 'Drop table entry: [REDACTED]. Congratulations.'];
 export const uniqueSerial = (floor, r) => `F${floor}-${Math.floor(r() * 0x10000).toString(16).toUpperCase().padStart(4, '0')}`;
 function makeUnique(r, floor, element, seq, ownedNames = [], force = {}) {
-  const ab = force.ab ? ABILITIES.find(x => x.id === force.ab) : pick(r, ABILITIES), okD = DRAWBACKS.filter(d => allowedPair(ab.id, d.id));
-  const dr = force.dr ? DRAWBACKS.find(x => x.id === force.dr) : pick(r, okD), s = scale(floor);
+  const slot = force.slot || (force.ab ? (ARMOR_ABILITIES.some(a => a.id === force.ab) ? 'armor' : 'weapon') : r() < 0.5 ? 'weapon' : 'armor'), POOL = slot === 'armor' ? ARMOR_ABILITIES : ABILITIES;
+  const ab = force.ab ? POOL.find(x => x.id === force.ab) : pick(r, POOL), okD = DRAWBACKS.filter(d => allowedPair(ab.id, d.id));
+  const dr0 = force.dr ? DRAWBACKS.find(x => x.id === force.dr) : pick(r, okD), s = scale(floor);
+  const dr = slot === 'armor' && dr0.id === 'whisper' ? { ...dr0, text: 'The armor whispers in the Chronicle (cosmetic)' } : dr0;
   let name, tries = 0;
-  do name = `${ELEMENT_WORD[element] || 'Tower'}${pick(r, U_PRE)} ${pick(r, U_BASE)} of ${pick(r, U_EPI)}`; while (ownedNames.includes(name) && ++tries < 20);
-  const stats = { dps: +(1.5 * s * 3.6).toFixed(1), dpsPct: Math.round((6 + r() * 6) * 1.2) }; // above a Legendary of the same floor (mul 3 → 3.6)
+  do name = `${ELEMENT_WORD[element] || 'Tower'}${pick(r, U_PRE)} ${pick(r, slot === 'armor' ? U_ABASE : U_BASE)} of ${pick(r, U_EPI)}`; while (ownedNames.includes(name) && ++tries < 20);
+  const stats = slot === 'armor' ? { dpsPct: Math.round((3 + floor / 8) * 3 * 1.2) } // ~20% above a Legendary armor of the same floor
+    : { dps: +(1.5 * s * 3.6).toFixed(1), dpsPct: Math.round((6 + r() * 6) * 1.2) }; // above a Legendary of the same floor (mul 3 → 3.6)
   for (const src of [ab.stats, dr.stats]) for (const [k, v] of Object.entries(src || {})) stats[k] = (stats[k] || 0) + v;
   const serial = uniqueSerial(floor, r);
-  return { id: `u${floor}-${seq}-${serial}`, slot: 'weapon', rarity: 'unique', floor, element, name, serial, stamp: `Forged on Floor ${floor} · #${serial}`, stats, affixes: [],
+  return { id: `u${floor}-${seq}-${serial}`, slot, rarity: 'unique', floor, element, name, serial, stamp: `Forged on Floor ${floor} · #${serial}`, stats, affixes: [],
     ability: { id: ab.id, text: ab.text }, drawback: { id: dr.id, text: dr.text }, lore: `System notice: ${pick(r, U_LORE)}` };
 }
 /** Dev/test helper: a Unique with a chosen ability and drawback. */
 export const forgeUnique = (floor, element, ab, dr, seed = 1) => makeUnique(rng(seed), floor, element, 'forge', [], { ab, dr });
+export { U_ABASE };
 const ownedUniqueNames = save => [...save.inv, ...Object.values(save.heroes[0].equip || {})].filter(i => i?.rarity === 'unique').map(i => i.name);
-const uniqueFx = save => { const w = save.heroes[0].equip?.weapon; return w?.rarity === 'unique' ? new Set([w.ability.id, w.drawback.id]) : new Set(); };
+const uniqueFx = save => new Set(['weapon', 'armor'].flatMap(k => { const w = save.heroes[0].equip?.[k]; return w?.rarity === 'unique' ? [w.ability.id, w.drawback.id] : []; }));
 export const rarityOf = id => RARITIES.find(r => r.id === id);
 /** Rarity weights; special/milestone floors double every non-common weight, and Unique uses its own wSpecial. */
 export const rarityWeights = floor => RARITIES.map((r, i) => isSpecialSlot(floor) ? (r.wSpecial ?? r.w * (i > 0 ? 2 : 1)) : r.w);
@@ -84,7 +103,7 @@ const AFFIXES = [
   { k: 'xpPct', label: v => `+${v}% XP`, roll: (r, m) => Math.round((3 + r() * 5) * m) },
   { k: 'capH', label: v => `+${v}h offline cap`, roll: (r, m) => Math.max(1, Math.round((0.5 + r()) * m)) },
 ];
-export const statLabel = (k, v) => ({ dps: `+${v} DPS`, dpsPct: `+${v}% DPS`, goldPct: `+${v}% gold`, xpPct: `+${v}% XP`, capH: `+${v}h offline cap` })[k];
+export const statLabel = (k, v) => { const n = `${v < 0 ? '−' + -v : '+' + v}`; return ({ dps: `${n} DPS`, dpsPct: `${n}% DPS`, goldPct: `${n}% gold`, xpPct: `${n}% XP`, capH: `${n}h offline cap` })[k]; };
 const weighted = (r, ws) => { let x = r() * ws.reduce((a, b) => a + b, 0); for (let i = 0; i < ws.length; i++) if ((x -= ws[i]) < 0) return i; return ws.length - 1; };
 /** Roll one gear piece from a seeded rng. */
 export function rollItem(r, floor, element, seq = 0, weights = null, owned = []) {
@@ -144,9 +163,12 @@ export function equipItem(save, invIndex) {
   const w = h.equip.weapon, jealous = x => x?.rarity === 'unique' && x.drawback.id === 'jealous';
   if (it.slot === 'trinket' && jealous(w)) return false; // the jealous Unique refuses company
   const old = h.equip[it.slot]; h.equip[it.slot] = it; save.inv.splice(invIndex, 1); if (old) save.inv.push(old);
+  if (it.rarity === 'unique') for (const k of GEAR_SLOTS) if (k !== it.slot && h.equip[k]?.rarity === 'unique') { save.inv.push(h.equip[k]); h.equip[k] = null; } // one-Unique rule: one equipped at a time
   if (jealous(it) && h.equip.trinket) { save.inv.push(h.equip.trinket); h.equip.trinket = null; }
   return true;
 }
+/** One-Unique rule on load: if two Uniques are somehow equipped, the armor goes back to the bag. */
+export function enforceOneUnique(save) { const e = save?.heroes?.[0]?.equip; if (e?.weapon?.rarity === 'unique' && e?.armor?.rarity === 'unique') { save.inv.push(e.armor); e.armor = null; return true; } return false; }
 export function salvageItem(save, invIndex) { const it = save.inv[invIndex]; if (!it) return 0; const g = salvagePay(save, it); save.inv.splice(invIndex, 1); save.gold += g; return g; }
 /** Base DPS of a Legendary weapon on floor f (parity reference for the staff weapon). */
 export const legendaryWeaponDps = f => +(1.5 * scale(f) * 3).toFixed(1);

@@ -223,3 +223,6 @@ header{padding-top:max(14px,env(safe-area-inset-top))}main{padding-left:max(12px
 .item>.ico{float:left}.notice .ico{width:24px;height:24px}
 #sellBox{max-height:260px;overflow-y:auto;-webkit-overflow-scrolling:touch}#sellBox .srow{display:flex;align-items:center;gap:6px}#sellBox .srow>div{flex:1;min-width:0}#sellBox button{min-height:44px;min-width:44px}
 .sellh{margin-top:12px}
+/* Vesperveil · The Unwritten Hour: the arena dims to a starlit night (static overlay; twinkle only without reduced motion) */
+#arena.unwritten::before{content:'';position:absolute;inset:0;z-index:2;pointer-events:none;background:radial-gradient(1px 1px at 12% 20%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 33% 12%,#ffd76a 50%,transparent 51%),radial-gradient(1px 1px at 58% 26%,#cfd8ff 50%,transparent 51%),radial-gradient(1px 1px at 77% 9%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 90% 30%,#ffd76a 50%,transparent 51%),radial-gradient(1px 1px at 45% 40%,#fff 50%,transparent 51%),linear-gradient(#05031acc,#0b0626aa 70%,transparent);animation:uhtw 4s ease-in-out infinite alternate}
+@keyframes uhtw{to{opacity:.75}}@media (prefers-reduced-motion:reduce){#arena.unwritten::before{animation:none}}

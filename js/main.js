@@ -13,9 +13,10 @@ import { cleanChat, CHAT_MAX } from './chatfilter.js';
 import { boardWithStaff, wouldRankLabel } from './ranks.js';
 import { VESPERVEIL, staffActive, GM_CLASS, GM_SIGIL, EVENTIDE, gmOn, checkPass, sanitizeSave, becomeGm, leaveGm, eventide, shouldAnnounce } from './gm.js';
 import { openSandbox, sandboxFloor, sandboxFight, sandboxLoot, closeSandbox, sandboxEdit } from './sandbox.js';
-import { legendaryWeaponDps, rerollItem, chooseDestiny, DESTINY_MS } from './loot.js';
+import { enforceOneUnique, legendaryWeaponDps, rerollItem, chooseDestiny, DESTINY_MS } from './loot.js';
 import { cx, CODEX, isCodex } from './codex.js';
 import { galaxyTier, mountGalaxy } from './galaxy.js';
+import { unwrittenHour } from './game.js';
 import { itemIcon } from './icons.js';
 import { sellPrice, sellable, toggleLock, sellItem, bulkPreview, sellBulk } from './town.js';
 const ico = (it, cls = 'ico') => `<i class="${cls}${it.rarity === 'unique' ? ' ushim' : ''}" style='background-image:${itemIcon(it).replace(/'/g, '%27')}' aria-hidden="true"></i>`;
@@ -63,11 +64,11 @@ async function boot() {
   be = await makeBackend(); const localUnlock = await checkPass(localStorage.getItem('logout.v1.gm'), GM_PASS_HASH);
   gmValid = staffActive({ serverRole: !!be.isGm?.(), localUnlock }); // policy lives in gm.js
   if (be.name === 'supabase') be.holdUploads = gmValid && !be.isGm(); // local-only staff: no save, name or damage ever leaves this device
-  save = migrateSave(await be.loadSave()); if (save) delete save.ctx; // live-only context, never trusted from storage
+  save = migrateSave(await be.loadSave()); if (save) { delete save.ctx; enforceOneUnique(save); } // live-only context, never trusted from storage
   if (save && sanitizeSave(save, gmValid)) { save = migrateSave(save); await be.saveSave(save); } // pasted staff ids are stripped
   if (!save) return showCreate();
   if (gmValid) save.heroes[0].hp = null; // staff perk: always full HP
-  { const f0 = (await be.getFloor()).floor, bi = bossInfo(f0); myGuild = featureOn(FEATURES, 'guilds', gmValid) && !localStaffOnly() ? await be.myGuild?.().catch(() => null) : null; save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid, guild: !!myGuild }; } // offline maths sees the same floor context
+  { const fl0 = await be.getFloor(), f0 = fl0.floor, bi = bossInfo(f0); myGuild = featureOn(FEATURES, 'guilds', gmValid) && !localStaffOnly() ? await be.myGuild?.().catch(() => null) : null; save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid, guild: !!myGuild, bossPct: fl0.maxHp ? fl0.hp / fl0.maxHp : 1, gmPresent: gmValid || (fl0.gmUntil || 0) > Date.now() }; } // offline maths sees the same floor context
   const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
   save.gold += p.gold; const ups = applyXp(save.heroes, p.xp); pending += p.damage;
   const offFloor = (await be.getFloor()).floor, trickled = trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
@@ -106,7 +107,7 @@ function handleClears(clears = [], quiet = false) {
 function openWardrobe() {
   const h = save.heroes[0];
   $('wpreview').style.backgroundImage = heroSprite(h.look, h.cls);
-  $('wname').innerHTML = `<span style="color:${nameColorOf(h)}">${esc(h.name)}</span><br><span class="ttl">«${esc(titleOf(h))}»</span>` + (h.cls === GM_CLASS && h.look.outfitStyle === 'gm-coat' ? `<p class="sub" id="vesper"><b style="color:#ffd76a">${esc(VESPERVEIL.label)}</b><br>${esc(VESPERVEIL.lore)}</p>` : '');
+  $('wname').innerHTML = `<span style="color:${nameColorOf(h)}">${esc(h.name)}</span><br><span class="ttl">«${esc(titleOf(h))}»</span>` + (h.cls === GM_CLASS && h.look.outfitStyle === 'gm-coat' ? `<p class="sub" id="vesper"><b style="color:#ffd76a">${esc(VESPERVEIL.label)}</b><br>${esc(VESPERVEIL.lore)}<br><span style="color:#cfd8ff">✦ ${esc(VESPERVEIL.ability)}</span></p>` : '');
   picker($('wpick'), SLOTS, h.look, h.cls, save.progress, async id => { if (equip(save, id)) { await be.saveSave(save); render(); openWardrobe(); } });
   if (!$('wardrobe').open) $('wardrobe').showModal();
 }
@@ -120,7 +121,8 @@ async function startGame(fresh = false) {
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
 function tick() {
-  save.ctx = { gm: gmValid, guild: !!myGuild, decreePct: decreePctNow(), decree: gmValid || (floor.gmUntil || 0) > Date.now() || echoUntil > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, sessionSecs: (Date.now() - sessionStart) / 1000 };
+  save.ctx = { gm: gmValid, gmPresent: gmValid || (floor.gmUntil || 0) > Date.now(), guild: !!myGuild, decreePct: decreePctNow(), decree: gmValid || (floor.gmUntil || 0) > Date.now() || echoUntil > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, sessionSecs: (Date.now() - sessionStart) / 1000 };
+  { const uh = unwrittenHour(save.ctx), ar = $('arena'); if (ar.classList.contains('unwritten') !== uh) { ar.classList.toggle('unwritten', uh); ar.title = uh ? 'The Unwritten Hour: +5% damage until the guardian falls' : ''; } }
   const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS), fx = effectsOf(save.heroes[0]);
   if (fx.has('whisper') && Date.now() - lastWhisper > 120000) { lastWhisper = Date.now(); log(WHISPERS[Math.floor(Math.random() * WHISPERS.length)], '#b9a8ff'); }
   if (p.damage > 0 && save.sheath && cx(save.heroes[0], 'cx-sheath')) { const extra = Math.round(p.damage * 0.5); p.damage += extra; save.sheath = false; log('Twilight Sheath: the first cut after rest lands +50%.', '#ffd76a'); } // Twilight Sheath
@@ -164,7 +166,7 @@ function render() {
   $('hhp').title = `HP ${Math.round(heroHp(h))} / ${heroMaxHp(h)}`;
   const b = buffsOf(save), mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   H('buffs').innerHTML = [worn ? '<span class="buff bad" title="Below 30% HP: DPS halved">Worn down · DPS ½</span>' : '', b.rested > 0 ? `<span class="buff" title="+15% gold and XP">Well Rested ${mmss(b.rested)}</span>` : '',
-    b.elixir > 0 ? `<span class="buff" title="+25% DPS">Fury ${mmss(b.elixir)}</span>` : '', b.vigil > 0 ? `<span class="buff" title="Offline cap raised once">Vigil +${b.vigil}h</span>` : '', h.cls === GM_CLASS && h.look.aura === 'gm-aura' ? (g => `<span class="buff gold" id="galaxyTier" title="${esc(g.desc)}">Galaxy · Tier ${g.tier} · ${esc(g.name)}</span>`)(galaxyTier(h.level)) : ''].join('');
+    b.elixir > 0 ? `<span class="buff" title="+25% DPS">Fury ${mmss(b.elixir)}</span>` : '', b.vigil > 0 ? `<span class="buff" title="Offline cap raised once">Vigil +${b.vigil}h</span>` : '', unwrittenHour(save.ctx) ? '<span class="buff gold" title="Vesperveil: +5% damage for heroes on this floor until the guardian falls">The Unwritten Hour · +5%</span>' : '', h.cls === GM_CLASS && h.look.aura === 'gm-aura' ? (g => `<span class="buff gold" id="galaxyTier" title="${esc(g.desc)}">Galaxy · Tier ${g.tier} · ${esc(g.name)}</span>`)(galaxyTier(h.level)) : ''].join('');
   const xp = h.xp / xpToNext(h.level); H('hxp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < xp ? '' : 'off'}"></i>`).join('');
   H('stats').innerHTML = `${classOf(h.cls).icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${effectiveDps(save).toFixed(1)}</b> · HP <b>${Math.round(heroHp(h))}/${heroMaxHp(h)}</b> · Gold <b>${fmt(save.gold)}</b>`;
   H('lvlL').textContent = `Train ${fmt(levelCost(h))}g`; $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`; $('lvl').disabled = save.gold < levelCost(h);
@@ -226,7 +228,7 @@ function openBag() {
       <div class="bagbtns"><button id="bEquip" class="cta">Equip</button>${sellable(it) ? `<button id="bLock">${it.locked ? 'Unlock' : 'Lock'}</button>` : ''}${cx(h, 'cx-loom') && !it.gm ? '<button id="bLoom">Rename</button>' : ''}${cx(h, 'cx-plan') && !it.gm && it.rarity !== 'unique' ? `<button id="bPlan" ${save.planFloor === floor.floor ? 'disabled title="Used on this floor"' : ''}>Master Plan · reroll</button>` : ''}</div>`;
     if ($('bLoom')) $('bLoom').onclick = async () => { const v = prompt('Loom of Names: new name (max 28)', it.customName || it.name); if (v == null) return; const c = cleanChat(v, 28); if (!c.ok || c.text !== v.replace(/\s+/g, ' ').trim()) { notice('That name is not allowed'); return; } it.customName = c.text; it.name = c.text; await be.saveSave(save); openBag(); };
     if ($('bPlan')) $('bPlan').onclick = async () => { const n = rerollItem(save, bagSel, floor.floor); if (n) { log(`Master Plan: ${n.name} redrawn.`, '#ffd76a'); await be.saveSave(save); openBag(); } };
-    $('bEquip').onclick = async () => { if (!equipItem(save, bagSel)) { notice('Your Unique weapon refuses to share you with a trinket'); return; } log(`Equipped ${it.name}.`, rarityOf(it.rarity).color); bagSel = -1; await be.saveSave(save); render(); openBag(); };
+    $('bEquip').onclick = async () => { const back = it.rarity === 'unique' ? GEAR_SLOTS.map(k => h.equip[k]).find(x => x?.rarity === 'unique' && x.slot !== it.slot) : null; if (!equipItem(save, bagSel)) { notice('Your Unique weapon refuses to share you with a trinket'); return; } log(`Equipped ${it.name}.`, rarityOf(it.rarity).color); if (back) log(`System notice: one Unique at a time. ${back.name} returned to your bag.`, '#7ff6ff'); bagSel = -1; await be.saveSave(save); render(); openBag(); };
     if ($('bLock')) $('bLock').onclick = async () => { toggleLock(save, bagSel); await be.saveSave(save); openBag(); };
     $('bagDetail').insertAdjacentHTML('beforeend', `<p class="sub">${sellable(it) ? `Sell at Quill's in Town · ${fmt(sellPrice(save, it))}g` : 'Staff items cannot be sold.'}</p>`);
   } else $('bagDetail').innerHTML = '<p class="sub">Select an item to compare it with what you have equipped.</p>';

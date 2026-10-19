@@ -27,7 +27,8 @@ for (let i = 0; i < 4000; i++) { const f = 1 + (i % 100); clean(L.rollItem(rng(i
 for (let i = 0; i < 2000; i++) clean(L.rollDrops({ heroId: 'h' + i, floor: 1 + (i % 100), share: 1, seq: i }), 'rollDrops');
 { const s = mk(); for (let i = 0; i < 300; i++) { clean(L.trickleDrops(s, L.TRICKLE.secs, 1 + (i % 100), Infinity), 'trickle'); s.inv.length = 0; } }
 for (let f = 1; f <= 100; f++) for (let b = 0; b < 6; b++) clean(T.shopStock(f, b * T.SHOP_BUCKET_MS), 'shop');
-clean([L.ABILITIES, L.DRAWBACKS, L.U_PRE, L.U_BASE, L.U_EPI, L.RARITIES, L.FORBIDDEN], 'Unique pools');
+clean([L.ABILITIES, L.ARMOR_ABILITIES, L.DRAWBACKS, L.U_PRE, L.U_BASE, L.U_ABASE, L.U_EPI, L.RARITIES, L.FORBIDDEN], 'Unique pools');
+for (let i = 0; i < 3000; i++) clean(L.rollItem(rng(70000 + i), 1 + (i % 100), 'void', i, [0, 0, 0, 0, 0, 1]), 'Unique weapons + armor');
 clean([C.CATALOG, C.SLOTS, C.CREATION_SLOTS, Object.keys(CLASSES), TREES], 'catalog/classes/trees');
 for (let f = 1; f <= PLAN_FLOORS; f++) clean(bossInfo(f), 'boss plan');
 clean(fs.readFileSync(new URL('../preview-bosses.html', import.meta.url), 'utf8'), 'preview page');

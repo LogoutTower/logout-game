@@ -5,7 +5,7 @@ import { rollItem, salvageValue, bagSize, salvageGold, salvagePay } from './loot
 import { talentBonus } from './talents.js';
 import { canvas, shadeShape } from './bosses.js';
 const tier = f => Math.sqrt(baseHp(f) / baseHp(1)); // price scale per floor
-export const innCost = (f, save) => save?.ctx?.gm ? 0 : Math.round(30 * tier(f) * (save && effectsOf(save.heroes[0]).has('innTax') ? 1.25 : 1) * (save ? 1 - talentBonus(save.heroes[0]).innPct / 100 : 1));
+export const innCost = (f, save) => save?.ctx?.gm ? 0 : Math.round(30 * tier(f) * (save && effectsOf(save.heroes[0]).has('innTax') ? 1.25 : 1) * (save && effectsOf(save.heroes[0]).has('innkeep') ? 0.6 : 1) * (save ? 1 - talentBonus(save.heroes[0]).innPct / 100 : 1));
 /** Shop price after talent discounts. */
 export const priceFor = (save, it) => Math.round(it.price * (save ? 1 - talentBonus(save.heroes[0]).shopPct / 100 : 1));
 export function rest(save, floor) {

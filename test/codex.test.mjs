@@ -57,4 +57,10 @@ assert.deepEqual([5, 20, 50].map(l => galaxyTier(l).tier), [1, 3, 5]); assert(ga
 assert.deepEqual([1, 10, 20, 30, 40].map(l => galaxyTier(l).tier), [1, 2, 3, 4, 5]);
 assert.equal(G.VESPERVEIL.label, 'Vesperveil, Mantle of the Unwritten'); assert.equal(G.VESPERVEIL.lore, 'System notice: wearer identity not found. The tower stopped asking.');
 for (const n of ['Vesperveil', 'Galaxy of the Unwritten', 'Unsheathed', "The Architect's Codex", 'The Final Shape', 'Collapse of Stars']) assert(G.GM_NAMES.includes(n), `exclusivity scan covers ${n}`); // gm.test.mjs scans every pool for GM_NAMES
+// ---- Vesperveil: The Unwritten Hour (+5% under 10% boss HP while staff is present; same in offline maths)
+{ const { unwrittenHour, layerMul, accrue } = await import('../js/game.js'); assert(G.VESPERVEIL.ability.startsWith('The Unwritten Hour'));
+  const p = mk(); p.ctx = { bossPct: 0.05 }; const off = effectiveDps(p); p.ctx.gmPresent = true; assert(Math.abs(effectiveDps(p) / off - 1.05) < 1e-6, '+5% while present');
+  p.ctx.bossPct = 0.2; assert.equal(effectiveDps(p), (p.ctx.gmPresent = false, effectiveDps(p)), 'off above 10%'); assert(!unwrittenHour({ bossPct: 0.05 }), 'no presence, no bonus');
+  const a = mk(), b = mk(); a.ctx = { bossPct: 0.05, gmPresent: true }; b.ctx = { bossPct: 0.05 }; a.lastTick = b.lastTick = Date.now() - 600e3; const ra = accrue(a, Date.now()), rb = accrue(b, Date.now()); assert(Math.abs(ra.damage / rb.damage - 1.05) < 0.01, 'offline maths agree');
+  const L2 = await import('../js/loot.js'); assert(![...L2.ABILITIES, ...L2.ARMOR_ABILITIES].some(x => /unwritten/i.test(x.id + x.text)), 'never in a Unique pool'); }
 console.log('codex tests passed');

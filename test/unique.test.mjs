@@ -1,7 +1,7 @@
 // Unique rarity: generated one-of-a-kind weapons (rate, trickle exclusion, auto-salvage protection, names, every ability/drawback, forbidden pairs).
 import assert from 'node:assert';
 import { newHero, simulate, effectiveDps, heroDps, offlineCap, effectsOf, heroMaxHp, LOW_MUL, DRAIN_SECS } from '../js/game.js';
-import { RARITIES, rarityWeights, rollItem, grantDrops, trickleDrops, TRICKLE, INV_SIZE, ABILITIES, DRAWBACKS, FORBIDDEN, allowedPair, forgeUnique, salvageGold, salvageValue, equipItem } from '../js/loot.js';
+import { RARITIES, rarityWeights, rollItem, grantDrops, trickleDrops, TRICKLE, INV_SIZE, ABILITIES, ARMOR_ABILITIES, DRAWBACKS, FORBIDDEN, allowedPair, forgeUnique, salvageGold, salvageValue, equipItem } from '../js/loot.js';
 import { innCost } from '../js/town.js';
 import { rng } from '../js/floors.js';
 import { migrateSave } from '../js/cosmetics.js';
@@ -24,7 +24,7 @@ assert.equal(TRICKLE.weights[U], 0);
   assert(found, 'a seeded boss kill yields a Unique');
   const u = found.d.items.find(i => i.rarity === 'unique');
   assert(found.s.inv.includes(u), 'Unique kept in bag'); assert(found.s.inv.length > INV_SIZE || found.d.items.length === 1, 'bag may overflow for Unique');
-  assert.equal(u.slot, 'weapon'); assert(u.stamp.includes('Floor 50') && u.serial && u.lore.startsWith('System notice'), 'stamp + serial + lore');
+  assert(['weapon', 'armor'].includes(u.slot)); assert(u.stamp.includes('Floor 50') && u.serial && u.lore.startsWith('System notice'), 'stamp + serial + lore');
   // same seed → same Unique (reproducible)
   const t = mk(); t.heroes[0].id = found.s.heroes[0].id; t.lootSeq = found.s.lootSeq - 1; for (let i = 0; i < INV_SIZE; i++) t.inv.push(found.s.inv[i]); const again = grantDrops(t, 50, 1).items.find(i => i.rarity === 'unique'); assert.deepEqual(again, u);
 }
@@ -39,9 +39,9 @@ assert.equal(TRICKLE.weights[U], 0);
 // ---- forbidden pairs never roll; every ability and drawback can roll
 { const seenA = new Set(), seenD = new Set();
   for (let i = 0; i < 6000; i++) { const it = rollItem(rng(i * 31 + 5), 10, 'holy', i, [0, 0, 0, 0, 0, 1]); seenA.add(it.ability.id); seenD.add(it.drawback.id); assert(allowedPair(it.ability.id, it.drawback.id), `forbidden ${it.ability.id}+${it.drawback.id}`); }
-  assert.equal(seenA.size, ABILITIES.length); assert.equal(seenD.size, DRAWBACKS.length);
+  assert.equal(seenA.size, ABILITIES.length + ARMOR_ABILITIES.length); assert.equal(seenD.size, DRAWBACKS.length);
   assert(!allowedPair('lifesteal', 'drain') && !allowedPair('gold', 'poor') && !allowedPair('vigil', 'shortCap') && !allowedPair('scholar', 'dull'));
-  for (const [a, ds] of Object.entries(FORBIDDEN)) { assert(ABILITIES.some(x => x.id === a)); for (const d of ds) assert(DRAWBACKS.some(x => x.id === d)); }
+  for (const [a, ds] of Object.entries(FORBIDDEN)) { assert([...ABILITIES, ...ARMOR_ABILITIES].some(x => x.id === a)); for (const d of ds) assert(DRAWBACKS.some(x => x.id === d)); }
 }
 // ---- every ability and drawback applies (vs. the same weapon with neutral effect ids)
 const withW = (ab, dr, ctx) => { const s = mk(), it = forgeUnique(10, 'storm', ab, dr); s.heroes[0].equip.weapon = it; if (ctx) s.ctx = ctx; return s; };

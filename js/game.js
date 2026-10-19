@@ -25,9 +25,9 @@ export function gearBonus(h) {
 }
 // Forge (h.gear) tempers the hero's weapon: +15% per tier. Equipped loot adds flat weapon DPS and % bonuses.
 /** Special effects of equipped Unique items (see UNIQUES in loot.js). */
-export const effectsOf = h => { const w = h?.equip?.weapon; return w?.rarity === 'unique' ? new Set([w.ability.id, w.drawback.id]) : new Set(); };
-export const FX = { tenthMul: 1.1, heavyMul: 0.95, lastLayer: { below: 0.2, mul: 1.3 }, lifesteal: 0.65, drain: 1.2, steadyLowMul: 0.85, hearthHp: 0.5, momentum: { perMin: 0.01, max: 0.3 }, milestoneMul: 1.5 };
-export const heroDps = h => { const c = classOf(h.cls), g = gearBonus(h), e = effectsOf(h); return +((c.atk * c.spd * (1 + 0.25 * (h.level - 1)) + g.dps) * (1 + 0.15 * h.gear) * (1 + g.dpsPct / 100) * talentDpsMul(h) * (e.has('tenth') ? FX.tenthMul : 1) * (e.has('heavy') ? FX.heavyMul : 1)).toFixed(3); };
+export const effectsOf = h => new Set(['weapon', 'armor'].flatMap(k => { const w = h?.equip?.[k]; return w?.rarity === 'unique' ? [w.ability.id, w.drawback.id] : []; })); // the one-Unique rule means at most one of these is set
+export const FX = { tenthMul: 1.1, heavyMul: 0.95, lastLayer: { below: 0.2, mul: 1.3 }, lifesteal: 0.65, drain: 1.2, steadyLowMul: 0.85, hearthHp: 0.5, momentum: { perMin: 0.01, max: 0.3 }, milestoneMul: 1.5, thornsMul: 1.08, aegis: 0.8, stillness: 0.65, dodgeDrain: 0.9, dodgeMul: 1.03, restfulPerMin: 0.01, innkeep: 0.6 };
+export const heroDps = h => { const c = classOf(h.cls), g = gearBonus(h), e = effectsOf(h); return +((c.atk * c.spd * (1 + 0.25 * (h.level - 1)) + g.dps) * (1 + 0.15 * h.gear) * (1 + g.dpsPct / 100) * talentDpsMul(h) * (e.has('tenth') ? FX.tenthMul : 1) * (e.has('heavy') ? FX.heavyMul : 1) * (e.has('thorns') ? FX.thornsMul : 1) * (e.has('dodge') ? FX.dodgeMul : 1)).toFixed(3); };
 const talentDpsMul = h => { const t = talentBonus(h), high = t.highHpDpsPct && heroHp(h) > 0.5 * heroMaxHp(h) ? t.highHpDpsPct : 0; return (1 + (t.dpsPct + t.rallyPct + t.eclipsePct + t.crackPct + high) / 100) * (1 + t.doublePct / 100); };
 const goldMul = heroes => 1 + (gearBonus(heroes[0]).goldPct + talentBonus(heroes[0]).goldPct) / 100, xpMul = heroes => 1 + (gearBonus(heroes[0]).xpPct + talentBonus(heroes[0]).xpPct) / 100;
 /** Shaper's Decree: +5% gold/XP for everyone on a floor while a staff hero is fighting there (ctx.decree, set live or from the server floor state). */
@@ -61,7 +61,11 @@ export const buffsOf = save => save.buffs || (save.buffs = { rested: 0, elixir: 
 /** DPS right now, including the low-HP penalty and an active elixir. */
 const lowMulOf = h => Math.max(effectsOf(h).has('steady') ? FX.steadyLowMul : LOW_MUL, LOW_MUL + talentBonus(h).lowMulPct / 100);
 /** Situational Unique multipliers. save.ctx is transient live context set by the UI ({ bossPct, special, sessionSecs }); offline it is absent. */
-export const layerMul = save => { const e = effectsOf(save.heroes[0]), c = save.ctx || {}; let m = 1;
+// Vesperveil's 'The Unwritten Hour' (staff coat): boss under 10% while the Architect is on the floor → +5% damage for heroes there.
+// gmPresent = this client's own valid staff hero, or the server presence (role = gm only), so a local-only GM never lifts others.
+export const UNWRITTEN = { below: 0.1, mul: 1.05 };
+export const unwrittenHour = c => !!c?.gmPresent && (c.bossPct ?? 1) < UNWRITTEN.below;
+export const layerMul = save => { const e = effectsOf(save.heroes[0]), c = save.ctx || {}; let m = unwrittenHour(c) ? UNWRITTEN.mul : 1;
   if (e.has('lastLayer') && (c.bossPct ?? 1) < FX.lastLayer.below) m *= FX.lastLayer.mul;
   if (e.has('momentum')) m *= 1 + Math.min(FX.momentum.max, (c.sessionSecs || 0) / 60 * FX.momentum.perMin);
   if (e.has('milestone') && c.special) m *= FX.milestoneMul;
@@ -74,22 +78,22 @@ export const effectiveDps = save => totalDps(save.heroes) * (!save.ctx?.gm && is
  *  Mutates hero HP and buff timers; returns float { dmg, gold, xp, lowSecs }. */
 export function simulate(save, secs) {
   if (save.ctx?.gm) save.heroes[0].hp = heroMaxHp(save.heroes[0]); // staff: no drain, never worn down (also restores HP drained before the unlock)
-  const h = save.heroes[0], max = heroMaxHp(h), b = buffsOf(save), e = effectsOf(h), tb = talentBonus(h), raw = max / DRAIN_SECS * (e.has('lifesteal') ? FX.lifesteal : 1) * (e.has('drain') ? FX.drain : 1);
+  const h = save.heroes[0], max = heroMaxHp(h), b = buffsOf(save), e = effectsOf(h), tb = talentBonus(h), raw = max / DRAIN_SECS * (e.has('lifesteal') ? FX.lifesteal : 1) * (e.has('drain') ? FX.drain : 1) * (e.has('aegis') ? FX.aegis : 1) * (e.has('stillness') ? FX.stillness : 1) * (e.has('dodge') ? FX.dodgeDrain : 1);
   const drain = save.ctx?.gm ? 0 : Math.max(raw * 0.1, raw * (1 - tb.drainPct / 100) - tb.regenPct / 100 * max / 60); // talents: slower drain + regen
   const base = totalDps(save.heroes) * layerMul(save), lowMul = lowMulOf(h), hearth = e.has('hearth');
   const gM = goldMul(save.heroes) * decreeMul(save) * guildMul(save), xM = xpMul(save.heroes) * decreeMul(save) * guildMul(save);
   let hp = heroHp(h), t = Math.max(0, secs), dmg = 0, gold = 0, xp = 0, lowSecs = 0;
   for (let guard = 0; t > 1e-9 && guard < 16; guard++) {
-    const low = hp <= LOW_HP * max + 1e-9; let seg = t;
-    if (!low) seg = Math.min(seg, (hp - LOW_HP * max) / drain);
+    const low = hp <= LOW_HP * max + 1e-9; let seg = t; const rs = e.has('restful') && b.rested > 0, dr = rs ? 0 : drain; // restful armor: no drain + regen while Well Rested
+    if (!low && dr > 0) seg = Math.min(seg, (hp - LOW_HP * max) / dr);
     const restedTicks = !(hearth && hp > FX.hearthHp * max + 1e-9); // hearth: Well Rested is frozen while above 50% HP
-    if (hearth && hp > FX.hearthHp * max + 1e-9) seg = Math.min(seg, (hp - FX.hearthHp * max) / drain);
+    if (hearth && dr > 0 && hp > FX.hearthHp * max + 1e-9) seg = Math.min(seg, (hp - FX.hearthHp * max) / dr);
     if (b.rested > 0 && restedTicks) seg = Math.min(seg, b.rested);
     if (b.elixir > 0) seg = Math.min(seg, b.elixir);
     if (seg <= 1e-9) { hp -= 1e-7; continue; } // sitting exactly on a threshold: step past it
     const d = base * (low ? lowMul : 1) * (b.elixir > 0 ? ELIXIR.mul : 1) * seg, r = b.rested > 0 ? restedMul(h) : 1;
     dmg += d; gold += d * 0.1 * gM * r; xp += d * 0.05 * xM * r; if (low) lowSecs += seg;
-    hp = Math.max(1, hp - drain * seg); if (restedTicks) b.rested = Math.max(0, b.rested - seg); b.elixir = Math.max(0, b.elixir - seg); t -= seg;
+    hp = rs ? Math.min(max, hp + FX.restfulPerMin * max / 60 * seg) : Math.max(1, hp - dr * seg); if (restedTicks) b.rested = Math.max(0, b.rested - seg); b.elixir = Math.max(0, b.elixir - seg); t -= seg;
   }
   h.hp = hp;
   return { dmg, gold, xp, lowSecs };

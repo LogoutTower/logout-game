@@ -13,7 +13,7 @@ export const GM_SIGIL = '◆';
 export const GM_ITEMS = [ // cosmetic ids (all prefixed gm-) rendered only for a valid staff hero
   { id: 'gm-title', type: 'title', label: 'Architect', value: GM_TITLE },
   { id: 'gm-name', type: 'nameColor', label: 'Void Gold', value: '#0b0812' },
-  { id: 'gm-coat', type: 'outfitStyle', label: 'Vesperveil, Mantle of the Unwritten', value: 'gm-coat', lore: 'System notice: wearer identity not found. The tower stopped asking.' },
+  { id: 'gm-coat', type: 'outfitStyle', label: 'Vesperveil, Mantle of the Unwritten', value: 'gm-coat', lore: 'System notice: wearer identity not found. The tower stopped asking.', ability: "The Unwritten Hour: when the floor guardian falls below 10% HP while the Architect is on the floor, every hero there deals +5% damage until it dies, under a starlit night." },
   { id: 'gm-hood', type: 'hairStyle', label: 'Shadow Hood', value: 'gm-hood' },
   { id: 'gm-black', type: 'outfitColor', label: 'Void Leather', value: '#17131f' },
   { id: 'gm-gold', type: 'trim', label: 'Architect Gold', value: '#d9a93f' },
@@ -26,7 +26,7 @@ export const GM_LOOK = { skin: 'skin-1', hairColor: 'hc-ink', hairStyle: 'gm-hoo
 export const EVENTIDE = { id: 'gm-eventide', name: 'Eventide, the Final Shape', lore: 'System notice: this object has no origin. It was here before the tower.', ability: "Shaper's Decree: while you fight on a floor, every hero there gets +5% XP and gold." };
 export const DECREE_MUL = 1.05;
 export const VESPERVEIL = GM_ITEMS.find(i => i.id === 'gm-coat');
-export const GM_NAMES = ['GameMaster', 'Architect of the Cosmos', 'Shaper of Destiny', 'Eventide', 'Final Shape', "Shaper's Decree", 'Vesperveil', 'Mantle of the Unwritten', 'Galaxy of the Unwritten', 'Unsheathed', ...CODEX_NAMES];
+export const GM_NAMES = ['GameMaster', 'Architect of the Cosmos', 'Shaper of Destiny', 'Eventide', 'Final Shape', "Shaper's Decree", 'Vesperveil', 'Mantle of the Unwritten', 'Galaxy of the Unwritten', 'Unsheathed', 'The Unwritten Hour', 'Unwritten Hour', ...CODEX_NAMES];
 export const isGmId = id => typeof id === 'string' && id.startsWith('gm-');
 /** Eventide: a Legendary-parity weapon of the given floor (base stat only, no Unique ability). */
 export const eventide = (floor, legendaryDps) => ({ id: EVENTIDE.id, gm: true, slot: 'weapon', rarity: 'legendary', floor, element: 'void', name: EVENTIDE.name, lore: EVENTIDE.lore, stats: { dps: legendaryDps }, affixes: [] });
