@@ -83,7 +83,7 @@ export class SupabaseBackend {
   async leaderboard(me = null) {
     const f = (await this.getFloor()).floor;
     const { data, error } = await this.sb.from('damage').select('name, damage, is_staff').eq('floor', f).order('damage', { ascending: false }).limit(50);
-    return boardWithStaff((error ? [] : data || []).map(r => ({ name: r.name, damage: Number(r.damage), staff: !!r.is_staff })), me);
+    return boardWithStaff((error ? [] : data || []).map(r => ({ name: r.name, damage: Number(r.damage), staff: !!r.is_staff })), me, 10, { truncated: (data || []).length >= 50 });
   }
   // ---- identity ("bind your identity"). Wallet = message signature only; never transactions, never keys, never funds.
   async bindWallet(wallet = globalThis.window?.phantom?.solana) {

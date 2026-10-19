@@ -1,6 +1,6 @@
 // "Tower Staff · would rank #N": staff never takes a numbered slot; players keep real ranks; rewards ignore staff.
 import assert from 'node:assert';
-import { rankRows, boardWithStaff } from '../js/ranks.js';
+import { rankRows, boardWithStaff, wouldRankLabel } from '../js/ranks.js';
 import { staffActive, STAFF_POLICY } from '../js/gm.js';
 const rows = [{ name: 'A', damage: 100 }, { name: 'B', damage: 80 }, { name: 'S', damage: 70, staff: true }, { name: 'C', damage: 60 }, { name: 'D', damage: 40 }];
 const { players, staff } = rankRows(rows);
@@ -15,4 +15,10 @@ const g = rankRows([{ name: 'G1', damage: 500 }, { name: 'G2', damage: 300 }]); 
 // staff policy switch points
 assert(staffActive({ serverRole: true })); assert(staffActive({ localUnlock: true })); assert(!staffActive({ localUnlock: true, staffMode: false }), 'toggle off');
 STAFF_POLICY.allowLocalUnlock = false; assert(!staffActive({ localUnlock: true }), 'local unlock can be removed'); assert(staffActive({ serverRole: true })); STAFF_POLICY.allowLocalUnlock = true;
+assert.equal(wouldRankLabel(staff[0]), 'Tower Staff · would rank #3');
+{ const many = Array.from({ length: 50 }, (_, i) => ({ name: 'P' + i, damage: 1000 - i })), t = rankRows([...many, { name: 'S', damage: 1, staff: true }], { truncated: true });
+  assert.equal(wouldRankLabel(t.staff[0]), 'Tower Staff · would rank #51+', 'server list cut off: shown as N+');
+  assert.equal(rankRows([...many, { name: 'S', damage: 975.5, staff: true }], { truncated: true }).staff[0].wouldRank, 26, 'inside the slice: exact');
+  const bb = boardWithStaff([...many, { name: 'S', damage: 500, staff: true }], null, 10); assert.equal(bb.length, 11); assert.equal(bb.players.length, 50, 'full list kept for local staff rows');
+  assert(bb.slice(1).every((r, i) => r.rank === i + 1 && !r.staff), 'numbered slots are players only'); }
 console.log('rank tests passed');
