@@ -1,5 +1,6 @@
 // Backend abstraction: LocalBackend (simulated shared tower) or SupabaseBackend.
 import { floorBossHp } from './game.js';
+import { MAX_FLOOR } from '../config.js';
 // Pre-restyle handles, renamed in older saved worlds so leaderboards stay in-theme.
 const LEGACY = ['xX_Reaper', 'mossgirl', 'NoRespawn', 'kaito.exe', 'LastLight', 'Wren', 'gl1tch', 'Ophelia', 'tankmom', 'Byte'];
 const FAKE = ['Eldrinn', 'Mossveil', 'Thornwick', 'Kaelith', 'Ravensong', 'Brightmoor', 'LyssDawn', 'Grimhallow', 'SableFen', 'Ironbough'];
@@ -22,7 +23,7 @@ export class LocalBackend {
     for (const n of FAKE) { const d = Math.floor(secs * (5 + (n.length * 7) % 40) * Math.random() * 2); w.dmg[n] = (w.dmg[n] || 0) + d; w.hp -= d; }
     this._adv(w);
   }
-  _adv(w) { let adv = 0; w.clears = w.clears || []; while (w.hp <= 0 && w.floor < 10) { const over = -w.hp; w.clears.push({ floor: w.floor, ranking: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).map(e => e[0]), dmg: { ...w.dmg }, maxHp: floorBossHp(w.floor) }); w.floor++; adv++; w.hp = floorBossHp(w.floor) - over; w.dmg = {}; headStart(w); } if (w.hp < 0) w.hp = 0; if (w.floor >= 10 && w.hp <= 0 && !w.final) { w.final = 1; w.clears.push({ floor: 10, ranking: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).map(e => e[0]), dmg: { ...w.dmg }, maxHp: floorBossHp(w.floor) }); } return adv; }
+  _adv(w) { let adv = 0; w.clears = w.clears || []; while (w.hp <= 0 && w.floor < MAX_FLOOR) { const over = -w.hp; w.clears.push({ floor: w.floor, ranking: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).map(e => e[0]), dmg: { ...w.dmg }, maxHp: floorBossHp(w.floor) }); w.floor++; adv++; w.hp = floorBossHp(w.floor) - over; w.dmg = {}; headStart(w); } if (w.hp < 0) w.hp = 0; if (w.floor >= MAX_FLOOR && w.hp <= 0 && !w.final) { w.final = 1; w.clears.push({ floor: MAX_FLOOR, ranking: Object.entries(w.dmg).sort((a, b) => b[1] - a[1]).map(e => e[0]), dmg: { ...w.dmg }, maxHp: floorBossHp(w.floor) }); } return adv; }
   async getFloor() { const w = this._w(); this._sim(w); this._sw(w); return { floor: w.floor, hp: w.hp, maxHp: floorBossHp(w.floor) }; }
   async submitDamage(playerName, amount) {
     const w = this._w(); w.dmg[playerName] = (w.dmg[playerName] || 0) + amount; w.hp -= amount;

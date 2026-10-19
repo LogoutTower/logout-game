@@ -8,8 +8,9 @@ export function sprite(rows, pal = PAL) {
 }
 const cache = new Map();
 const memo = (k, f) => { if (!cache.has(k)) cache.set(k, f()); return cache.get(k); };
-import { bossGrid } from './bosses.js';
-export { bossGrid, bossShape, bossIsBig, BOSS_SIZE } from './bosses.js';
+import { bossGrid } from './floors.js';
+export { bossGrid, bossShape, bossIsBig, bossInfo } from './floors.js';
+export { BOSS_SIZE } from './bosses.js';
 export const bossSprite = f => memo('b' + f, () => { const g = bossGrid(f); return sprite(g.rows, g.pal); });
 export const BOSS_SPRITE = bossSprite(1);
 import { heroGrid } from './cosmetics.js';

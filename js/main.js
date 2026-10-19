@@ -31,6 +31,7 @@ function picker(el, slots, look, heroCls, progress, onPick) {
 }
 
 async function boot() {
+  $('maxf').textContent = MAX_FLOOR;
   be = await makeBackend(); save = migrateSave(await be.loadSave());
   if (!save) return showCreate();
   const p = computeProgress(save.heroes, save.lastTick, Date.now(), OFFLINE_CAP_HOURS);

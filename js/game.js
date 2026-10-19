@@ -4,9 +4,8 @@ export const CLASSES = {
   Blade:    { icon: '🗡️', atk: 5, spd: 1.3, hp: 100 },
   Arcanist: { icon: '🔮', atk: 9, spd: 0.7, hp: 80 },
 };
-export const floorBossHp = f => Math.round(20000 * Math.pow(1.6, f - 1));
-export const BOSS_NAMES = ['The Gatewarden', 'The Rust Hydra', 'The Hollow King', 'The Ash Seraph', 'The Mire Lich', 'The Iron Choir', 'The Pale Colossus', 'The Storm Wyrm', 'The Thorn Matriarch', 'The Last Warden'];
-export const bossName = f => BOSS_NAMES[(f - 1) % BOSS_NAMES.length];
+// Boss names, HP curve and the 100-floor plan live in floors.js.
+export { floorBossHp, bossName, bossInfo } from './floors.js';
 
 export function newHero(name, cls) {
   if (!CLASSES[cls]) throw new Error('bad class');
