@@ -1,5 +1,5 @@
 // Loot: seeded, reproducible boss drops (stat gear + rare element cosmetics), inventory, equip and salvage. Pure (no DOM, no Math.random).
-import { rng, baseHp, isUniqueSlot, bossInfo } from './floors.js';
+import { rng, baseHp, isSpecialSlot, bossInfo } from './floors.js';
 import { DROP_COSMETICS } from './cosmetics.js';
 export const INV_SIZE = 20;
 export const GEAR_SLOTS = ['weapon', 'armor', 'trinket'];
@@ -9,13 +9,69 @@ export const RARITIES = [
   { id: 'rare', label: 'Rare', color: '#4fa8ff', w: 10, mul: 1.7, affixes: 1 },
   { id: 'epic', label: 'Epic', color: '#c26bff', w: 4, mul: 2.2, affixes: 2 },
   { id: 'legendary', label: 'Legendary', color: '#ffb02e', w: 1, mul: 3, affixes: 2 },
+  { id: 'unique', label: 'Unique', color: '#7ff6ff', w: 0.05, wSpecial: 0.21, mul: 3.6, affixes: 0 }, // 0.05/100.05 ≈ 0.05% · special floors 0.21/140.21 ≈ 0.15%
 ];
+export const UNIQUE_COLOR = '#7ff6ff';
+// Unique: a randomly generated, one-of-a-kind WEAPON, seeded per drop. One strong ability + one mild drawback.
+// Stat-type effects live in item.stats (goldPct/xpPct/capH, summed by gearBonus); the rest are effect ids read via effectsOf() in game.js.
+export const ABILITIES = [
+  { id: 'lastLayer', text: '+30% DPS while the guardian is on its last HP layer (<20%)' },
+  { id: 'tenth', text: 'Every 10th hit lands twice (+10% average DPS)' },
+  { id: 'vigil', text: '+6h offline cap', stats: { capH: 6 } },
+  { id: 'ledger', text: 'Salvage pays ×3 gold' },
+  { id: 'hearth', text: 'Well Rested does not run down while you are above 50% HP' },
+  { id: 'lifesteal', text: 'Lifesteal: each hit restores HP, the guardian drains you 35% slower' },
+  { id: 'luck', text: '+25% gear drop chance from guardian kills' },
+  { id: 'momentum', text: '+1% DPS per minute this session, up to +30% (resets on reload)' },
+  { id: 'milestone', text: '+50% DPS on milestone / special floors' },
+  { id: 'gold', text: '+40% gold from everything', stats: { goldPct: 40 } },
+  { id: 'scholar', text: '+40% XP from everything', stats: { xpPct: 40 } },
+  { id: 'steady', text: 'Worn down only cuts DPS to 85% (not 50%)' },
+];
+export const DRAWBACKS = [
+  { id: 'drain', text: '+20% HP drain' },
+  { id: 'poor', text: '-10% gold', stats: { goldPct: -10 } },
+  { id: 'innTax', text: 'Inn costs +25%' },
+  { id: 'shortCap', text: '-1h offline cap', stats: { capH: -1 } },
+  { id: 'dull', text: '-5% XP', stats: { xpPct: -5 } },
+  { id: 'whisper', text: 'The weapon whispers in the Chronicle (cosmetic)' },
+  { id: 'jealous', text: 'Jealous: no trinket can be worn alongside it' },
+  { id: 'heavy', text: '-5% DPS' },
+];
+/** Pairs that would cancel out or stack on the same axis, so they are never rolled together. */
+export const FORBIDDEN = {
+  lifesteal: ['drain'], steady: ['drain'], hearth: ['innTax', 'drain'], vigil: ['shortCap'], gold: ['poor'], ledger: ['poor'], scholar: ['dull'],
+  lastLayer: ['heavy'], tenth: ['heavy'], momentum: ['heavy'], milestone: ['heavy'],
+};
+export const allowedPair = (a, d) => !(FORBIDDEN[a] || []).includes(d);
+const U_PRE = ['sung', 'bound', 'wrought', 'touched', 'born', 'kissed', 'veined', 'hewn'];
+const U_BASE = ['Thornblade', 'Greatsword', 'Halberd', 'Warglaive', 'Moonsabre', 'Runeblade', 'Warpick', 'Spellstaff', 'Fangspear', 'Cleaver', 'Longbrand', 'Starhook'];
+const U_EPI = ['the Ninth Bell', 'the Last Login', 'the Hollow Crown', 'the Quiet Server', 'the Unpatched Night', 'the Broken Compass', 'the Ashen Choir', 'the Final Layer',
+  'the Lost Party', 'the Silent Admin', 'the Endless Queue', 'the Pale Dawn', 'the Severed Link', 'the Thousand Floors', 'the Empty Throne', 'the Frozen Clock'];
+const U_LORE = ['This weapon does not exist in the item database. It exists anyway.', 'Forged once. The template was deleted afterwards.', 'No other player will ever hold this exact item.',
+  'Checksum mismatch. The tower decided to let you keep it.', 'It remembers the guardian it was taken from.', 'Drop table entry: [REDACTED]. Congratulations.'];
+export const uniqueSerial = (floor, r) => `F${floor}-${Math.floor(r() * 0x10000).toString(16).toUpperCase().padStart(4, '0')}`;
+function makeUnique(r, floor, element, seq, ownedNames = [], force = {}) {
+  const ab = force.ab ? ABILITIES.find(x => x.id === force.ab) : pick(r, ABILITIES), okD = DRAWBACKS.filter(d => allowedPair(ab.id, d.id));
+  const dr = force.dr ? DRAWBACKS.find(x => x.id === force.dr) : pick(r, okD), s = scale(floor);
+  let name, tries = 0;
+  do name = `${ELEMENT_WORD[element] || 'Tower'}${pick(r, U_PRE)} ${pick(r, U_BASE)} of ${pick(r, U_EPI)}`; while (ownedNames.includes(name) && ++tries < 20);
+  const stats = { dps: +(1.5 * s * 3.6).toFixed(1), dpsPct: Math.round((6 + r() * 6) * 1.2) }; // above a Legendary of the same floor (mul 3 → 3.6)
+  for (const src of [ab.stats, dr.stats]) for (const [k, v] of Object.entries(src || {})) stats[k] = (stats[k] || 0) + v;
+  const serial = uniqueSerial(floor, r);
+  return { id: `u${floor}-${seq}-${serial}`, slot: 'weapon', rarity: 'unique', floor, element, name, serial, stamp: `Forged on Floor ${floor} · #${serial}`, stats, affixes: [],
+    ability: { id: ab.id, text: ab.text }, drawback: { id: dr.id, text: dr.text }, lore: `System notice: ${pick(r, U_LORE)}` };
+}
+/** Dev/test helper: a Unique with a chosen ability and drawback. */
+export const forgeUnique = (floor, element, ab, dr, seed = 1) => makeUnique(rng(seed), floor, element, 'forge', [], { ab, dr });
+const ownedUniqueNames = save => [...save.inv, ...Object.values(save.heroes[0].equip || {})].filter(i => i?.rarity === 'unique').map(i => i.name);
+const uniqueFx = save => { const w = save.heroes[0].equip?.weapon; return w?.rarity === 'unique' ? new Set([w.ability.id, w.drawback.id]) : new Set(); };
 export const rarityOf = id => RARITIES.find(r => r.id === id);
-/** Rarity weights; unique/milestone floors double every non-common weight. */
-export const rarityWeights = floor => RARITIES.map((r, i) => r.w * (i > 0 && isUniqueSlot(floor) ? 2 : 1));
-export const COSMETIC_CHANCE = { normal: 0.03, unique: 0.05 };
+/** Rarity weights; special/milestone floors double every non-common weight, and Unique uses its own wSpecial. */
+export const rarityWeights = floor => RARITIES.map((r, i) => isSpecialSlot(floor) ? (r.wSpecial ?? r.w * (i > 0 ? 2 : 1)) : r.w);
+export const COSMETIC_CHANCE = { normal: 0.03, special: 0.05 };
 /** Chance of a gear drop for one kill, by damage share (0 share = no loot). */
-export const gearChance = (share, floor) => share <= 0 ? 0 : Math.min(1, 0.3 + share * 5 + (isUniqueSlot(floor) ? 0.3 : 0));
+export const gearChance = (share, floor) => share <= 0 ? 0 : Math.min(1, 0.3 + share * 5 + (isSpecialSlot(floor) ? 0.3 : 0));
 const scale = f => Math.pow(baseHp(f) / baseHp(1), 0.6); // gear power grows slower than boss HP
 const ELEMENT_WORD = { fire: 'Ember', frost: 'Frost', void: 'Void', storm: 'Storm', venom: 'Venom', holy: 'Hallowed', blood: 'Blood', shadow: 'Shadow' };
 const NOUNS = { weapon: ['Blade', 'Edge', 'Glaive', 'Fang', 'Brand'], armor: ['Mail', 'Aegis', 'Cuirass', 'Mantle', 'Plate'], trinket: ['Charm', 'Sigil', 'Locket', 'Talisman', 'Band'] };
@@ -28,8 +84,9 @@ const AFFIXES = [
 export const statLabel = (k, v) => ({ dps: `+${v} DPS`, dpsPct: `+${v}% DPS`, goldPct: `+${v}% gold`, xpPct: `+${v}% XP`, capH: `+${v}h offline cap` })[k];
 const weighted = (r, ws) => { let x = r() * ws.reduce((a, b) => a + b, 0); for (let i = 0; i < ws.length; i++) if ((x -= ws[i]) < 0) return i; return ws.length - 1; };
 /** Roll one gear piece from a seeded rng. */
-export function rollItem(r, floor, element, seq = 0) {
-  const ri = weighted(r, rarityWeights(floor)), R = RARITIES[ri], slot = GEAR_SLOTS[Math.floor(r() * 3)], s = scale(floor);
+export function rollItem(r, floor, element, seq = 0, weights = null, owned = []) {
+  const ri = weighted(r, weights || rarityWeights(floor)); if (RARITIES[ri].id === 'unique') return makeUnique(r, floor, element, seq, owned);
+  const R = RARITIES[ri], slot = GEAR_SLOTS[Math.floor(r() * 3)], s = scale(floor);
   const stats = {};
   if (slot === 'weapon') stats.dps = +(1.5 * s * R.mul).toFixed(1);
   if (slot === 'armor') stats.dpsPct = Math.round((3 + floor / 8) * R.mul);
@@ -42,25 +99,49 @@ export function rollItem(r, floor, element, seq = 0) {
 const pick = (r, a) => a[Math.floor(r() * a.length)];
 const hash = s => { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 /** Seeded drops for one boss kill. Same (heroId, floor, seq, share) always gives the same result. */
-export function rollDrops({ heroId = 'hero', floor, share, seq = 0, owned = [] }) {
-  const r = rng(hash(`${heroId}|${floor}|${seq}`)), element = bossInfo(floor).lootElement, uniq = isUniqueSlot(floor), items = [];
-  const rolls = uniq ? 2 : 1;
-  for (let i = 0; i < rolls; i++) if (r() < gearChance(share, floor)) items.push(rollItem(r, floor, element, `${seq}.${i}`));
+export function rollDrops({ heroId = 'hero', floor, share, seq = 0, owned = [], ownedU = [], luck = 1 }) {
+  const r = rng(hash(`${heroId}|${floor}|${seq}`)), element = bossInfo(floor).lootElement, special = isSpecialSlot(floor), items = [];
+  const rolls = special ? 2 : 1;
+  for (let i = 0; i < rolls; i++) if (r() < Math.min(1, gearChance(share, floor) * luck)) items.push(rollItem(r, floor, element, `${seq}.${i}`, null, ownedU));
   let cosmetic = null;
-  if (share > 0 && r() < (uniq ? COSMETIC_CHANCE.unique : COSMETIC_CHANCE.normal)) { const c = DROP_COSMETICS.find(x => x.unlock.drop === element); if (c && !owned.includes(c.id)) cosmetic = c.id; }
+  if (share > 0 && r() < (special ? COSMETIC_CHANCE.special : COSMETIC_CHANCE.normal)) { const c = DROP_COSMETICS.find(x => x.unlock.drop === element); if (c && !owned.includes(c.id)) cosmetic = c.id; }
   return { items, cosmetic, element };
 }
+/** Salvage gold for an item; Scrapper's Ledger (equipped) pays ×3. */
+export const salvageGold = (save, it) => salvageValue(it) * (uniqueFx(save).has('ledger') ? 3 : 1);
 export const salvageValue = it => Math.round(20 * Math.pow(RARITIES.findIndex(r => r.id === it.rarity) + 1, 2) * scale(it.floor));
 /** Apply one kill's drops to a v3 save. Returns { items, cosmetic, salvaged } (salvaged = auto-salvaged gold when the bag is full). */
 export function grantDrops(save, floor, share) {
-  const h = save.heroes[0], d = rollDrops({ heroId: h.id, floor, share, seq: save.lootSeq++, owned: save.progress.drops });
+  const h = save.heroes[0], d = rollDrops({ heroId: h.id, floor, share, seq: save.lootSeq++, owned: save.progress.drops, ownedU: ownedUniqueNames(save), luck: uniqueFx(save).has('luck') ? 1.25 : 1 });
   let salvaged = 0;
-  for (const it of d.items) { if (save.inv.length < INV_SIZE) save.inv.push(it); else { const g = salvageValue(it); save.gold += g; salvaged += g; } }
+  for (const it of d.items) {
+    if (it.rarity === 'unique') { save.inv.push(it); continue; } // never auto-salvaged (may exceed the bag)
+    if (save.inv.length < INV_SIZE) save.inv.push(it); else { const g = salvageGold(save, it); save.gold += g; salvaged += g; }
+  }
   if (d.cosmetic) save.progress.drops.push(d.cosmetic);
   return { ...d, salvaged };
 }
+// ---- Trickle: small seeded drops from regular fighting (~1 Common/Uncommon per 150s), so the bag fills early.
+export const TRICKLE = { secs: 150, weights: [70, 30, 0, 0, 0, 0], offlineMax: 4 }; // never Rare+ and never Unique
+/** Add `secs` of active fighting on `floor`; returns the trickle items granted (max `maxDrops`; time past the cap is discarded). */
+export function trickleDrops(save, secs, floor, maxDrops = Infinity) {
+  const t = save.trickle || (save.trickle = { secs: 0, seq: 0 }), out = [], h = save.heroes[0];
+  t.secs += Math.max(0, secs); const every = TRICKLE.secs;
+  while (t.secs >= every) {
+    if (out.length >= maxDrops) { t.secs %= every; break; }
+    t.secs -= every; const r = rng(hash(`${h.id}|trickle|${t.seq}`)), it = rollItem(r, floor, bossInfo(floor).lootElement, `t${t.seq}`, TRICKLE.weights); t.seq++;
+    it.trickle = true; out.push(it);
+    if (save.inv.length < INV_SIZE) save.inv.push(it); else { save.gold += salvageGold(save, it); it.salvaged = true; }
+  }
+  return out;
+}
 export function equipItem(save, invIndex) {
   const h = save.heroes[0], it = save.inv[invIndex]; if (!it) return false;
-  const old = h.equip[it.slot]; h.equip[it.slot] = it; save.inv.splice(invIndex, 1); if (old) save.inv.push(old); return true;
+  const w = h.equip.weapon, jealous = x => x?.rarity === 'unique' && x.drawback.id === 'jealous';
+  if (it.slot === 'trinket' && jealous(w)) return false; // the jealous Unique refuses company
+  const old = h.equip[it.slot]; h.equip[it.slot] = it; save.inv.splice(invIndex, 1); if (old) save.inv.push(old);
+  if (jealous(it) && h.equip.trinket) { save.inv.push(h.equip.trinket); h.equip.trinket = null; }
+  return true;
 }
-export function salvageItem(save, invIndex) { const it = save.inv[invIndex]; if (!it) return 0; save.inv.splice(invIndex, 1); const g = salvageValue(it); save.gold += g; return g; }
+export function salvageItem(save, invIndex) { const it = save.inv[invIndex]; if (!it) return 0; const g = salvageGold(save, it); save.inv.splice(invIndex, 1); save.gold += g; return g; }
+export { AFFIXES, scale as gearScale, ELEMENT_WORD, U_PRE, U_BASE, U_EPI };

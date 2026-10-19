@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { bossInfo, bossGrid, bossShape, baseHp, floorBossHp, isUniqueSlot, isMilestone, PLAN_FLOORS } from '../js/floors.js';
+import { bossInfo, bossGrid, bossShape, baseHp, floorBossHp, isSpecialSlot, isMilestone, PLAN_FLOORS } from '../js/floors.js';
 import { BOSSES } from '../js/bosses.js';
 const ALL = Array.from({ length: PLAN_FLOORS }, (_, i) => i + 1);
 // floors 1-10 unchanged: the original hand-made bosses
@@ -7,13 +7,13 @@ BOSSES.forEach((b, i) => assert.equal(bossInfo(i + 1).name, b.name));
 // deterministic: fresh module instance gives identical plan and pixels
 const again = await import('../js/floors.js?fresh=1');
 for (const f of ALL) { assert.deepEqual(again.bossInfo(f), bossInfo(f), `floor ${f} stable`); assert.deepEqual(again.bossGrid(f), bossGrid(f), `floor ${f} sprite stable`); }
-// unique slots are never generated and are flagged placeholder_unique
+// special slots are never generated and are flagged placeholder_special
 for (const f of ALL) {
   const i = bossInfo(f);
-  if (isUniqueSlot(f)) { assert.notEqual(i.kind, 'generated', `floor ${f} must not be generated`); assert.equal(i.placeholder_unique, true); }
+  if (isSpecialSlot(f)) { assert.notEqual(i.kind, 'generated', `floor ${f} must not be generated`); assert.equal(i.placeholder_special, true); }
   else if (f > 9) assert.equal(i.kind, 'generated');
 }
-for (const f of [10, 20, 30, 40, 50, 60, 70, 80, 90, ...Array.from({ length: 10 }, (_, i) => 91 + i)]) assert(isUniqueSlot(f));
+for (const f of [10, 20, 30, 40, 50, 60, 70, 80, 90, ...Array.from({ length: 10 }, (_, i) => 91 + i)]) assert(isSpecialSlot(f));
 assert.equal(bossInfo(100).name, 'The Last Warden');
 // no adjacent repeats of base or element (generated neighbours)
 for (let f = 2; f <= PLAN_FLOORS; f++) { const a = bossInfo(f - 1), b = bossInfo(f); assert.notEqual(a.base, b.base, `floors ${f - 1}/${f} share base`); if (a.kind === 'generated' || b.kind === 'generated') assert.notEqual(a.element, b.element); }

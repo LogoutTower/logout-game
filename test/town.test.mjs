@@ -3,7 +3,8 @@ import { newHero, simulate, accrue, offlineProgress, heroMaxHp, heroHp, isWorn, 
 import { innCost, rest, shopStock, buy, soldOut, SHOP_BUCKET_MS, npcGrid } from '../js/town.js';
 import { migrateSave, SAVE_VERSION } from '../js/cosmetics.js';
 const mk = (cls = 'Blade') => migrateSave({ version: 2, heroes: [newHero('W', cls)], gold: 0, lastTick: 0, progress: { cleared: [], top3: [], rank1: 0 } });
-// ---- HP drain + DPS penalty
+// ---- HP drain + DPS penalty (worn down after ~12 min of fighting)
+assert(Math.abs((1 - LOW_HP) * DRAIN_SECS / 60 - 12) < 0.25, '30% threshold at ~12 min');
 { const s = mk(), h = s.heroes[0], max = heroMaxHp(h), dps = totalDps(s.heroes);
   assert.equal(heroHp(h), max);
   const tLow = (1 - LOW_HP) * DRAIN_SECS; // seconds until worn down
@@ -23,9 +24,9 @@ const mk = (cls = 'Blade') => migrateSave({ version: 2, heroes: [newHero('W', cl
 { assert.equal(innCost(1), 30); assert(innCost(10) > innCost(5) && innCost(5) > innCost(1));
   const s = mk(); s.gold = 10; simulate(s, 3000); assert(!rest(s, 1), 'cannot afford'); s.gold = 1000;
   assert(rest(s, 1)); assert.equal(s.gold, 970); assert.equal(heroHp(s.heroes[0]), heroMaxHp(s.heroes[0])); assert.equal(s.buffs.rested, RESTED.secs);
-  const dps = totalDps(s.heroes), r = simulate(s, 3600); // 1800s rested (full HP), then 1800s plain; HP stays above 30% all hour? no: drop to 50% at 1800s, worn at 2520s
-  const tLow = (1 - LOW_HP) * DRAIN_SECS, dmg = dps * tLow + dps * LOW_MUL * (3600 - tLow);
-  assert(Math.abs(r.dmg - dmg) < 1e-6); const gold = dps * 1800 * 0.1 * RESTED.mul + (dmg - dps * 1800) * 0.1; assert(Math.abs(r.gold - gold) < 1e-6, 'rested bonus only for 30 min');
+  const dps = totalDps(s.heroes), r = simulate(s, 3600); // rested for the first 1800s; worn down after tLow
+  const tLow = (1 - LOW_HP) * DRAIN_SECS, dmg = dps * tLow + dps * LOW_MUL * (3600 - tLow), dR = dps * Math.min(tLow, 1800) + dps * LOW_MUL * Math.max(0, 1800 - tLow);
+  assert(Math.abs(r.dmg - dmg) < 1e-6); const gold = dR * 0.1 * RESTED.mul + (dmg - dR) * 0.1; assert(Math.abs(r.gold - gold) < 1e-6, 'rested bonus only for 30 min');
   assert.equal(s.buffs.rested, 0, 'buff expired');
   // offline: rested applies to the first 30 min of absence only
   const o = mk(); o.lastTick = 0; o.gold = 100; rest(o, 1); const p = offlineProgress(o, 2 * 3600e3, 12); assert.equal(o.buffs.rested, 0);

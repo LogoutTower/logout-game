@@ -1,12 +1,12 @@
 // Town hub (one safe town per floor): inn rest + Well Rested buff, a seeded rotating shop, and original NPC sprites. Pure (no DOM).
-import { heroMaxHp, heroHp, buffsOf, RESTED, ELIXIR } from './game.js';
+import { heroMaxHp, heroHp, buffsOf, effectsOf, RESTED, ELIXIR } from './game.js';
 import { rng, baseHp, bossInfo } from './floors.js';
 import { rollItem, salvageValue, INV_SIZE } from './loot.js';
 import { canvas, shadeShape } from './bosses.js';
 const tier = f => Math.sqrt(baseHp(f) / baseHp(1)); // price scale per floor
-export const innCost = f => Math.round(30 * tier(f));
+export const innCost = (f, save) => Math.round(30 * tier(f) * (save && effectsOf(save.heroes[0]).has('innTax') ? 1.25 : 1));
 export function rest(save, floor) {
-  const c = innCost(floor); if (save.gold < c) return false;
+  const c = innCost(floor, save); if (save.gold < c) return false;
   save.gold -= c; const h = save.heroes[0]; h.hp = heroMaxHp(h); buffsOf(save).rested = RESTED.secs; return true;
 }
 export const SHOP_BUCKET_MS = 4 * 3600e3; // stock rotates every 4 hours
@@ -20,7 +20,7 @@ export function shopStock(floor, now) {
     { kind: 'elixir', name: 'Elixir of Fury', desc: `+${Math.round((ELIXIR.mul - 1) * 100)}% DPS for ${ELIXIR.secs / 60} min`, price: Math.round(45 * t) },
     { kind: 'vigil', name: 'Scroll of Vigil', desc: `+${VIGIL_HOURS}h offline cap, once`, price: Math.round(120 * t) },
   ];
-  for (let i = 0; i < 3; i++) { const it = rollItem(r, floor, el, `shop${bucket}.${i}`); items.push({ kind: 'gear', name: it.name, item: it, price: Math.round(salvageValue(it) * 3), desc: '' }); }
+  for (let i = 0; i < 3; i++) { const it = rollItem(r, floor, el, `shop${bucket}.${i}`, [60, 25, 10, 4, 1, 0]); /* shops never sell Unique */ items.push({ kind: 'gear', name: it.name, item: it, price: Math.round(salvageValue(it) * 3), desc: '' }); }
   return { floor, bucket, endsAt: (bucket + 1) * SHOP_BUCKET_MS, items };
 }
 /** Buy stock index i. Gear can be bought once per rotation. Returns a short result string or null if not possible. */

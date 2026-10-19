@@ -9,7 +9,7 @@ h1{font:700 20px 'Cinzel',serif;color:#e8c06a;margin:0 0 4px}p{margin:0 0 12px;c
 .s{width:96px;height:96px;margin:auto;image-rendering:pixelated;background:center/100% no-repeat}
 .n{font:700 11px 'Cinzel',serif;color:#fff3c9;min-height:28px}.f{color:#5ff6ff}.hp{color:#a99ad6}.k{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#e8c06a}
 </style></head><body>
-<h1>Boss plan · floors 1–100</h1><p>Dev-only preview. Gold border = reserved unique slot (placeholder_unique), cyan = hand-made floors 1–9, plain = generated (seeded by floor).</p>
+<h1>Boss plan · floors 1–100</h1><p>Dev-only preview. Gold border = reserved special slot (placeholder_special), cyan = hand-made floors 1–9, plain = generated (seeded by floor).</p>
 <div id="grid"></div>
 <script type="module">
 import { bossInfo, PLAN_FLOORS } from './js/floors.js';
@@ -18,8 +18,8 @@ import { fmt } from './js/game.js';
 const g = document.getElementById('grid');
 for (let f = 1; f <= PLAN_FLOORS; f++) {
   const i = bossInfo(f), d = document.createElement('div');
-  d.className = 't ' + (i.placeholder_unique ? 'u' : i.kind === 'handmade' ? 'h' : '');
-  d.innerHTML = `<div class="s"></div><div class="n"></div><div class="f">Floor ${f}${i.milestone ? ' ★' : ''}</div><div class="hp">${fmt(i.hp)} HP</div><div class="k">${i.placeholder_unique ? 'placeholder unique' : i.kind === 'handmade' ? 'hand-made' : i.element + (i.addons.length ? ' · ' + i.addons.join(' + ') : '')}</div>`;
+  d.className = 't ' + (i.placeholder_special ? 'u' : i.kind === 'handmade' ? 'h' : '');
+  d.innerHTML = `<div class="s"></div><div class="n"></div><div class="f">Floor ${f}${i.milestone ? ' ★' : ''}</div><div class="hp">${fmt(i.hp)} HP</div><div class="k">${i.placeholder_special ? 'placeholder special' : i.kind === 'handmade' ? 'hand-made' : i.element + (i.addons.length ? ' · ' + i.addons.join(' + ') : '')}</div>`;
   d.querySelector('.n').textContent = i.name; d.querySelector('.s').style.backgroundImage = bossSprite(f); g.append(d);
 }
 </script></body></html>

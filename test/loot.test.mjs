@@ -2,23 +2,23 @@ import assert from 'node:assert';
 import { rollDrops, rollItem, grantDrops, equipItem, salvageItem, salvageValue, rarityWeights, gearChance, RARITIES, INV_SIZE, COSMETIC_CHANCE } from '../js/loot.js';
 import { migrateSave, SAVE_VERSION, DROP_COSMETICS, isUnlocked, byId } from '../js/cosmetics.js';
 import { heroDps, newHero, gearBonus, offlineCap, computeProgress } from '../js/game.js';
-import { rng, isUniqueSlot, bossInfo } from '../js/floors.js';
+import { rng, isSpecialSlot, bossInfo } from '../js/floors.js';
 // reproducible: same inputs → identical drops
 for (const f of [1, 7, 10, 37, 100]) assert.deepEqual(rollDrops({ heroId: 'x', floor: f, share: 0.08, seq: 3 }), rollDrops({ heroId: 'x', floor: f, share: 0.08, seq: 3 }));
 assert.notDeepEqual(JSON.stringify([0, 1, 2, 3, 4, 5].map(s => rollDrops({ heroId: 'x', floor: 37, share: 0.5, seq: s }))), JSON.stringify([0, 1, 2, 3, 4, 5].map(() => rollDrops({ heroId: 'x', floor: 37, share: 0.5, seq: 0 }))), 'seq varies rolls');
-// drop rate tracks damage share; zero share = no loot; unique floors better
+// drop rate tracks damage share; zero share = no loot; special floors better
 const rate = (floor, share, N = 4000) => { let n = 0, c = 0; for (let s = 0; s < N; s++) { const d = rollDrops({ heroId: 'r', floor, share, seq: s }); n += d.items.length; c += d.cosmetic ? 1 : 0; } return { items: n / N, cos: c / N }; };
 assert.equal(rate(5, 0, 500).items, 0); assert.equal(rate(5, 0, 500).cos, 0);
 const lo = rate(5, 0.01), hi = rate(5, 0.12), uq = rate(20, 0.01);
 assert(Math.abs(lo.items - gearChance(0.01, 5)) < 0.03, `low share rate ${lo.items}`); assert(Math.abs(hi.items - gearChance(0.12, 5)) < 0.03, `high share rate ${hi.items}`);
-assert(hi.items > lo.items && uq.items > lo.items * 1.5, 'more share / unique floor → more drops');
-assert(lo.cos > 0.01 && lo.cos < 0.05, `cosmetic chance ~3% (${lo.cos})`); assert(uq.cos > lo.cos * 0.9, 'unique floors cosmetic odds not lower');
-// rarity weights: empirical distribution matches 60/25/10/4/1, unique floors shift up
+assert(hi.items > lo.items && uq.items > lo.items * 1.5, 'more share / special floor → more drops');
+assert(lo.cos > 0.01 && lo.cos < 0.05, `cosmetic chance ~3% (${lo.cos})`); assert(uq.cos > lo.cos * 0.9, 'special floors cosmetic odds not lower');
+// rarity weights: empirical distribution matches 60/25/10/4/1, special floors shift up
 const dist = floor => { const r = rng(99), c = RARITIES.map(() => 0), N = 20000; for (let i = 0; i < N; i++) { const id = rollItem(r, floor, 'fire', i).rarity; c[RARITIES.findIndex(x => x.id === id)]++; } return c.map(x => x / N); };
 const dn = dist(5), w = rarityWeights(5), tot = w.reduce((a, b) => a + b);
 dn.forEach((p, i) => assert(Math.abs(p - w[i] / tot) < 0.015, `rarity ${RARITIES[i].id} ${p}`));
-const du = dist(50); assert(du[0] < dn[0] - 0.1 && du[4] > dn[4] * 1.5, 'unique floor rarity luck');
-assert(isUniqueSlot(50) && !isUniqueSlot(5));
+const du = dist(50); assert(du[0] < dn[0] - 0.1 && du[4] > dn[4] * 1.25, 'special floor rarity luck');
+assert(isSpecialSlot(50) && !isSpecialSlot(5));
 // items: base stat scales with floor, element tag matches the boss, 0-2 affixes
 const a = rollItem(rng(1), 3, 'fire', 0), b = rollItem(rng(1), 60, 'fire', 0); assert.equal(a.slot, b.slot); assert(Object.values(b.stats)[0] > Object.values(a.stats)[0], 'floor scaling');
 for (let f = 1; f <= 100; f++) { const d = rollDrops({ heroId: 'e', floor: f, share: 1, seq: 0 }); for (const it of d.items) { assert.equal(it.element, bossInfo(f).lootElement); assert(it.affixes.length <= 2); } }

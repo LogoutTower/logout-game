@@ -1,17 +1,22 @@
-import { CLASSES, newHero, heroDps, levelCost, gearCost, accrue, offlineProgress, applyXp, heroHp, heroMaxHp, isWorn, effectiveDps, buffsOf, bossName, fmt, fmtDur, xpToNext } from './game.js';
+import { effectsOf, CLASSES, newHero, heroDps, levelCost, gearCost, accrue, offlineProgress, applyXp, heroHp, heroMaxHp, isWorn, effectiveDps, buffsOf, bossName, fmt, fmtDur, xpToNext } from './game.js';
 import { makeBackend } from './storage.js';
 import { innCost, rest, shopStock, buy as shopBuy, soldOut, npcGrid } from './town.js';
 import { sprite } from './sprites.js';
-import { grantDrops, equipItem, salvageItem, salvageValue, rarityOf, statLabel, INV_SIZE, GEAR_SLOTS } from './loot.js';
+import { isSpecialSlot } from './floors.js';
+import { TRICKLE, trickleDrops, grantDrops, equipItem, salvageItem, salvageValue, rarityOf, statLabel, INV_SIZE, GEAR_SLOTS } from './loot.js';
 import { OFFLINE_CAP_HOURS, MAX_FLOOR } from '../config.js';
 import { bossSprite, bossIsBig, heroSprite } from './sprites.js';
 import { SLOTS, CREATION_SLOTS, itemsFor, isUnlocked, unlockText, defaultLook, migrateSave, recordClear, equip, titleOf, nameColorOf, fakeProfile, byId, SAVE_VERSION } from './cosmetics.js';
 const $ = id => document.getElementById(id);
+// Write only when changed: avoids rebuilding nodes (and layout shifts that eat clicks) on every 1s tick.
+const H = id => { const e = $(id); return { set innerHTML(v) { if (e._v !== v) { e._v = v; e.innerHTML = v; } }, set textContent(v) { if (e.textContent !== v) e.textContent = v; } }; };
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 let lootLines = [];
 let be, save, floor, pending = 0, recent = { dmg: 0, gold: 0, xp: 0 }, quietSync = true, cls = 'Vanguard', draftLook = defaultLook('Vanguard'), toastT;
-const log = (m, color) => { const d = document.createElement('div'); d.textContent = m; if (m.startsWith('System notice')) d.className = 'rune'; if (color) { d.style.color = color; d.className = 'loot'; } $('log').prepend(d); };
-function notice(m, color) { const n = document.createElement('div'); n.className = 'notice'; if (color) n.style.borderColor = color; n.innerHTML = `<small>◈ System notice</small><span${color ? ` style="color:${color}"` : ''}>${esc(m)}</span>`; $('notices').append(n); setTimeout(() => n.remove(), 3200); }
+const log = (m, color) => { const d = document.createElement('div'); d.textContent = m; if (m.startsWith('System notice')) d.className = 'rune'; if (color) { d.style.color = color; d.className = 'loot'; } if (color === '#7ff6ff') d.className = 'loot uniq'; $('log').prepend(d); };
+function notice(m, color) { const n = document.createElement('div'); n.className = 'notice' + (color === '#7ff6ff' ? ' uniq' : ''); if (color) n.style.borderColor = color; n.innerHTML = `<small>◈ System notice</small><span${color ? ` style="color:${color}"` : ''}>${esc(m)}</span>`; $('notices').append(n); setTimeout(() => n.remove(), color === '#7ff6ff' ? 7000 : 3200); }
+const sessionStart = Date.now(); let hits = 0, lastWhisper = Date.now();
+const WHISPERS = ['The weapon hums a floor number you have not reached.', 'Something in the blade asks whether you remember logging in.', 'A whisper: "the guardian is afraid of you."', 'The weapon murmurs your name, then someone else\'s.', 'A voice from the steel: "one more floor."'];
 function floorCleared(f) { $('clearedSub').textContent = `${bossName(f)} has fallen`; const c = $('cleared'); c.classList.remove('show'); void c.offsetWidth; c.classList.add('show'); }
 const LAYERS = 5;
 const hpColor = pct => pct > 0.5 ? '#5cff9a' : pct > 0.2 ? '#ffd84f' : '#ff3355';
@@ -36,14 +41,15 @@ function picker(el, slots, look, heroCls, progress, onPick) {
 
 async function boot() {
   $('maxf').textContent = MAX_FLOOR;
-  be = await makeBackend(); save = migrateSave(await be.loadSave());
+  be = await makeBackend(); save = migrateSave(await be.loadSave()); if (save) delete save.ctx; // live-only context, never trusted from storage
   if (!save) return showCreate();
   const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
   save.gold += p.gold; const ups = applyXp(save.heroes, p.xp); pending += p.damage;
+  const offFloor = (await be.getFloor()).floor, trickled = trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
   if (p.secs > 30) {
     const r = await be.submitDamage(h0.name, pending); pending = 0;
     lootLines = []; const got = handleClears(r.clears, true);
-    $('awaytxt').innerHTML = `Log out disabled. You fought on for ${fmtDur(p.secs)}${p.capped ? ` (capped at ${cap}h)` : ''}${p.vigilUsed ? ' · Scroll of Vigil burned' : ''}<br>HP: ${Math.round(heroHp(h0))} / ${heroMaxHp(h0)}${p.lowSecs > 0 ? ` · worn down for ${fmtDur(p.lowSecs)} (DPS halved). Rest at the inn.` : ''}<br>Damage: ${fmt(p.damage)}<br>Gold: +${fmt(p.gold)}<br>XP: +${fmt(p.xp)}${ups.length ? `<br>Level ups: ${ups.length}` : ''}${r.advanced ? `<br>Floors cleared: ${r.advanced}. Floor ${r.floor} is open.` : ''}${got.length ? `<br>Cosmetics unlocked: ${got.map(i => esc(i.label)).join(', ')}` : ''}${lootLines.length ? `<br>Loot: ${lootLines.join(', ')}` : ''}`;
+    $('awaytxt').innerHTML = `Log out disabled. You fought on for ${fmtDur(p.secs)}${p.capped ? ` (capped at ${cap}h)` : ''}${p.vigilUsed ? ' · Scroll of Vigil burned' : ''}<br>HP: ${Math.round(heroHp(h0))} / ${heroMaxHp(h0)}${p.lowSecs > 0 ? ` · worn down for ${fmtDur(p.lowSecs)} (DPS halved). Rest at the inn.` : ''}<br>Damage: ${fmt(p.damage)}<br>Gold: +${fmt(p.gold)}<br>XP: +${fmt(p.xp)}${ups.length ? `<br>Level ups: ${ups.length}` : ''}${r.advanced ? `<br>Floors cleared: ${r.advanced}. Floor ${r.floor} is open.` : ''}${got.length ? `<br>Cosmetics unlocked: ${got.map(i => esc(i.label)).join(', ')}` : ''}${lootLines.length || trickled.length ? `<br>Loot: ${[...lootLines, ...trickled.map(it => `<span style="color:${rarityOf(it.rarity).color}">${esc(it.name)}</span>`)].join(', ')}` : ''}`;
     $('away').showModal();
   }
   save.lastTick = Date.now(); await be.saveSave(save); startGame();
@@ -66,7 +72,7 @@ function handleClears(clears = [], quiet = false) {
     const got = recordClear(save, c.floor, c.ranking.indexOf(me) + 1, c.maxHp ? (c.dmg?.[me] || 0) / c.maxHp : 1); all.push(...got);
     for (const it of got) { log(`System notice: cosmetic unlocked — ${it.label}.`); if (!quiet) notice(`Cosmetic unlocked — ${it.label}`); }
     const share = c.maxHp ? (c.dmg?.[me] || 0) / c.maxHp : 0, d = grantDrops(save, c.floor, share);
-    for (const it of d.items) { const R = rarityOf(it.rarity); log(`Loot · ${R.label} ${it.name} (Floor ${c.floor})`, R.color); lootLines.push(`<span style="color:${R.color}">${esc(R.label)} ${esc(it.name)}</span>`); if (!quiet) notice(`${R.label} drop — ${it.name}`, R.color); }
+    for (const it of d.items) { const R = rarityOf(it.rarity); if (it.rarity === 'unique') { log(`System notice: UNIQUE item acquired — ${it.name} · ${it.stamp}. ${it.ability.text}; drawback: ${it.drawback.text}.`, R.color); if (!quiet) notice(`UNIQUE item acquired — ${it.name}`, R.color); lootLines.push(`<span class="uniq">UNIQUE ${esc(it.name)}</span>`); continue; } log(`Loot · ${R.label} ${it.name} (Floor ${c.floor})`, R.color); lootLines.push(`<span style="color:${R.color}">${esc(R.label)} ${esc(it.name)}</span>`); if (!quiet) notice(`${R.label} drop — ${it.name}`, R.color); }
     if (d.salvaged) log(`Bag full: a drop was salvaged for ${fmt(d.salvaged)} gold.`);
     if (d.cosmetic) { const it = byId(d.cosmetic); log(`System notice: rare cosmetic drop — ${it.label}!`, '#ffb02e'); lootLines.push(`<span style="color:#ffb02e">${esc(it.label)} (cosmetic)</span>`); all.push(it); if (!quiet) notice(`Rare cosmetic — ${it.label}`, '#ffb02e'); }
   }
@@ -86,14 +92,22 @@ async function startGame(fresh = false) {
   $('lvl').onclick = () => buy('level'); $('gear').onclick = () => buy('gear'); $('wardrobeBtn').onclick = openWardrobe;
   $('townBtn').onclick = openTown; $('helpBtn').onclick = () => tourShow(0); $('bagBtn').onclick = openBag; placeDock();
   setInterval(tick, 1000); setInterval(sync, 5000); render(); renderLb();
-  if (!save.tutorialSeen) setTimeout(startTour, fresh ? 1600 : 400);
+  if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
 function tick() {
-  const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS);
+  save.ctx = { bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), sessionSecs: (Date.now() - sessionStart) / 1000 };
+  const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS), fx = effectsOf(save.heroes[0]);
+  if (fx.has('whisper') && Date.now() - lastWhisper > 120000) { lastWhisper = Date.now(); log(WHISPERS[Math.floor(Math.random() * WHISPERS.length)], '#b9a8ff'); }
   save.gold += p.gold; recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp; pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage);
   if (applyXp(save.heroes, p.xp).length) { log(`System notice: level ${save.heroes[0].level} reached.`); notice(`Level ${save.heroes[0].level} reached`); }
-  if (p.damage > 0) hitFx(p.damage); $('boss').classList.add('hit'); setTimeout(() => $('boss').classList.remove('hit'), 120); render();
+  for (const it of trickleDrops(save, p.secs, floor.floor, p.secs > 2 ? TRICKLE.offlineMax : Infinity)) { const R = rarityOf(it.rarity); log(`Loot · ${R.label} ${it.name}${it.salvaged ? ' (bag full: salvaged)' : ''}`, R.color); notice(`${R.label} find — ${it.name}`, R.color); }
+  if (p.damage > 0) { hits++; if (fx.has('tenth') && hits % 10 === 0) { hitFx(p.damage); log('The Tenth Bell rings — double hit.', '#7ff6ff'); } hitFx(p.damage); } $('boss').classList.add('hit'); setTimeout(() => $('boss').classList.remove('hit'), 120); render();
 }
+// Background tabs throttle timers: every tick measures real elapsed time (accrue = offline maths), and we catch up as soon as the tab is visible or focused.
+let lastCatchUp = 0;
+function catchUp() { if (!save || !floor || Date.now() - lastCatchUp < 500) return; lastCatchUp = Date.now(); tick(); sync(); }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
+addEventListener('focus', catchUp); addEventListener('pageshow', catchUp);
 async function sync() {
   const r = await be.submitDamage(save.heroes[0].name, pending); pending = 0;
   if (recent.dmg > 0) { log(`You strike for ${fmt(recent.dmg)} · +${fmt(recent.gold)} gold · +${fmt(recent.xp)} XP`); recent = { dmg: 0, gold: 0, xp: 0 }; }
@@ -104,41 +118,42 @@ async function sync() {
 }
 function buy(kind) {
   const h = save.heroes[0], c = kind === 'level' ? levelCost(h) : gearCost(h); if (save.gold < c) return;
-  save.gold -= c; kind === 'level' ? h.level++ : h.gear++; log(kind === 'level' ? `${h.name} trained through the night and rose to level ${h.level}.` : `The forge rang out; ${h.name}'s gear was tempered to +${h.gear}.`); render();
+  save.gold -= c; kind === 'level' ? h.level++ : h.gear++; log(kind === 'level' ? `${h.name} trained through the night and rose to level ${h.level}.` : `The forge rang out; ${h.name}'s gear was tempered to +${h.gear}.`);
+  render(); be.saveSave(save);
 }
 function render() {
   const h = save.heroes[0];
   $('hero').style.backgroundImage = heroSprite(h.look, h.cls); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; $('boss').style.backgroundImage = bossSprite(floor.floor); $('boss').classList.toggle('big', bossIsBig(floor.floor));
   const won = floor.floor >= MAX_FLOOR && floor.hp <= 0;
-  $('bname').textContent = won ? 'Log out enabled' : bossName(floor.floor);
-  $('floor').textContent = won ? 'System notice · the tower is silent' : `Guardian of Floor ${floor.floor} / ${MAX_FLOOR}`;
+  H('bname').textContent = won ? 'Log out enabled' : bossName(floor.floor);
+  H('floor').textContent = won ? 'System notice · the tower is silent' : `Guardian of Floor ${floor.floor} / ${MAX_FLOOR}`;
   const pct = floor.hp / floor.maxHp, lay = Math.ceil(pct * LAYERS - 1e-9), inLayer = pct * LAYERS - (lay - 1);
-  $('layers').innerHTML = Array.from({ length: LAYERS }, (_, i) => `<i class="${i < lay ? 'on' : ''}"></i>`).join('');
+  H('layers').innerHTML = Array.from({ length: LAYERS }, (_, i) => `<i class="${i < lay ? 'on' : ''}"></i>`).join('');
   const c = hpColor(pct); $('hpfill').style.width = (lay ? inLayer * 100 : 0) + '%'; $('hpfill').style.background = `linear-gradient(90deg, ${c}aa, ${c})`; $('hpfill').style.color = c;
-  $('hptext').textContent = `${fmt(floor.hp)} / ${fmt(floor.maxHp)} HP · ${lay}× layers`;
-  $('hname2').innerHTML = `<div style="color:${nameColorOf(h)}">${esc(h.name)}</div><div class="ttl">${esc(titleOf(h))}</div>`; $('hlv').textContent = `LV ${h.level}`;
-  const hp = heroHp(h) / heroMaxHp(h), worn = isWorn(h); $('hhp').className = 'seg' + (worn ? ' worn' : hp < 0.6 ? ' mid' : ''); $('hhp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < hp ? '' : 'off'}"></i>`).join('');
+  H('hptext').textContent = `${fmt(floor.hp)} / ${fmt(floor.maxHp)} HP · ${lay}× layers`;
+  H('hname2').innerHTML = `<div style="color:${nameColorOf(h)}">${esc(h.name)}</div><div class="ttl">${esc(titleOf(h))}</div>`; H('hlv').textContent = `LV ${h.level}`;
+  const hp = heroHp(h) / heroMaxHp(h), worn = isWorn(h); $('hhp').className = 'seg' + (worn ? ' worn' : hp < 0.6 ? ' mid' : ''); H('hhp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < hp ? '' : 'off'}"></i>`).join('');
   $('hhp').title = `HP ${Math.round(heroHp(h))} / ${heroMaxHp(h)}`;
   const b = buffsOf(save), mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-  $('buffs').innerHTML = [worn ? '<span class="buff bad" title="Below 30% HP: DPS halved">Worn down · DPS ½</span>' : '', b.rested > 0 ? `<span class="buff" title="+15% gold and XP">Well Rested ${mmss(b.rested)}</span>` : '',
+  H('buffs').innerHTML = [worn ? '<span class="buff bad" title="Below 30% HP: DPS halved">Worn down · DPS ½</span>' : '', b.rested > 0 ? `<span class="buff" title="+15% gold and XP">Well Rested ${mmss(b.rested)}</span>` : '',
     b.elixir > 0 ? `<span class="buff" title="+25% DPS">Fury ${mmss(b.elixir)}</span>` : '', b.vigil > 0 ? `<span class="buff" title="Offline cap raised once">Vigil +${b.vigil}h</span>` : ''].join('');
-  const xp = h.xp / xpToNext(h.level); $('hxp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < xp ? '' : 'off'}"></i>`).join('');
-  $('stats').innerHTML = `${CLASSES[h.cls].icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${effectiveDps(save).toFixed(1)}</b> · HP <b>${Math.round(heroHp(h))}/${heroMaxHp(h)}</b> · Gold <b>${fmt(save.gold)}</b>`;
-  $('lvlL').textContent = `Train ${fmt(levelCost(h))}g`; $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`; $('lvl').disabled = save.gold < levelCost(h);
-  $('equipped').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip?.[s]; return `<span class="eq" style="${it ? `color:${rarityOf(it.rarity).color}` : ''}">${s[0].toUpperCase() + s.slice(1)}: ${it ? esc(it.name) : '—'}</span>`; }).join('');
-  $('bagL').textContent = `Bag ${save.inv.length}/${INV_SIZE}`; $('gear').title = 'Forge: temper your weapon, +15% damage per tier';
-  $('gearL').textContent = `Forge ${fmt(gearCost(h))}g`; $('gear').disabled = save.gold < gearCost(h);
+  const xp = h.xp / xpToNext(h.level); H('hxp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < xp ? '' : 'off'}"></i>`).join('');
+  H('stats').innerHTML = `${CLASSES[h.cls].icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${effectiveDps(save).toFixed(1)}</b> · HP <b>${Math.round(heroHp(h))}/${heroMaxHp(h)}</b> · Gold <b>${fmt(save.gold)}</b>`;
+  H('lvlL').textContent = `Train ${fmt(levelCost(h))}g`; $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`; $('lvl').disabled = save.gold < levelCost(h);
+  H('equipped').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip?.[s]; return `<span class="eq" style="${it ? `color:${rarityOf(it.rarity).color}` : ''}">${s[0].toUpperCase() + s.slice(1)}: ${it ? esc(it.name) : '—'}</span>`; }).join('');
+  H('bagL').textContent = `Bag ${save.inv.length}/${INV_SIZE}`; $('gear').title = 'Forge: temper your weapon, +15% damage per tier';
+  H('gearL').textContent = `Forge ${fmt(gearCost(h))}g`; $('gear').disabled = save.gold < gearCost(h);
 }
 async function renderLb() {
   const h = save.heroes[0];
   $('lb').innerHTML = (await be.leaderboard(h.name)).map(r => {
     const me = r.name === h.name, pr = me ? { title: titleOf(h), color: nameColorOf(h) } : fakeProfile(r.name);
-    return `<li class="${me ? 'me' : ''}" value="${r.rank}"><span style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span></li>`;
+    return `<li class="${me ? 'me' : ''}" value="${r.rank}"><span style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span>${me && r.rank > 3 ? '<div class="climb">Climb: Train, Forge and equip loot to raise DPS. Top 3 on a kill earns rare rewards.</div>' : ''}</li>`;
   }).join('');
 }
 // ---- Town (safe zone of the current floor): inn + rotating shop
 function openTown() {
-  const f = floor.floor, now = Date.now(), st = shopStock(f, now), h = save.heroes[0], c = innCost(f);
+  const f = floor.floor, now = Date.now(), st = shopStock(f, now), h = save.heroes[0], c = innCost(f, save);
   $('townTitle').textContent = `Town of Floor ${f}`;
   $('innkeeper').style.backgroundImage = sprite(npcGrid('innkeeper').rows, npcGrid('innkeeper').pal); $('merchant').style.backgroundImage = sprite(npcGrid('merchant').rows, npcGrid('merchant').pal);
   $('innInfo').innerHTML = `HP <b>${Math.round(heroHp(h))} / ${heroMaxHp(h)}</b>${isWorn(h) ? ' · <span class="bad">worn down</span>' : ''}`;
@@ -156,13 +171,13 @@ function openTown() {
 
 // ---- Bag: inventory grid, compare panel, equip and salvage
 let bagSel = -1;
-const itemCard = (it, cls = '') => { const R = rarityOf(it.rarity); return `<div class="item ${cls}" style="--rc:${R.color}"><b style="color:${R.color}">${esc(it.name)}</b><small>${R.label} · ${it.slot} · Floor ${it.floor} · ${it.element}</small>${Object.entries(it.stats).map(([k, v]) => `<div>${statLabel(k, v)}</div>`).join('')}</div>`; };
+const itemCard = (it, cls = '') => { const R = rarityOf(it.rarity); return `<div class="item ${cls}" style="--rc:${R.color}"><b class="${it.rarity === 'unique' ? 'uniq' : ''}" style="color:${R.color}">${esc(it.name)}</b><small>${R.label} · ${it.slot} · Floor ${it.floor} · ${it.element}</small>${Object.entries(it.stats).map(([k, v]) => `<div>${statLabel(k, v)}</div>`).join('')}${it.rarity === 'unique' ? `<div class="ab">✦ ${esc(it.ability.text)}</div><div class="db">▾ ${esc(it.drawback.text)}</div><div class="lore">${esc(it.lore)}</div><small>${esc(it.stamp)}</small>` : ''}</div>`; };
 function openBag() {
   const h = save.heroes[0];
   $('bagCount').textContent = `· ${save.inv.length} / ${INV_SIZE}`;
   $('eqrow').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip[s]; return `<div class="eqslot" title="${s}">${it ? itemCard(it, 'mini') : `<div class="item mini empty">${s}: empty</div>`}</div>`; }).join('');
-  $('bagGrid').innerHTML = Array.from({ length: INV_SIZE }, (_, i) => { const it = save.inv[i]; if (!it) return '<button class="cell" disabled aria-label="empty slot"></button>';
-    const R = rarityOf(it.rarity); return `<button class="cell ${i === bagSel ? 'sel' : ''}" data-i="${i}" style="--rc:${R.color}" title="${esc(R.label + ' ' + it.name)}">${{ weapon: '⚔', armor: '⛨', trinket: '◈' }[it.slot]}</button>`; }).join('');
+  $('bagGrid').innerHTML = Array.from({ length: Math.max(INV_SIZE, save.inv.length) }, (_, i) => { const it = save.inv[i]; if (!it) return '<button class="cell" disabled aria-label="empty slot"></button>';
+    const R = rarityOf(it.rarity); return `<button class="cell ${i === bagSel ? 'sel' : ''} ${it.rarity === 'unique' ? 'ucell' : ''}" data-i="${i}" style="--rc:${R.color}" title="${esc(R.label + ' ' + it.name)}">${{ weapon: '⚔', armor: '⛨', trinket: '◈' }[it.slot]}</button>`; }).join('');
   $('bagGrid').onclick = e => { const b = e.target.closest('button.cell[data-i]'); if (b) { bagSel = +b.dataset.i; openBag(); } };
   const it = save.inv[bagSel];
   if (it) {
@@ -170,8 +185,8 @@ function openBag() {
     $('bagDetail').innerHTML = `${itemCard(it)}<div class="vs">vs equipped</div>${cur ? itemCard(cur, 'mini') : '<div class="item mini empty">nothing equipped</div>'}
       <p class="delta" style="color:${delta >= 0 ? '#5cff8a' : '#ff3355'}">DPS ${delta >= 0 ? '+' : ''}${delta.toFixed(1)} (${before.toFixed(1)} → ${(before + delta).toFixed(1)})</p>${['goldPct', 'xpPct', 'capH'].map(k => { const d = (it.stats[k] || 0) - (cur?.stats[k] || 0); return d ? `<div style="color:${d > 0 ? '#5cff8a' : '#ff3355'}">${k === 'capH' ? 'Offline cap' : k === 'goldPct' ? 'Gold' : 'XP'} ${d > 0 ? '+' : ''}${d}${k === 'capH' ? 'h' : '%'}</div>` : ''; }).join('')}
       <div class="bagbtns"><button id="bEquip" class="cta">Equip</button><button id="bSalv">Salvage · ${fmt(salvageValue(it))}g</button></div>`;
-    $('bEquip').onclick = async () => { equipItem(save, bagSel); log(`Equipped ${it.name}.`, rarityOf(it.rarity).color); bagSel = -1; await be.saveSave(save); render(); openBag(); };
-    $('bSalv').onclick = async () => { const g = salvageItem(save, bagSel); log(`Salvaged ${it.name} for ${fmt(g)} gold.`); bagSel = -1; await be.saveSave(save); render(); openBag(); };
+    $('bEquip').onclick = async () => { if (!equipItem(save, bagSel)) { notice('Your Unique weapon refuses to share you with a trinket'); return; } log(`Equipped ${it.name}.`, rarityOf(it.rarity).color); bagSel = -1; await be.saveSave(save); render(); openBag(); };
+    $('bSalv').onclick = async () => { if (it.rarity === 'unique' && !confirm('Salvage a one-of-a-kind Unique? It can never drop again.')) return; const g = salvageItem(save, bagSel); log(`Salvaged ${it.name} for ${fmt(g)} gold.`); bagSel = -1; await be.saveSave(save); render(); openBag(); };
   } else $('bagDetail').innerHTML = '<p class="sub">Select an item to compare it with what you have equipped.</p>';
   if (!$('bag').open) $('bag').showModal();
 }
@@ -194,7 +209,7 @@ function tourShow(i) {
   $('tour').classList.remove('hidden');
   if (el) { el.classList.add('tour-hi'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
 }
-function startTour() { if ($('away').open) return $('away').addEventListener('close', startTour, { once: true }); tourShow(0); }
+function startTour() { const d = document.querySelector('dialog[open]'); if (d) return d.addEventListener('close', startTour, { once: true }); if (tourAt < 0 && !save.tutorialSeen) tourShow(0); }
 $('tnext').onclick = () => tourShow(tourAt + 1); $('tback').onclick = () => tourShow(Math.max(0, tourAt - 1)); $('tskip').onclick = () => tourShow(TOUR.length);
 
 // On phones the action bar becomes a fixed dock; it must live under <body> because the glass panel's backdrop-filter traps position:fixed.
