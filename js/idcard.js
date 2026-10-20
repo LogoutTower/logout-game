@@ -7,7 +7,7 @@ import { rng } from './floors.js';
 import { byId, titleOf, nameColorOf, defaultLook, fakeProfile, itemsFor } from './cosmetics.js';
 import { GM_CLASS, GM_TITLE, sanitizeSave } from './gm.js';
 import { nodeById } from './talents.js';
-import { SHOP, PETS, PERK_LABEL, DIVINE, SPIRIT } from './prestige.js';
+import { SHOP, PETS, PERK_LABEL, DIVINE, SPIRIT, spiritStage } from './prestige.js';
 export const CARD_TTL = 300000; // 5 min client cache: re-opening a card costs nothing
 const SLOTS = ['weapon', 'armor', 'trinket'], LOOK_KEYS = ['title', 'ptitle', 'nameColor', 'aura', 'skin', 'skinSet', 'outfitStyle', 'outfitColor', 'hairStyle', 'hairColor', 'weapon', 'weaponColor', 'trim'];
 /** The public card for a save (own hero, local mode) in the same shape the server returns. */
@@ -45,7 +45,7 @@ export function cardHtml(card, { fmt = String, esc = String, guildBadge = () => 
   const ab = [c ? `${c.icon || ''} ${esc(h.cls)} class` : st ? '◈ GameMaster' : '', ...SLOTS.flatMap(k => h.equip[k]?.ability ? [`<b style="color:${rc('unique')}">${esc(h.equip[k].ability.text || h.equip[k].ability.id)}</b> <small class="sub">· ${esc(h.equip[k].drawback?.text || '')}</small>`] : []),
     ...tal.map(x => `${esc(x.n.name || x.n.id)} <small class="sub">rank ${x.r}</small>`)].filter(Boolean);
   const gear = SLOTS.map(k => { const it = h.equip[k]; return `<div class="cgear" style="--rc:${it ? (it.gm ? '#ffd76a' : rc(it.rarity)) : '#3a2a5a'}"><small class="sub">${k}</small>${it ? `<b>${esc(it.name || '')}</b><small style="color:${it.gm ? '#ffd76a' : rc(it.rarity)}">${esc(it.gm ? 'Staff' : rl(it.rarity))}${it.floor ? ` · F${it.floor}` : ''}</small><small>${Object.entries(it.stats || {}).map(([s, v]) => esc(statLabel(s, v) || '')).join(' · ')}</small>` : '<small class="sub">empty</small>'}</div>`; }).join('');
-  const p = card.pet, pet = st && card.spirit ? `<span style="color:${DIVINE.color}">${esc(SPIRIT.title)}</span> <small class="sub">${DIVINE.label}</small>`
+  const p = card.pet, pet = st && card.spirit ? `<span style="color:${DIVINE.color}">${esc(spiritStage(h.level).name)}</span> <small class="sub">${DIVINE.label} · stage ${spiritStage(h.level).n} of 3</small>`
     : p ? `<span style="color:${rc(p.rarity)}">${esc(p.name || PETS.find(x => x.sp === p.sp)?.label || p.sp)}</span> <small class="sub">${esc(rl(p.rarity))}${p.perk && PERK_LABEL[p.perk] ? ' · ' + esc(PERK_LABEL[p.perk](p.v)) : ''}</small>` : '<small class="sub">none</small>';
   const gu = card.guild ? `${guildBadge(card.guild)}[${esc(card.guild.tag)}] ${esc(card.guild.name || '')}` : '<small class="sub">no guild</small>';
   let dps = 0, hp = 0; try { dps = heroDps(h); hp = heroMaxHp(h); } catch {}

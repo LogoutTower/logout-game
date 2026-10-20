@@ -1,20 +1,26 @@
 // Late-game shop UI pieces (Goods tab sections, pet sprites, hall decor, memorial wall). Pure string builders; main.js wires them.
-import { SHOP, DECOR, PETS, PET_GRIDS, PERK_LABEL, PET_RARITY, memorialPrice, prestigePrice, SPIRIT, DIVINE, ECLIPSE, MEMORIAL_SHOW } from './prestige.js';
+import { SHOP, DECOR, PETS, PET_GRIDS, PERK_LABEL, PET_RARITY, memorialPrice, prestigePrice, SPIRIT, DIVINE, ECLIPSE, MEMORIAL_SHOW, spiritStage, SPIRIT_STAGES } from './prestige.js';
 import { sprite } from './sprites.js';
 import { rarityOf } from './loot.js';
 const cache = new Map();
 export const petSprite = sp => { if (!cache.has(sp)) { const p = PETS.find(x => x.sp === sp); cache.set(sp, sprite(PET_GRIDS[sp], { a: p.c[0], b: p.c[1], c: '#3a2a55', e: '#12062a' })); } return cache.get(sp); };
-const HALF = { light: ['...aa...', '..abba..', '.abbbba.', 'abbebbba', 'abbbbbba', '.abbbba.', '..abba..', '...aa...'] };
-export const spiritHalves = () => { if (!cache.has('eq')) cache.set('eq', [sprite(HALF.light, { a: '#ffe9a8', b: '#fff8e0', e: '#d9a93f' }), sprite(HALF.light, { a: '#7a3cff', b: '#1a0f2e', e: '#c9a0ff' })]); return cache.get('eq'); };
+// One grid per evolution stage (8×8; the CSS scales them per stage): 1 a small wisp orb, 2 the spirit, 3 the winged, crowned final form.
+export const SPIRIT_GRIDS = {
+  1: ['........', '........', '...aa...', '..abba..', '..abea..', '...aa...', '........', '........'],
+  2: ['...aa...', '..abba..', '.abbbba.', 'abbebbba', 'abbbbbba', '.abbbba.', '..abba..', '...aa...'],
+  3: ['a.e..e.a', 'aa.ee.aa', 'aabbbbaa', 'abbebbba', 'abbbbbba', 'aabbbbaa', 'aa.bb.aa', 'a......a'],
+};
+export const spiritHalves = (stage = 3) => { const k = 'eq' + stage, g = SPIRIT_GRIDS[stage] || SPIRIT_GRIDS[3]; if (!cache.has(k)) cache.set(k, [sprite(g, { a: '#ffe9a8', b: '#fff8e0', e: '#d9a93f' }), sprite(g, { a: '#7a3cff', b: '#1a0f2e', e: '#c9a0ff' })]); return cache.get(k); };
+const lvOf = save => save?.heroes?.[0]?.level || 1;
 /** Arena pet element HTML: the active pet bobbing at the hero's heel, or (staff only) the Solumbra spirit's two orbiting halves. */
 export function petHtml(save, gm) {
-  if (gm && save.spirit) return haloHtml();
+  if (gm && save.spirit) return haloHtml(spiritStage(lvOf(save)).n);
   const p = (save.pets || []).find(x => x.id === save.activePet); if (!p || !PET_GRIDS[p.sp]) return '';
   return `<div class="petbob r-${p.rarity}" style="background-image:${petSprite(p.sp).replace(/"/g, '&quot;')};--rc:${rarityOf(p.rarity).color}" title="${p.uname || PETS.find(x => x.sp === p.sp).label}"></div>`;
 }
 /** Solumbra's halo: the two halves on a small elliptical orbit above the staff hero's head (pure CSS transforms; paused while the tab is hidden, static under reduced motion). */
-export function haloHtml() { const [l, d] = spiritHalves(), u = x => x.replace(/"/g, '&quot;');
-  return `<div class="halo" title="${SPIRIT.title}"><i class="sph lt" style="background-image:${u(l)}"></i><i class="sph dk" style="background-image:${u(d)}"></i></div>`; }
+export function haloHtml(stage = 3) { const [l, d] = spiritHalves(stage), u = x => x.replace(/"/g, '&quot;'), st = SPIRIT_STAGES[(stage | 0) - 1] || SPIRIT_STAGES[2];
+  return `<div class="halo s${st.n}" data-stage="${st.n}" title="${st.name}">${st.n === 3 ? '<i class="corona"></i>' : ''}<i class="sph lt" style="background-image:${u(l)}"></i><i class="sph dk" style="background-image:${u(d)}"></i></div>`; }
 export const eclipseOn = (t = Date.now()) => t % ECLIPSE.everyMs < ECLIPSE.forMs;
 const petName = p => p.uname || PETS.find(x => x.sp === p.sp)?.label || p.sp;
 /** Goods tab: condensed late-game sections. st = server shop_state (or null while loading). */
@@ -31,8 +37,8 @@ export function shopHtml(st, save, f, { fmt, esc, gm }) {
   const sec = (title, kinds, note = '') => `<details class="cwing"><summary>${title}</summary>${note}` + SHOP.filter(i => kinds.includes(i.kind)).map(item).join('') + '</details>';
   const pets = (st.pets || []), act = save.activePet;
   const petRows = pets.map(p => { const R = rarityOf(p.rarity); return `<div class="petcell ${p.id === act ? 'on' : ''}" style="--rc:${R.color}"><i style="background-image:${petSprite(p.sp).replace(/"/g, '&quot;')}"></i><b>${esc(petName(p))}</b><small style="color:${R.color}">${R.label}</small><small>${PERK_LABEL[p.perk.k](p.perk.v)}</small><button data-pet="${p.id}">${p.id === act ? 'Active' : 'Follow'}</button></div>`; }).join('');
-  const [sl, sd] = spiritHalves(), u = x => x.replace(/"/g, '&quot;');
-  const spirit = gm ? `<div class="petcell spiritcard ${save.spirit ? 'on' : ''}" style="--rc:${DIVINE.color}"><div class="spart"><i style="background-image:${u(sl)}"></i><i style="background-image:${u(sd)}"></i></div><b>${esc(SPIRIT.title)}</b><small class="divine">${DIVINE.label} · ${SPIRIT.label} · staff only</small>${SPIRIT.abilities.map(([n, t]) => `<small><b>${esc(n)}</b> ${esc(t)}</small>`).join('')}<small class="lore">${esc(SPIRIT.lore)}</small><button data-spirit>${save.spirit ? 'Active' : 'Follow'}</button></div>` : '';
+  const sst = spiritStage(lvOf(save)), [sl, sd] = spiritHalves(sst.n), u = x => x.replace(/"/g, '&quot;');
+  const spirit = gm ? `<div class="petcell spiritcard ${save.spirit ? 'on' : ''}" style="--rc:${DIVINE.color}"><div class="spart s${sst.n}"><i style="background-image:${u(sl)}"></i><i style="background-image:${u(sd)}"></i></div><b>${esc(sst.name)}</b><small class="divine">${DIVINE.label} · ${SPIRIT.label} · staff only · stage ${sst.n} of 3</small><small class="sub">${esc(sst.blurb)}${sst.n < 3 ? ` · evolves at Lv ${SPIRIT_STAGES[sst.n].min}` : ''}</small>${SPIRIT.abilities.map(([n, t]) => `<small><b>${esc(n)}</b> ${esc(t)}</small>`).join('')}<small class="lore">${esc(SPIRIT.lore)}</small><button data-spirit>${save.spirit ? 'Active' : 'Follow'}</button></div>` : '';
   const carvable = Array.from({ length: Math.max(0, arcF) }, (_, i) => i + 1);
   return `<h3>Collector's Wing <small>· cosmetic and prestige only</small></h3>`
     + sec('Arc trophies', ['trophy']) + sec('Hero skins', ['skin'])

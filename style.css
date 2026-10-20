@@ -461,3 +461,12 @@ body.tabhidden #sanctumDeco .bp{animation-play-state:paused}@media (prefers-redu
 .idab{margin:0;padding-left:18px;display:grid;gap:2px}.idmeta{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 @media(max-width:640px){#idCard{width:100vw}.idstats{grid-template-columns:repeat(3,1fr)}.cgears,.idmeta{grid-template-columns:1fr}.cgear{flex-direction:row;flex-wrap:wrap;align-items:baseline;column-gap:8px}.dquest{flex-wrap:wrap}.dquest button,.gquest button{min-width:84px}.cardlink{padding:2px 0}}
 #idCard{background:linear-gradient(180deg,rgba(29,15,66,.98),rgba(16,8,40,.99))} /* opens on top of the board/chat/roster sheets: opaque so they do not show through */
+/* Solumbra evolution stages: the halo orbit grows with the stage; stage 3 adds a corona */
+.halo.s1 .sph{animation-duration:8s;scale:.6}.halo.s2 .sph{scale:1}.halo.s3 .sph{scale:1.35}.halo.s3 .sph.lt{filter:drop-shadow(0 0 4px #fffaf0) drop-shadow(0 0 8px #f6d77a)}.halo.s3 .sph.dk{filter:drop-shadow(0 0 4px #9a5cff) drop-shadow(0 0 8px #3a1a6a)}
+.halo.s1{scale:.75}.halo.s3{scale:1.3}
+.halo .corona{position:absolute;left:50%;top:50%;width:34px;height:34px;translate:-50% -50%;border-radius:50%;background:conic-gradient(from 0deg,#fffaf088,#f6d77a00 25%,#0b0a0f88 50%,#9a5cff00 75%,#fffaf088);filter:blur(1px);animation:corona 9s linear infinite;pointer-events:none}
+@keyframes corona{to{rotate:360deg}}
+.spart.s1{width:36px;height:36px}.spart.s3{width:58px;height:58px;box-shadow:0 0 16px #f6d77a,0 0 30px #9a5cff66}
+.notice.evolve{display:flex;flex-direction:column;align-items:center;gap:6px;border-color:#f6d77a}.notice.evolve span{color:#f6d77a}.notice.evolve .halo{position:relative;inset:auto;width:32px;height:16px;transform:scale(2);margin:10px 0}
+body.tabhidden .halo .corona{animation-play-state:paused}
+@media (prefers-reduced-motion:reduce){.halo .corona{animation:none}}

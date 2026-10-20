@@ -31,7 +31,7 @@ import { bannerBadge, hallArt } from './banner.js';
 import { slotsOf, displayBanner, ZERO_BANNER, staffHall } from './guildsv2.js';
 import { itemIcon } from './icons.js';
 import { shopHtml, haloHtml, petHtml, decorHtml, wallHtml, eclipseOn } from './prestigeui.js';
-import { SHOP } from './prestige.js';
+import { SHOP, spiritStage } from './prestige.js';
 import { SANCTUM, sanctumAllowed, inSanctum, newConstruct, hitConstruct, dpsMeters, constructSprite, towerModelSprite } from './sanctum.js';
 import { sellPrice, sellable, toggleLock, sellItem, bulkPreview, sellBulk } from './town.js';
 const shownRarity = it => it?.gm ? 'unique' : it?.rarity; // staff items display as Unique (see gm.js)
@@ -123,7 +123,7 @@ function handleClears(clears = [], quiet = false) {
 }
 function openWardrobe() {
   const h = save.heroes[0];
-  $('wpreview').style.backgroundImage = heroSprite(h.look, h.cls); $('wpreview').innerHTML = gmValid && save.spirit ? haloHtml() : ''; // Solumbra halo on the portrait (staff only)
+  $('wpreview').style.backgroundImage = heroSprite(h.look, h.cls); $('wpreview').innerHTML = gmValid && save.spirit ? haloHtml(spiritStage(h.level).n) : ''; // Solumbra halo on the portrait (staff only)
   $('wname').innerHTML = `<span style="color:${nameColorOf(h)}">${esc(h.name)}</span><br><span class="ttl">«${esc(titleOf(h))}»</span>` + (h.cls === GM_CLASS && h.look.outfitStyle === 'gm-coat' ? `<p class="sub" id="vesper"><b class="uniq" style="color:${rarityOf('unique').color}">${esc(VESPERVEIL.label)}</b> <small style="color:${rarityOf('unique').color}">Unique · coat · ${esc(STAFF_STAMP)}</small><br>${esc(VESPERVEIL.lore)}<br><span style="color:#cfd8ff">✦ ${esc(VESPERVEIL.ability)}</span></p>` : '');
   picker($('wpick'), SLOTS, h.look, h.cls, save.progress, async id => { if (equip(save, id)) { await be.saveSave(save); render(); openWardrobe(); } });
   if (!$('wardrobe').open) $('wardrobe').showModal();
@@ -275,6 +275,7 @@ function playAwaken() {
 function render() {
   const h = save.heroes[0]; renderSanctum();
   { const ph = petHtml(save, gmValid); if (ph !== lastPet) { $('pet').innerHTML = ph; lastPet = ph; } }
+  if (gmValid && save.spirit) { const ss = spiritStage(save.heroes[0].level); if ((save.spiritSeen || 0) < ss.n) { save.spiritSeen = ss.n; spiritEvolve(ss); } } // staff only: first time each stage is reached
   $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; const phase = bossPhase(floor.floor, floor.hp, floor.maxHp); $('boss').style.backgroundImage = bossSprite(floor.floor, phase); $('boss').classList.toggle('big', bossIsBig(floor.floor));
   const won = floor.floor >= MAX_FLOOR && floor.hp <= 0, waiting = !won && floor.hp <= 0, bi = bossInfo(floor.floor), arc = arcOf(floor.floor); applyScene(floor.floor);
   // end of content after the last open floor; 'waiting' = the server has not opened the next floor yet (e.g. its floor cap is still lower)
@@ -497,6 +498,9 @@ async function openSystem() {
 
 // ---- Staff (gm): entrance notice, Eventide upkeep, hidden unlock field, sandbox.
 let lastAnnSeen = 0, lastFloorSeen = 0;
+function spiritEvolve(st) { const n = document.createElement('div'); n.className = `notice bigsys evolve s${st.n}`; n.id = 'evolveBanner';
+  n.innerHTML = `<small>◈ ${st.n === 1 ? 'Solumbra awakens' : 'Solumbra evolves'} · stage ${st.n} of 3</small>${haloHtml(st.n)}<span>${esc(st.name)}</span>`; document.querySelector('#evolveBanner')?.remove(); document.body.append(n); setTimeout(() => n.remove(), 6000);
+  log(`System notice: ${st.n === 1 ? 'Solumbra awakens' : 'Solumbra evolves'} · ${st.name}.`, '#f6d77a'); }
 function bigNotice(m) { const n = document.createElement('div'); n.className = 'notice bigsys'; n.innerHTML = `<small>◈ System notice</small><span>${esc(m)}</span>`; document.body.append(n); setTimeout(() => n.remove(), 4500); }
 async function gmFloorChecks() {
   const h = save.heroes[0], f = floor.floor;

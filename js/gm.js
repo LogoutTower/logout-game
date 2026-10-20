@@ -70,7 +70,7 @@ export function sanitizeSave(save, valid) {
     for (const [k, it] of Object.entries(h.equip || {})) if (it && (it.gm || isGmId(it.id))) { h.equip[k] = null; changed = true; }
     for (const id of Object.keys(h.talents || {})) if (isCodexId(id)) { delete h.talents[id]; changed = true; } // Codex ranks are staff-only
   }
-  for (const k of ['spirit', 'equinox', 'sanctum']) if (save[k]) { delete save[k]; changed = true; } // the Solumbra spirit is staff-only (equinox: old placeholder key)
+  for (const k of ['spirit', 'equinox', 'sanctum', 'spiritSeen']) if (save[k]) { delete save[k]; changed = true; } // the Solumbra spirit is staff-only (equinox: old placeholder key)
   if ((save.pets || []).some(p => /solumbra|equinox/i.test(p?.sp || '') || p?.rarity === 'divine')) { save.pets = save.pets.filter(p => !/solumbra|equinox/i.test(p?.sp || '') && p?.rarity !== 'divine'); changed = true; }
   const n = (save.inv || []).length; save.inv = (save.inv || []).filter(it => !(it?.gm || isGmId(it?.id))); if (save.inv.length !== n) changed = true;
   return changed;

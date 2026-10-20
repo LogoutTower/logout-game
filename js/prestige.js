@@ -49,5 +49,12 @@ export const DIVINE = { id: 'divine', label: 'Divine', color: '#f6d77a', ink: '#
 export const SPIRIT = { id: 'spirit-solumbra', name: 'Solumbra', title: 'Solumbra, Spirit of the First Dawn and Last Dusk', rarity: 'divine', label: 'Pet',
   abilities: [["Architect's Grace", 'A blessing over everyone on the floor: up to +5% gold & XP, the higher of it and the Shaper\'s Decree, never stacking past 5%.'], ["Umbra's Veil", 'Eclipses the arena for 20 s every 10 min; +3% XP for the staff hero only.']],
   lore: "When the Architect wrote the tower's first line of code, a spirit woke in the light it cast. When he made Umbra, the spirit split, half light and half shadow. Now it circles the Architect, a reminder that she was born from his own light. It is bound to him alone, and no one else can ever summon it." };
+// Solumbra evolves with the staff hero's level (visuals and name only; Architect's Grace and Umbra's Veil stay exactly as capped above).
+export const SPIRIT_STAGES = [
+  { n: 1, min: 1, name: 'Solumbra Wisp', blurb: 'a small orb of light and shadow' },
+  { n: 2, min: 30, name: 'Solumbra Spirit', blurb: 'light and shadow wound into one spirit' },
+  { n: 3, min: 60, name: SPIRIT.title, blurb: 'its final form, crowned in dawn and dusk' },
+];
+export const spiritStage = level => [...SPIRIT_STAGES].reverse().find(s => (level || 1) >= s.min);
 export const isSpiritId = id => /solumbra|equinox/i.test(String(id || '')); // equinox = the old placeholder id
 export const ECLIPSE = { everyMs: 600000, forMs: 20000, xpMul: 1.03 };
