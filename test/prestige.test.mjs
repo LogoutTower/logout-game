@@ -27,5 +27,5 @@ assert(!PET_RARITY.includes('divine') && SPIRIT.rarity === 'divine', 'Divine is 
 assert(DECOR.length === 4);
 { const { shopHtml } = await import('../js/prestigeui.js'); const st = { owned: [], tokens: {}, pets: [], prices: {}, arc: 3 }, sv2 = { gold: 0, heroes: [newHero('Z', 'Blade')], spirit: true }, o = { fmt: String, esc: x => x };
   assert(!/Solumbra/.test(shopHtml(st, sv2, 3, { ...o, gm: false })), 'players never see the spirit card'); const gh = shopHtml(st, sv2, 3, { ...o, gm: true }); const grid = gh.slice(gh.indexOf('petgrid')); assert(grid.includes(SPIRIT.lore) && (grid.includes(SPIRIT.title) || /Solumbra (Wisp|Spirit)/.test(grid)) && /Divine · Pet/.test(grid) && !/<summary>Spirit/.test(gh), 'Solumbra is shown as a pet, inside the pet collection'); }
-{ const { petHtml } = await import('../js/prestigeui.js'); assert(/class="halo"/.test(petHtml({ spirit: true }, true)), 'staff: halo above the head'); assert.equal(petHtml({ spirit: true }, false), '', 'players never get the halo'); }
+{ const { petHtml } = await import('../js/prestigeui.js'); assert(/class="halo s1"/.test(petHtml({ spirit: true }, true)) && /class="halo s3"/.test(petHtml({ spirit: true, heroes: [{ level: 70 }] }, true)), 'staff: halo above the head'); assert.equal(petHtml({ spirit: true }, false), '', 'players never get the halo'); }
 console.log('prestige tests passed');
