@@ -2,6 +2,7 @@
 // the server (or LocalBackend) re-checks every rule, the client only hides buttons the player can't use.
 import * as R from './guildsv2.js';
 import { STAFF_MARK } from './guilds.js';
+import { isTeam, teamTag } from './teamstaff.js';
 import { bannerIcon, bannerBadge, hallArt } from './banner.js';
 import { cleanChat } from './chatfilter.js';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
@@ -31,7 +32,7 @@ export function renderGuildV2(info, ctx) {
       const self = m.user_id === me.user_id, acts = [];
       if (!self && R.canKick(me.role, m.role)) acts.push(`<button data-kick="${esc(m.user_id)}">Kick</button>`);
       if (!self && lead && !m.is_staff) { if (m.role === 'member') acts.push(`<button data-role="officer" data-u="${esc(m.user_id)}">Promote</button>`); if (m.role === 'officer') acts.push(`<button data-role="member" data-u="${esc(m.user_id)}">Demote</button>`); acts.push(`<button data-role="leader" data-u="${esc(m.user_id)}">Make leader</button>`); }
-      return `<tr class="${self ? 'mine' : ''}"><td><span class="cardlink" data-card="${esc(m.name)}" role="button" tabindex="0">${m.is_staff ? '◈ ' : ''}${esc(m.name)}</span></td><td><small class="role r-${m.role}">${m.role}</small></td><td>${fmtN(m.contrib)}</td><td class="sub">${ago(m.last_active)}</td><td class="gacts">${acts.join('')}</td></tr>`; }).join('')}</table>
+      return `<tr class="${self ? 'mine' : ''}"><td><span class="cardlink" data-card="${esc(m.name)}" role="button" tabindex="0">${m.is_staff ? '◈ ' : ''}${esc(m.name)}${isTeam(m.name) ? ' ' + teamTag() : ''}</span></td><td><small class="role r-${m.role}">${m.role}</small></td><td>${fmtN(m.contrib)}</td><td class="sub">${ago(m.last_active)}</td><td class="gacts">${acts.join('')}</td></tr>`; }).join('')}</table>
     <p class="sub">Officers and the leader invite, kick members and answer requests. The leader promotes, demotes and hands over leadership. A leader inactive for ${R.INACTIVE_DAYS} days passes it to the most active officer.</p>`;
   else if (tab === 'bank') body = `<p>Bank: <b>${fmtN(g.bank)} gold</b>. Gold only: it is spent on guild upgrades and never paid out to players.</p>
     ${ctx.staff ? '<p class="sub">Staff cannot donate.</p>' : `<div class="grow"><input id="gDon" type="number" min="1" max="${R.DONATE_DAILY_CAP}" placeholder="Gold to donate" inputmode="numeric"><button id="gDonB" class="cta">Donate</button></div><p class="sub">You have ${fmtN(Math.floor(ctx.save.gold))}g. At most ${fmtN(R.DONATE_DAILY_CAP)} a day, one donation every ${R.DONATE_COOLDOWN_S}s.</p>`}
@@ -71,7 +72,7 @@ export function renderGuildV2(info, ctx) {
   if ($q('#gBan')) $q('#gBan').onclick = () => { const c = R.checkBanner(draft, g.level, g.banner_unlocks, sg); if (!c.ok) return msg(c.reason); act(async () => { try { await ctx.be.guildSetBanner(c.banner.sigil, c.banner.c1, c.banner.c2); } catch (e) { throw c.banner.sigil === R.STAFF_SIGIL && /locked/.test(e.message) ? new Error('The Floor Zero sigil arrives soon.') : e; } draft = null; }, 'banner saved.'); };
   clearInterval(gchatTimer); gchatTimer = null;
   if (tab === 'chat') { const draw = () => { const l = $q('#gChatLog'); if (!l) return; const atEnd = l.scrollHeight - l.scrollTop - l.clientHeight < 40;
-      l.innerHTML = gchat.map(m => `<div class="msg ${m.author === 'me' || m.name === ctx.name ? 'me' : ''} ${m.is_staff ? 'staff' : ''}">${bannerBadge(g.banner, g.tag)}<b class="cardlink" data-card="${esc(m.name)}" role="button" tabindex="0">${esc(m.name)}</b><time>${new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time> ${esc(m.body)}</div>`).join('') || '<p class="sub">Quiet in the hall.</p>'; if (atEnd) l.scrollTop = l.scrollHeight; };
+      l.innerHTML = gchat.map(m => `<div class="msg ${m.author === 'me' || m.name === ctx.name ? 'me' : ''} ${m.is_staff ? 'staff' : ''}">${bannerBadge(g.banner, g.tag)}<b class="cardlink" data-card="${esc(m.name)}" role="button" tabindex="0">${esc(m.name)}${isTeam(m.name, m.author) ? ' ' + teamTag() : ''}</b><time>${new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time> ${esc(m.body)}</div>`).join('') || '<p class="sub">Quiet in the hall.</p>'; if (atEnd) l.scrollTop = l.scrollHeight; };
     const poll = async () => { if (!el.isConnected || !el.closest('dialog')?.open || document.hidden) return; try { const n = await ctx.be.guildChatFetch(gchatLast); for (const m of n) { gchat.push(m); gchatLast = Math.max(gchatLast, m.id); } gchat = gchat.slice(-100); draw(); } catch {} };
     draw(); poll(); gchatTimer = setInterval(() => { if (!el.closest('dialog')?.open) { clearInterval(gchatTimer); return; } poll(); }, 5000);
     if ($q('#gChatF')) $q('#gChatF').onsubmit = async e => { e.preventDefault(); const v = $q('#gChatIn').value, c = cleanChat(v); if (!c.ok) { $q('#gChatNote').textContent = c.reason; return; }

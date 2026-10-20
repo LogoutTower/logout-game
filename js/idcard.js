@@ -4,6 +4,7 @@
 import { CLASSES, heroDps, heroMaxHp, gearBonus } from './game.js';
 import { RARITIES, statLabel, rollItem } from './loot.js';
 import { rng } from './floors.js';
+import { teamTag } from './teamstaff.js';
 import { byId, titleOf, nameColorOf, defaultLook, fakeProfile, itemsFor } from './cosmetics.js';
 import { GM_CLASS, GM_TITLE, sanitizeSave, ROOT_KEY, GM_LUCK, GM_GEAR_NAMES, gmTier } from './gm.js';
 import { nodeById } from './talents.js';
@@ -34,7 +35,7 @@ export function heroOf(card) {
   const s = { heroes: [h], inv: [], pets: [] }; sanitizeSave(s, st); return h;
 }
 const rc = r => RARITIES.find(x => x.id === r)?.color || '#c9c2d8', rl = r => RARITIES.find(x => x.id === r)?.label || r || '';
-export function cardHtml(card, { fmt = String, esc = String, guildBadge = () => '', sprite = null } = {}) {
+export function cardHtml(card, { team = false, fmt = String, esc = String, guildBadge = () => '', sprite = null } = {}) {
   if (!card) return '<p class="sub">No ID card for this hero yet (they need to play and sync once).</p>';
   const h = heroOf(card), st = !!card.st, c = CLASSES[h.cls], g = gearBonus(h);
   let title = ''; try { title = st ? GM_TITLE : titleOf(h) || ''; } catch { title = ''; }
@@ -55,7 +56,7 @@ export function cardHtml(card, { fmt = String, esc = String, guildBadge = () => 
     : p ? `<span style="color:${rc(p.rarity)}">${esc(p.name || PETS.find(x => x.sp === p.sp)?.label || p.sp)}</span> <small class="sub">${esc(rl(p.rarity))}${p.perk && PERK_LABEL[p.perk] ? ' · ' + esc(PERK_LABEL[p.perk](p.v)) : ''}</small>` : '<small class="sub">none</small>';
   const gu = card.guild ? `${guildBadge(card.guild)}[${esc(card.guild.tag)}] ${esc(card.guild.name || '')}` : '<small class="sub">no guild</small>';
   let dps = 0, hp = 0; try { dps = heroDps(h); hp = heroMaxHp(h); } catch {}
-  return `<div class="idcard ${st ? 'staff' : ''}"><div class="idhead"><div class="idspr" style="background-image:${spr}"></div><div><div class="idname" style="color:${st ? '#ffd76a' : color}">${st ? '◈ ' : ''}${esc(h.name)}</div><div class="ttl">${esc(title)}</div>
+  return `<div class="idcard ${st ? 'staff' : ''}"><div class="idhead"><div class="idspr" style="background-image:${spr}"></div><div><div class="idname" style="color:${st ? '#ffd76a' : color}">${st ? '◈ ' : ''}${esc(h.name)}${team && !st ? ' ' + teamTag() : ''}</div><div class="ttl">${esc(title)}</div>
     <div class="sub">Lv ${h.level} · ${esc(h.cls === GM_CLASS ? 'Tower Staff' : h.cls)}${card.sim ? ' · simulated' : ''}</div></div></div>
     <div class="idstats"><span><small>DPS</small><b>${fmt(dps)}</b></span><span><small>HP</small><b>${fmt(hp)}</b></span><span><small>Forge</small><b>+${h.gear}</b></span><span><small>Gold</small><b>+${g.goldPct || 0}%</b></span><span><small>XP</small><b>+${g.xpPct || 0}%</b></span>${st ? `<span><small>Luck</small><b>+${GM_LUCK}%</b></span>` : ''}</div>
     <h3>Gear</h3><div class="cgears">${gear}</div><h3>Abilities</h3><ul class="idab">${ab.map(a => `<li>${a}</li>`).join('') || '<li class="sub">none yet</li>'}</ul>

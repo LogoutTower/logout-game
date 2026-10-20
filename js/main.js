@@ -40,6 +40,7 @@ const ico = (it, cls = 'ico') => `<i class="${cls}${shownRarity(it) === 'unique'
 import { ELEMENT_WORD } from './loot.js'; const ELEMENTS = Object.keys(ELEMENT_WORD);
 import { classOf } from './game.js';
 import { holderStatus } from './supabase.js';
+import { loadTeam, isTeam, teamTag } from './teamstaff.js';
 import { bossSprite, bossIsBig, heroSprite, bossPhase, AWAKEN_NAME, AWAKEN_TITLE } from './sprites.js';
 import { SLOTS, CREATION_SLOTS, itemsFor, isUnlocked, unlockText, defaultLook, migrateSave, recordClear, equip, titleOf, nameColorOf, fakeProfile, byId, SAVE_VERSION } from './cosmetics.js';
 const $ = id => document.getElementById(id);
@@ -206,7 +207,7 @@ async function openCard(name, author = null) {
   else if (be.name === 'local') { const gs = be._g?.(), m = gs?.members.find(x => x.name === name), gu = m && gs.guilds.find(x => x.id === m.guild_id); card = fakeCard(name, floor?.floor || 1, gu ? { tag: gu.tag, name: gu.name, banner: gu.banner, staff: !!gu.is_staff } : null); }
   else if (be.playerCard) card = await cards.get(author ? 'a:' + author : 'n:' + name, () => be.playerCard({ name: author ? null : name, author })).catch(() => null);
   $('idCardSub').textContent = card ? '· hero ID' : '';
-  body.innerHTML = card ? cardHtml(card, { fmt, esc, sprite: heroSprite, guildBadge: g => gv2On() && g.banner ? bannerBadge(displayBanner(g.banner, g.staff), g.tag) : '' })
+  body.innerHTML = card ? cardHtml(card, { team: !card.st && isTeam(card.name || name, author), fmt, esc, sprite: heroSprite, guildBadge: g => gv2On() && g.banner ? bannerBadge(displayBanner(g.banner, g.staff), g.tag) : '' })
     : `<p class="sub">${be.playerCard && !be.noCard ? 'No ID card for this hero yet. They need to play and sync once.' : 'ID cards open soon.'}</p>`;
 }
 document.addEventListener('click', e => { const t = e.target.closest?.('[data-card]'); if (!t || !save) return; e.preventDefault(); e.stopPropagation(); openCard(t.dataset.card, t.dataset.author || null); }, true);
@@ -597,8 +598,9 @@ async function openGuild() {
 let chatLast = 0, chatFloor = null, chatTimer = null; const chatMsgs = [];
 const muted = () => JSON.parse(localStorage.getItem('logout.v1.muted') || '[]');
 function renderChat() {
+  loadTeam(be).then(ok => ok && renderChat()).catch(() => {});
   const mu = muted(), el = $('chatLog'), atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-  el.innerHTML = chatMsgs.filter(m => !mu.includes(m.author)).map(m => `<div class="msg ${m.author === 'me' || m.name === save.heroes[0].name ? 'me' : ''} ${m.is_staff ? 'staff' : ''}"><span class="mod"><button data-mute="${esc(m.author)}" title="Mute">Mute</button><button data-rep="${m.id}" title="Report">Report</button></span>${m.guild_tag ? `${gv2On() && tagBanner(m.guild_tag) ? bannerBadge(tagBanner(m.guild_tag), m.guild_tag) : ''}<span class="tag">[${esc(m.guild_tag)}]</span>` : ''}<b class="cardlink" data-card="${esc(m.name)}"${/^[0-9a-f]{12}$/.test(m.author || '') ? ` data-author="${esc(m.author)}"` : ''} role="button" tabindex="0">${m.is_staff ? GM_SIGIL + ' ' : ''}${esc(m.name)}</b><time>${new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time><br>${esc(m.body)}</div>`).join('') || '<p class="sub">Quiet on this floor.</p>';
+  el.innerHTML = chatMsgs.filter(m => !mu.includes(m.author)).map(m => `<div class="msg ${m.author === 'me' || m.name === save.heroes[0].name ? 'me' : ''} ${m.is_staff ? 'staff' : ''}"><span class="mod"><button data-mute="${esc(m.author)}" title="Mute">Mute</button><button data-rep="${m.id}" title="Report">Report</button></span>${m.guild_tag ? `${gv2On() && tagBanner(m.guild_tag) ? bannerBadge(tagBanner(m.guild_tag), m.guild_tag) : ''}<span class="tag">[${esc(m.guild_tag)}]</span>` : ''}<b class="cardlink" data-card="${esc(m.name)}"${/^[0-9a-f]{12}$/.test(m.author || '') ? ` data-author="${esc(m.author)}"` : ''} role="button" tabindex="0">${m.is_staff ? GM_SIGIL + ' ' : ''}${esc(m.name)}${!m.is_staff && isTeam(m.name, m.author) ? ' ' + teamTag() : ''}</b><time>${new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time><br>${esc(m.body)}</div>`).join('') || '<p class="sub">Quiet on this floor.</p>';
   if (atEnd) el.scrollTop = el.scrollHeight;
   el.querySelectorAll('[data-mute]').forEach(b => b.onclick = () => { localStorage.setItem('logout.v1.muted', JSON.stringify([...new Set([...muted(), b.dataset.mute])])); renderChat(); });
   el.querySelectorAll('[data-rep]').forEach(b => b.onclick = async () => { const id = +b.dataset.rep; try { await be.chatReport(id, 'player report'); } catch {} const i = chatMsgs.findIndex(m => m.id === id); if (i >= 0) chatMsgs.splice(i, 1); renderChat(); $('chatNote').textContent = 'Reported. Thanks: it is hidden for you, and for everyone after a few reports.'; });

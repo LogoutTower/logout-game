@@ -10,6 +10,8 @@ Two SQL files, run by hand in the Supabase SQL editor. Nothing here runs automat
    suggested factor for a 40 h run. Apply it with `update public.tower_config set prelaunch_hp_factor = <x> where id = 1;`. The new
    factor applies from the next floor. Re-running the addendum also rescales the floor in progress (it only lowers HP).
 3. **The staff run**: floors 11-20, online, before Mon Oct 26 10:30 AM CT (2026-10-26 15:30 UTC).
+3b. **Team staff accounts** (optional, any time before the reset): run `supabase/schema-addendum-team-staff.sql` once, then
+   `supabase/admin-mark-staff.sql` with each account's Tower ID (More > System > Tower ID). Their saves survive the reset too.
 4. **`supabase/admin-reset-tower.sql`**: run after the run and before release. It's idempotent.
 
 ## What the addendum does
@@ -54,7 +56,7 @@ level held fixed; 2x XP makes it faster):
 - **Guild weeklies:** `guild_quests` and `guild_quest_contrib`.
 - **Guild progress:** `guild_ledger` and `guild_decor` are emptied. Non-staff guilds get xp, bank, bonus tier, hall level and banner
   unlocks set back to 0.
-- **Tester heroes** (every account without `role = 'gm'`): their `saves`, `pets`, `shop_owned`, `shop_tokens`, `daily_claims`,
+- **Tester heroes** (every account that has neither `role = 'gm'` nor `profiles.team`): their `saves`, `pets`, `shop_owned`, `shop_tokens`, `daily_claims`,
   `quest_days` and `casino_days` (Glitch Den limits), plus their active pet.
 - **Shop:** `shop_global.sold = 0`, so the climbing prestige prices start over.
 - **Turnout:** `profiles.last_submit = null` for everyone (nobody counts as recently active) and `sanctum = false`.
@@ -67,7 +69,7 @@ level held fixed; 2x XP makes it faster):
 - Guilds and their memberships and ranks
 - Chat
 - Egress stats
-- The staff save
+- The staff save, and every team staff save (`profiles.team = true`) with its pets, shop items, streaks and active pet
 - `max_floor`
 
 ## Reset epoch: old browser saves don't come back
@@ -80,5 +82,5 @@ level held fixed; 2x XP makes it faster):
   `createdAt` and are kept.
 - **Server guard:** a non-staff save upload with a missing or pre-reset `createdAt` is silently dropped, so a stale browser can't push
   old progress back up before it sees the new epoch.
-- **The staff save is always kept**, on the client and on the server.
+- **The staff save is always kept**, on the client and on the server. Team staff saves are kept too: the server guard skips them and `tick()` sends them no `ep`, so their browsers never discard.
 - **Re-running the reset** starts a new epoch, so heroes made between the two runs are discarded too.
