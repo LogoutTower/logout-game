@@ -483,3 +483,6 @@ body.tabhidden .halo .corona{animation-play-state:paused}
 .wseg.hit{background:#7a3cff;color:#fff;box-shadow:0 0 14px #c9a0ff}.denres{font-weight:700;text-align:center;margin:6px 0}.denres.win{color:#5cff8a}.denres.lose{color:#ff8aa8}
 #denBody.rolling .den{animation:denglitch .15s steps(2) 3}@keyframes denglitch{50%{transform:translateX(2px);filter:hue-rotate(60deg)}}
 @media (prefers-reduced-motion:reduce){#denBody.rolling .den{animation:none}}
+.ico.gmt2,.ico.gmt3{filter:drop-shadow(0 0 2px #ffd76a) drop-shadow(0 0 4px #ffd76a88)}.ico.gmt3{animation:gmtpulse 2.4s ease-in-out infinite}.ico.gmt4{filter:drop-shadow(0 0 2px #fffaf0) drop-shadow(0 0 5px #f6d77a) drop-shadow(0 0 1px #0b0a0f);animation:gmtpulse 2s ease-in-out infinite}
+@keyframes gmtpulse{50%{filter:drop-shadow(0 0 3px #fffaf0) drop-shadow(0 0 7px #f6d77a)}}.gearaw-icons{display:flex;gap:10px;margin:6px 0}.gearaw-icons .ico{width:48px;height:48px}
+.cgear .gtier{font-size:10px;color:#ffd76a;letter-spacing:1px}

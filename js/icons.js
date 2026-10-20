@@ -16,13 +16,19 @@ export const SHAPES = {
   katana: ['...............m', '..............ma', '.............ma.', '............ma..', '...........ma...', '..........ma....', '.........ma.....', '........ma......', '.......ma.......', '.....dma........', '.....dd.........', '....hd..........', '...hh...........', '..hh............', '.hh.............', 'g...............'],
   armor: ['................', '...mm......mm...', '..mmmm....mmmm..', '..mmmmmmmmmmmm..', '...mmmmaammmm...', '....mmmaammm....', '....mmmmmmmm....', '....mmmggmmm....', '....mmmmmmmm....', '....dmmmmmmd....', '....dmmmmmmd....', '....ddmmmmdd....', '.....dddddd.....', '................', '................', '................'],
   ring: ['................', '................', '......gggg......', '.....gaaaag.....', '......gggg......', '.....m....m.....', '....m......m....', '...m........m...', '...m........m...', '...m........m...', '....m......m....', '.....m....m.....', '......mmmm......', '................', '................', '................'],
+  // Staff gear tiers: III adds a guard and edge light, Divine adds a light/shadow blade and a halo ring
+  katana2: ['..............am', '.............ama', '............ama.', '...........ama..', '..........ama...', '.........ama....', '........ama.....', '.......ama......', '......ama.......', '...g.dma........', '....ggd.........', '...ghdg.........', '...hh.g.........', '..hh............', '.hh.............', 'gg..............'],
+  katanaD: ['.............wwa', '............wwa.', '...........wwa..', '..........wwa...', '.........wwa....', '........wwa.....', '.......wda......', '......wda.......', '.....wda........', '..g.wda.........', '.ggggd..........', '..ghdgg.........', '..hh..g.........', '.hh.............', 'hh..............', 'gg..............'],
+  armor2: ['................', '..gmm......mmg..', '..mmmm....mmmm..', '.gmmmmmmmmmmmmg.', '...mmmmaammmm...', '....mmmaammm....', '....mmammamm....', '....mmmggmmm....', '....mammmmam....', '....dmmmmmmd....', '....dmaggamd....', '....ddmmmmdd....', '.....dddddd.....', '......g..g......', '................', '................'],
+  armorD: ['.....wwwwww.....', '..gww......wwg..', '..wwmm....mmdd..', '.gwwmmmmmmmmddg.', '...wwmmaammdd...', '....wwmaamdd....', '....wwammadd....', '....wwmggmdd....', '....wammmmad....', '....wmmmmmmd....', '....wmaggamd....', '....wwmmmmdd....', '.....wwwdddd.....'.slice(0, 16), '......g..g......', '.......gg.......', '................'],
   // The Root Key (staff, Divine): a bow ring of light and shadow halves, gold shaft, three teeth
   rootkey: ['.....wwgg.......', '....ww..gg......', '...w.wa.d.g.....', '...w.ad.a.g.....', '...w..dd..g.....', '....ww..gg......', '.....wwgg.......', '.......mm.......', '.......mm.......', '.......mm.......', '.......mmgg.....', '.......mm.......', '.......mmgg.....', '.......mm.......', '.......mmggg....', '........m.......'],
   amulet: ['....d......d....', '.....d....d.....', '......d..d......', '.......dd.......', '.......mm.......', '......mmmm......', '.....mmggmm.....', '....mmgaagmm....', '....mmgaagmm....', '.....mmggmm.....', '......mmmm......', '.......mm.......', '................', '................', '................', '................'],
 };
 const WEAPON_BY_WORD = [[/greatsword|longbrand|brand/i, 'greatsword'], [/glaive|halberd|warglaive|warpick|cleaver/i, 'axe'], [/staff|spellstaff/i, 'staff'], [/spear|fangspear|starhook/i, 'spear'], [/fang/i, 'dagger'], [/blade|edge|sabre|runeblade|thornblade/i, 'sword']];
 export function iconShape(it) {
-  if (it.gm && it.slot === 'weapon' || it.id === 'gm-eventide') return 'katana'; // the staff blade reuses its own cosmetic silhouette
+  if (it.gm && it.slot === 'weapon' || it.id === 'gm-eventide') return (it.tier || 1) >= 4 ? 'katanaD' : (it.tier || 1) >= 3 ? 'katana2' : 'katana';
+  if (it.gm && it.slot === 'armor' && (it.tier || 1) >= 3) return (it.tier || 1) >= 4 ? 'armorD' : 'armor2'; // the staff blade reuses its own cosmetic silhouette
   if (it.id === 'gm-rootkey') return 'rootkey';
   if (it.slot === 'armor') return 'armor';
   if (it.slot === 'trinket') return H(it.id) % 2 ? 'ring' : 'amulet';

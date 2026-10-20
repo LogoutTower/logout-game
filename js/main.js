@@ -12,7 +12,7 @@ import { featureOn } from './features.js';
 import { checkGuild, GUILD_CAP, GUILD_BUFF, STAFF_GUILD, STAFF_MARK, guildError } from './guilds.js';
 import { cleanChat, CHAT_MAX } from './chatfilter.js';
 import { boardWithStaff, wouldRankLabel } from './ranks.js';
-import { gmGear, wearsVesperveil, STAFF_STAMP, VESPERVEIL, staffActive, GM_CLASS, GM_LUCK, GM_SIGIL, EVENTIDE, gmOn, checkPass, sanitizeSave, becomeGm, leaveGm, eventide, shouldAnnounce } from './gm.js';
+import { gmTier, gmGear, wearsVesperveil, STAFF_STAMP, VESPERVEIL, staffActive, GM_CLASS, GM_LUCK, GM_SIGIL, EVENTIDE, gmOn, checkPass, sanitizeSave, becomeGm, leaveGm, eventide, shouldAnnounce } from './gm.js';
 import { initUI, go as goTab, townPane, syncHall, setDot, setHeroLabels, heroTab } from './ui.js';
 import { openSandbox, sandboxFloor, sandboxFight, sandboxLoot, closeSandbox, sandboxEdit } from './sandbox.js';
 import { softenGm, enforceOneUnique, legendaryArmorPct, legendaryWeaponDps, rerollItem, chooseDestiny, DESTINY_MS } from './loot.js';
@@ -36,7 +36,7 @@ import { SHOP, spiritStage } from './prestige.js';
 import { SANCTUM, sanctumAllowed, inSanctum, newConstruct, hitConstruct, dpsMeters, constructSprite, towerModelSprite } from './sanctum.js';
 import { sellPrice, sellable, toggleLock, sellItem, bulkPreview, sellBulk } from './town.js';
 const shownRarity = it => it?.gm ? 'unique' : it?.rarity; // staff items display as Unique (see gm.js)
-const ico = (it, cls = 'ico') => `<i class="${cls}${shownRarity(it) === 'unique' ? ' ushim' : ''}" style='background-image:${itemIcon(it).replace(/'/g, '%27')}' aria-hidden="true"></i>`;
+const ico = (it, cls = 'ico') => `<i class="${cls}${shownRarity(it) === 'unique' ? ' ushim' : ''}${it?.gm && it.tier >= 2 ? ` gmt${it.tier}` : ''}" style='background-image:${itemIcon(it).replace(/'/g, '%27')}' aria-hidden="true"></i>`;
 import { ELEMENT_WORD } from './loot.js'; const ELEMENTS = Object.keys(ELEMENT_WORD);
 import { classOf } from './game.js';
 import { holderStatus } from './supabase.js';
@@ -278,6 +278,7 @@ function playAwaken() {
 function render() {
   const h = save.heroes[0]; renderSanctum();
   { const ph = petHtml(save, gmValid); if (ph !== lastPet) { $('pet').innerHTML = ph; lastPet = ph; } }
+  if (gmValid && h.cls === GM_CLASS && floor?.floor) { const t = gmTier(h.level); gmGear(save, floor.floor, legendaryWeaponDps(floor.floor), legendaryArmorPct(floor.floor)); if ((save.gmTierSeen || 1) < t.n) { save.gmTierSeen = t.n; gearAwaken(t); } } // staff gear follows the level tier; banner once per tier
   if (gmValid && save.spirit) { const ss = spiritStage(save.heroes[0].level); if ((save.spiritSeen || 0) < ss.n) { save.spiritSeen = ss.n; spiritEvolve(ss); } } // staff only: first time each stage is reached
   $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; const phase = bossPhase(floor.floor, floor.hp, floor.maxHp); $('boss').style.backgroundImage = bossSprite(floor.floor, phase); $('boss').classList.toggle('big', bossIsBig(floor.floor));
   const won = floor.floor >= MAX_FLOOR && floor.hp <= 0, waiting = !won && floor.hp <= 0, bi = bossInfo(floor.floor), arc = arcOf(floor.floor); applyScene(floor.floor);
@@ -390,7 +391,7 @@ function renderGoods(f) {
 // ---- Bag: inventory grid, compare panel, equip and salvage
 let bagSel = -1;
 const DIVINE_R = { id: 'divine', label: 'Divine', color: '#f6d77a' };
-const itemCard = (it, cls = '') => { const R = it?.gm && it.divine ? DIVINE_R : rarityOf(shownRarity(it)); return `<div class="item ${cls}" style="--rc:${R.color}">${ico(it)}${it.locked ? '<span class="lock" title="Locked">🔒</span>' : ''}<b class="${R.id === 'unique' ? 'uniq' : ''}" style="color:${R.color}">${esc(it.name)}</b><small${R.id === 'divine' ? ' class="divine"' : ''}>${R.label} · ${it.slot} · Floor ${it.floor} · ${it.element}</small>${Object.entries(it.stats).map(([k, v]) => `<div>${statLabel(k, v)}</div>`).join('')}${it.rarity === 'unique' ? `<div class="ab">✦ ${esc(it.ability.text)}</div><div class="db">▾ ${esc(it.drawback.text)}</div><div class="lore">${esc(it.lore)}</div><small>${esc(it.stamp)}</small>` : it.gm ? `${it.staffPower ? `<div class="ab">✦ ${esc(it.staffPower)}</div>` : ''}<div class="lore">${esc(it.lore || '')}</div><small>${esc(STAFF_STAMP)}</small>` : ''}</div>`; };
+const itemCard = (it, cls = '') => { const R = it?.gm && it.divine ? DIVINE_R : rarityOf(shownRarity(it)); return `<div class="item ${cls}" style="--rc:${R.color}">${ico(it)}${it.locked ? '<span class="lock" title="Locked">🔒</span>' : ''}<b class="${R.id === 'unique' ? 'uniq' : ''}" style="color:${R.color}">${esc(it.name)}</b><small${R.id === 'divine' ? ' class="divine"' : ''}>${R.label}${it.gm && it.tierLabel && it.tier < 4 ? ` · ${esc(it.tierLabel)}` : it.gm && it.tier === 4 ? ' · Awakened' : ''} · ${it.slot} · Floor ${it.floor} · ${it.element}</small>${Object.entries(it.stats).map(([k, v]) => `<div>${statLabel(k, v)}</div>`).join('')}${it.rarity === 'unique' ? `<div class="ab">✦ ${esc(it.ability.text)}</div><div class="db">▾ ${esc(it.drawback.text)}</div><div class="lore">${esc(it.lore)}</div><small>${esc(it.stamp)}</small>` : it.gm ? `${it.staffPower ? `<div class="ab">✦ ${esc(it.staffPower)}</div>` : ''}<div class="lore">${esc(it.lore || '')}</div><small>${esc(STAFF_STAMP)}</small>` : ''}</div>`; };
 function openBag() {
   const h = save.heroes[0];
   $('bagCount').textContent = `· ${save.inv.length} / ${bagSize(save)}`;
@@ -503,6 +504,9 @@ async function openSystem() {
 
 // ---- Staff (gm): entrance notice, Eventide upkeep, hidden unlock field, sandbox.
 let lastAnnSeen = 0, lastFloorSeen = 0;
+function gearAwaken(t) { const h = save.heroes[0], n = document.createElement('div'); n.className = `notice bigsys evolve gearaw t${t.n}`; n.id = 'gearBanner';
+  const w = h.equip?.weapon, a = h.equip?.armor; n.innerHTML = `<small>◈ ${t.n === 4 ? 'Divine Awakening' : 'Staff gear ascends'} · ${esc(t.label)}</small><div class="gearaw-icons">${w?.gm ? ico(w, 'ico big') : ''}${a?.gm ? ico(a, 'ico big') : ''}</div><span>${esc(t.n === 4 ? 'Eventide and Vesperveil awaken' : `Eventide and Vesperveil reach ${t.label}`)}</span>`;
+  document.querySelector('#gearBanner')?.remove(); document.body.append(n); setTimeout(() => n.remove(), 6000); log(`System notice: ${t.n === 4 ? 'Divine Awakening' : t.label} · your staff gear answers your level.`, '#f6d77a'); }
 function spiritEvolve(st) { const n = document.createElement('div'); n.className = `notice bigsys evolve s${st.n}`; n.id = 'evolveBanner';
   n.innerHTML = `<small>◈ ${st.n === 1 ? 'Solumbra awakens' : 'Solumbra evolves'} · stage ${st.n} of 3</small>${haloHtml(st.n)}<span>${esc(st.name)}</span>`; document.querySelector('#evolveBanner')?.remove(); document.body.append(n); setTimeout(() => n.remove(), 6000);
   log(`System notice: ${st.n === 1 ? 'Solumbra awakens' : 'Solumbra evolves'} · ${st.name}.`, '#f6d77a'); }
