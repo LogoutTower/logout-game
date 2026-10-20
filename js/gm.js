@@ -39,9 +39,9 @@ export const vesperveil = (floor, legendaryArmorPct) => ({ id: VESPER_ID, gm: tr
   name: VESPERVEIL.label, lore: VESPERVEIL.lore, staffPower: VESPERVEIL.ability, stats: { dpsPct: legendaryArmorPct }, affixes: [] });
 export const wearsVesperveil = h => h?.equip?.armor?.id === VESPER_ID;
 /** The Root Key: a staff-only TRINKET, displayed at Divine (Solumbra's tier), Legendary-parity stats underneath like the other staff gear.
- *  Passive "Every Door": +5% offline gains, never past the public offline-bonus ceiling (OFFLINE_PCT_MAX) and never past the 24h cap. */
+ *  Passive "Every Door": +5% offline gold/XP on top of the 35% cap (OFFLINE_PCT_MAX); offline damage stays at 35%; 24h window unchanged. */
 export const ROOT_KEY = { id: 'gm-rootkey', name: 'The Root Key', lore: 'The first key the Architect ever cut. It opens every door in the tower, all but the one Umbra locked.',
-  ability: 'Every Door: +5% gains while offline (never past the usual offline bonus ceiling or the 24h cap).', offlinePct: 5 };
+  ability: 'Every Door: +5% offline gold and XP beyond the normal 35% cap (up to 40%; offline boss damage stays at 35%, 24h window unchanged).', offlinePct: 5 };
 export const OFFLINE_PCT_MAX = 35; // the most a public hero can reach (Idle Hands 3/3 + Phantom Watch)
 export const rootKey = (floor, legendaryTrinketPct) => ({ id: ROOT_KEY.id, gm: true, divine: true, slot: 'trinket', rarity: 'legendary', show: 'divine', stamp: STAFF_STAMP, floor, element: 'void',
   name: ROOT_KEY.name, lore: ROOT_KEY.lore, staffPower: ROOT_KEY.ability, stats: { goldPct: legendaryTrinketPct, xpPct: legendaryTrinketPct }, affixes: [] });

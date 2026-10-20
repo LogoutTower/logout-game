@@ -111,11 +111,11 @@ const settle = (save, s) => { // float → integer payouts with fractional carry
   return out;
 };
 /** Offline efficiency %: talents, plus the staff Root Key (only while the staff flag is live), clamped to the public ceiling. */
-export const offlinePctOf = save => { const t = talentBonus(save.heroes[0]).offlinePct || 0; return save.ctx?.gm && save.heroes[0]?.equip?.trinket?.id === 'gm-rootkey' ? Math.min(Math.max(t, 35), t + 5) : t; };
+export const offlinePctOf = (save, kind = 'gain') => { const t = Math.min(talentBonus(save.heroes[0]).offlinePct || 0, 35); return kind !== 'dmg' && save.ctx?.gm && save.heroes[0]?.equip?.trinket?.id === 'gm-rootkey' ? t + 5 : t; }; // Root Key: gold/XP up to 40%, damage stays at 35%
 /** Live accrual with fractional carry (fixes per-tick flooring that kept low-DPS heroes at 0 gold/XP). */
 export function accrue(save, now, capHours = 12, offline = false) {
   const raw = Math.max(0, (now - save.lastTick) / 1000), secs = Math.min(raw, capHours * 3600);
-  const s = simulate(save, secs), om = offline ? 1 + offlinePctOf(save) / 100 : 1; s.dmg *= om; s.gold *= om; s.xp *= om; // Shadowstep: offline efficiency
+  const s = simulate(save, secs), om = offline ? 1 + offlinePctOf(save) / 100 : 1, od = offline ? 1 + offlinePctOf(save, 'dmg') / 100 : 1; s.dmg *= od; s.gold *= om; s.xp *= om; // Shadowstep: offline efficiency
   const o = settle(save, s); save.lastTick = now;
   return { secs, capped: raw > secs, damage: o.dmg, gold: o.gold, xp: o.xp, lowSecs: s.lowSecs };
 }
