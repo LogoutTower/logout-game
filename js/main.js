@@ -28,7 +28,7 @@ import { renderGuildV2, invitesHtml } from './guildpanel.js';
 import { bannerBadge, hallArt } from './banner.js';
 import { slotsOf, displayBanner, ZERO_BANNER, staffHall } from './guildsv2.js';
 import { itemIcon } from './icons.js';
-import { shopHtml, petHtml, decorHtml, wallHtml, eclipseOn } from './prestigeui.js';
+import { shopHtml, haloHtml, petHtml, decorHtml, wallHtml, eclipseOn } from './prestigeui.js';
 import { SHOP } from './prestige.js';
 import { sellPrice, sellable, toggleLock, sellItem, bulkPreview, sellBulk } from './town.js';
 const shownRarity = it => it?.gm ? 'unique' : it?.rarity; // staff items display as Unique (see gm.js)
@@ -119,7 +119,7 @@ function handleClears(clears = [], quiet = false) {
 }
 function openWardrobe() {
   const h = save.heroes[0];
-  $('wpreview').style.backgroundImage = heroSprite(h.look, h.cls);
+  $('wpreview').style.backgroundImage = heroSprite(h.look, h.cls); $('wpreview').innerHTML = gmValid && save.spirit ? haloHtml() : ''; // Solumbra halo on the portrait (staff only)
   $('wname').innerHTML = `<span style="color:${nameColorOf(h)}">${esc(h.name)}</span><br><span class="ttl">«${esc(titleOf(h))}»</span>` + (h.cls === GM_CLASS && h.look.outfitStyle === 'gm-coat' ? `<p class="sub" id="vesper"><b class="uniq" style="color:${rarityOf('unique').color}">${esc(VESPERVEIL.label)}</b> <small style="color:${rarityOf('unique').color}">Unique · coat · ${esc(STAFF_STAMP)}</small><br>${esc(VESPERVEIL.lore)}<br><span style="color:#cfd8ff">✦ ${esc(VESPERVEIL.ability)}</span></p>` : '');
   picker($('wpick'), SLOTS, h.look, h.cls, save.progress, async id => { if (equip(save, id)) { await be.saveSave(save); render(); openWardrobe(); } });
   if (!$('wardrobe').open) $('wardrobe').showModal();
@@ -135,13 +135,14 @@ async function startGame(fresh = false) {
   $('tabGuild').hidden = !featureOn(FEATURES, 'guilds', gmValid); $('chatBtn').hidden = !featureOn(FEATURES, 'chat', gmValid);
   $('topbar').classList.remove('hidden'); $('tabbar').classList.remove('hidden'); setInterval(badgePoll, 60000); setTimeout(badgePoll, 4000);
   ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => addEventListener(ev, () => be?.touch?.(), { passive: true })); addEventListener('pagehide', () => { try { if (be?._dirty) be._push(be._dirty); } catch {} });
-  if (gmValid && save.equinox === undefined) save.equinox = true; loadShop();
+  document.addEventListener('visibilitychange', () => document.body.classList.toggle('tabhidden', document.hidden)); // pauses CSS loops (Solumbra halo, pet bob)
+  if (gmValid && save.equinox !== undefined) { if (save.spirit === undefined) save.spirit = save.equinox; delete save.equinox; } if (gmValid && save.spirit === undefined) save.spirit = true; loadShop();
   setInterval(tick, 1000); setInterval(sync, 5000); render(); renderLb();
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
 function tick() {
   save.ctx = { gm: gmValid, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (floor.gmUntil || 0) > Date.now(), guild: !!myGuild && !myGuild.is_staff, guildPct: myGuild?.is_staff || gv2Info?.guild?.is_staff ? 0 : gv2Info?.guild?.bonus_pct ?? null, decreePct: decreePctNow(), decree: gmValid || (floor.gmUntil || 0) > Date.now() || echoUntil > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, mech: bossInfo(floor.floor).mech, sessionSecs: (Date.now() - sessionStart) / 1000 };
-  save.ctx.eclipse = gmValid && !!save.equinox && eclipseOn(); { const ec = save.ctx.eclipse, ar0 = $('arena'); if (ar0.classList.contains('eclipse') !== ec) ar0.classList.toggle('eclipse', ec); }
+  save.ctx.eclipse = gmValid && !!save.spirit && eclipseOn(); { const ec = save.ctx.eclipse, ar0 = $('arena'); if (ar0.classList.contains('eclipse') !== ec) ar0.classList.toggle('eclipse', ec); }
   { const uh = unwrittenHour(save.ctx), ar = $('arena'); if (ar.classList.contains('unwritten') !== uh) { ar.classList.toggle('unwritten', uh); ar.title = uh ? 'The Unwritten Hour: +5% damage until the guardian falls' : ''; } }
   const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS), fx = effectsOf(save.heroes[0]);
   if (fx.has('whisper') && Date.now() - lastWhisper > 120000) { lastWhisper = Date.now(); log(WHISPERS[Math.floor(Math.random() * WHISPERS.length)], '#b9a8ff'); }
@@ -154,7 +155,7 @@ function tick() {
 }
 // Background tabs throttle timers: every tick measures real elapsed time (accrue = offline maths), and we catch up as soon as the tab is visible or focused.
 let lastCatchUp = 0;
-function catchUp() { if (!save || !floor || Date.now() - lastCatchUp < 500) return; lastCatchUp = Date.now(); tick(); sync(); }
+function catchUp() { if (!save || !floor || Date.now() - lastCatchUp < 500) return; lastCatchUp = Date.now(); tick(); be.resume?.(); sync(); } // tick() accrues the away time (12 h cap, same as offline); resume() makes sync() send it now
 document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
 addEventListener('focus', catchUp); addEventListener('pageshow', catchUp);
 async function sync() {
@@ -279,11 +280,11 @@ async function shopClick(t, f) { const d = t.dataset, lk = save.heroes[0].look, 
     if (d.shop) { const it = SHOP.find(i => i.id === d.shop); const r = await be.shopBuy(d.shop, save); return done(r.pet ? `The egg hatched: ${r.pet.uname || r.pet.sp} (${r.pet.rarity})` : `Bought ${it.label} for ${fmt(r.price)}g`); }
     if (d.skin) { lk.skinSet = lk.skinSet === d.skin ? undefined : d.skin; return done(); }
     if (d.ptitle) { lk.ptitle = lk.ptitle === d.ptitle ? undefined : d.ptitle; return done(); }
-    if (d.pet) { const id = +d.pet, on = save.activePet === id ? null : id; await be.petEquip(on); save.equinox = false; return done(on ? 'Your pet follows you' : 'Pet sent home'); }
+    if (d.pet) { const id = +d.pet, on = save.activePet === id ? null : id; await be.petEquip(on); save.spirit = false; return done(on ? 'Your pet follows you' : 'Pet sent home'); }
     if (d.tok === 'tok-rename') { const n = prompt('New hero name (2-20 characters, chat filters apply):', save.heroes[0].name); if (!n) return true; const r = await be.tokenUse('tok-rename', n.trim(), save); return done(`Your hero is now ${r.name}`); }
     if (d.tok === 'tok-reroll') { await be.tokenUse('tok-reroll', null, save); const h = save.heroes[0];
       for (const slot of ['outfitColor', 'trim', 'hairColor', 'weaponColor']) { const opts = itemsFor(slot, h.cls).filter(i => isUnlocked(i, save.progress) && !/^gm|vesper/i.test(i.id)); if (opts.length) h.look[slot] = opts[Math.floor(Math.random() * opts.length)].id; } return done('Look re-rolled from your unlocked colours'); }
-    if (d.equinox !== undefined) { save.equinox = !save.equinox; return done(); }
+    if (d.spirit !== undefined) { save.spirit = !save.spirit; if (save.spirit && save.activePet != null) { await be.petEquip(null); } return done(save.spirit ? 'Solumbra circles you' : 'Solumbra rests'); }
     if (d.carve !== undefined) { const fl = +$('carveF').value, n = $('carveN').value; const r = await be.memorialCarve(fl, n, save); return done(`Carved “${r.name}” on Floor ${fl}'s wall`); }
   } catch (err) { notice(String(err.message || err)); return true; }
   return false; }

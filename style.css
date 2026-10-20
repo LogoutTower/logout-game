@@ -358,25 +358,24 @@ nav.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:35;display:flex;justif
 #cutscene{width:100vw;height:100vh;max-width:none;max-height:none;margin:0;padding:0;border:0}#cutscene:not([open]){display:none}#cutscene::backdrop{background:#05030a}
 .dcal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:4px 0}.dday{border:1px solid #3a3160;border-radius:6px;padding:3px 0;text-align:center;display:flex;flex-direction:column;font-size:11px;opacity:.7}
 .dday b{font-size:13px}.dday.done{border-color:#ffd76a;opacity:1;background:#ffd76a14}.dday.next{border-color:#3ff7ff;opacity:1;box-shadow:0 0 6px #3ff7ff66}.gdon{display:flex;gap:6px;flex-wrap:wrap}
-/* ---- pets (one cached 8×8 sprite, CSS bob only) + Equinox (staff) + eclipse */
+/* ---- pets (one cached 8×8 sprite, CSS bob only) + Solumbra spirit (staff) + eclipse */
 #pet{position:absolute;left:calc(25% - 78px);bottom:18px;width:24px;height:24px;z-index:2;pointer-events:none}
 .petbob{width:8px;height:8px;transform:scale(3);transform-origin:bottom left;image-rendering:pixelated;background-size:100%;animation:petbob 1.6s ease-in-out infinite;filter:drop-shadow(0 0 1px var(--rc))}
 .petbob.r-legendary,.petbob.r-unique{filter:drop-shadow(0 0 1px var(--rc)) drop-shadow(0 0 2px var(--rc))}
 @keyframes petbob{50%{translate:0 -3px}}
-.eqx{position:relative;width:30px;height:30px;bottom:6px}
-.eqh{position:absolute;left:11px;top:11px;width:8px;height:8px;background-size:100%;image-rendering:pixelated;transform:scale(1.6);animation:orbit 4s linear infinite}
-.eqh.lt{filter:drop-shadow(0 0 2px #ffe9a8)}.eqh.dk{animation-delay:-2s;filter:drop-shadow(0 0 3px #9a5cff)}
+.spx{position:relative;width:30px;height:30px;bottom:6px}
+.sph{position:absolute;left:11px;top:11px;width:8px;height:8px;background-size:100%;image-rendering:pixelated;transform:scale(1.6);animation:orbit 4s linear infinite}
+.sph.lt{filter:drop-shadow(0 0 2px #ffe9a8)}.sph.dk{animation-delay:-2s;filter:drop-shadow(0 0 3px #9a5cff)}
 @keyframes orbit{from{transform:rotate(0) translateX(10px) rotate(0) scale(1.6)}to{transform:rotate(360deg) translateX(10px) rotate(-360deg) scale(1.6)}}
-.eqx .mote{position:absolute;width:2px;height:2px;border-radius:50%;background:#c9a0ff;box-shadow:0 0 3px #9a5cff;animation:mote 3s ease-in-out infinite}
-.eqx .m1{left:4px;top:2px}.eqx .m2{left:24px;top:8px;animation-delay:-1s;background:#fff}.eqx .m3{left:12px;top:26px;animation-delay:-2s}
+.spx .mote{position:absolute;width:2px;height:2px;border-radius:50%;background:#c9a0ff;box-shadow:0 0 3px #9a5cff;animation:mote 3s ease-in-out infinite}
+.spx .m1{left:4px;top:2px}.spx .m2{left:24px;top:8px;animation-delay:-1s;background:#fff}.spx .m3{left:12px;top:26px;animation-delay:-2s}
 @keyframes mote{50%{opacity:.2;translate:0 -4px}}
 #arena.eclipse::before{content:'';position:absolute;inset:0;z-index:2;pointer-events:none;background:radial-gradient(circle at 50% 18%,#05030a 0 16px,#ffe9a8 17px 19px,transparent 30px),linear-gradient(#1a0f2e88,#05030a66);animation:eclin 2s ease-out}
 @keyframes eclin{from{opacity:0}}
-@media (prefers-reduced-motion:reduce){.petbob,.eqh,.eqx .mote{animation:none}}
+@media (prefers-reduced-motion:reduce){.petbob,.sph,.spx .mote{animation:none}}
 .petgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:6px;margin:4px 0 8px}
 .petcell{border:1px solid var(--rc);border-radius:6px;padding:5px;display:flex;flex-direction:column;align-items:center;gap:1px;font-size:11px;text-align:center;background:#12062a}
 .petcell.on{box-shadow:0 0 0 2px var(--rc) inset}.petcell i{width:24px;height:24px;background-size:100%;image-rendering:pixelated;display:block}
-.petcell .eqmini{background:conic-gradient(#ffe9a8 0 50%,#2a1640 50%);border-radius:50%;box-shadow:0 0 6px #9a5cff}
 .petcell button{margin-top:3px;padding:2px 8px;font-size:11px}
 .carve{display:flex;gap:4px;flex-wrap:wrap}.carve input{flex:1;min-width:100px}
 .decor{display:flex;gap:8px;justify-content:center;font-size:22px;margin:6px 0}.decor .dc{filter:drop-shadow(0 0 4px #ffd84f66)}
@@ -384,6 +383,21 @@ nav.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:35;display:flex;justif
 .mwall{margin-top:6px;padding:6px;border:1px solid #4b4656;border-radius:6px;background:repeating-linear-gradient(0deg,#2a2535 0 10px,#24202e 10px 11px);display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;grid-column:1/-1}
 .mwall b{width:100%;color:#d9c48a}.mwall span{color:#e6dcff;font-family:serif;letter-spacing:.5px}
 details.cwing{border-top:1px solid #2a1d45;padding:3px 0}details.cwing>summary{cursor:pointer;font-weight:700;color:#ffd84f;font-size:13px;padding:3px 0}
-.eqx{width:44px;height:40px}.eqh{left:18px;top:16px}
+.spx{width:44px;height:40px}.sph{left:18px;top:16px}
 @keyframes orbit{from{transform:rotate(0) translateX(13px) rotate(0) scale(2.4)}to{transform:rotate(360deg) translateX(13px) rotate(-360deg) scale(2.4)}}
-#pet:has(.eqx){left:calc(25% - 92px);bottom:22px}
+#pet:has(.spx){left:calc(25% - 92px);bottom:22px}
+.spiritcard{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;gap:3px;border:2px solid transparent;border-radius:8px;padding:8px;background:linear-gradient(#0b0a0f,#0b0a0f) padding-box,linear-gradient(135deg,#fffaf0,#f6d77a 35%,#0b0a0f 50%,#f6d77a 65%,#fffaf0) border-box;box-shadow:0 0 12px #f6d77a44;font-size:12px}
+.spiritcard.on{box-shadow:0 0 0 1px #fffaf0 inset,0 0 16px #f6d77a88}.spiritcard p{margin:4px 0}.spiritcard .lore{font-style:italic;color:#e9e1c8;font-family:serif;border-top:1px solid #f6d77a44;padding-top:5px}
+.spart{position:relative;width:48px;height:48px;flex:none;border-radius:50%;background:conic-gradient(#fffaf0 0 50%,#0b0a0f 50%);box-shadow:0 0 10px #f6d77a}.spart i{position:absolute;width:8px;height:8px;background-size:100%;image-rendering:pixelated;transform:scale(2)}.spart i:first-child{left:8px;top:20px}.spart i:last-child{right:8px;top:20px}
+.divine{display:block;font-weight:800;letter-spacing:2px;text-transform:uppercase;background:linear-gradient(90deg,#fffaf0,#f6d77a,#0b0a0f 60%,#f6d77a);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:.3px #f6d77a}
+.spiritcard button{margin-top:4px}
+/* ---- Solumbra halo: two 8x8 halves on an ellipse above the staff hero's head. Transforms + opacity only (compositor), z-index swaps put the back half behind the head. */
+#pet:has(.halo){left:calc(25% - 16px);bottom:118px;width:32px;height:16px;z-index:auto}
+.halo{position:absolute;inset:0;pointer-events:none}
+.halo .sph{position:absolute;left:12px;top:4px;width:8px;height:8px;transform:none;background-size:100%;image-rendering:pixelated;animation:halo 7s linear infinite}
+.halo .sph.dk{animation-delay:-3.5s}
+@keyframes halo{0%{transform:translate(0,3px) scale(1.6);opacity:1;z-index:3}25%{transform:translate(16px,0) scale(1.3);opacity:.85;z-index:3}50%{transform:translate(0,-3px) scale(1.05);opacity:.5;z-index:0}75%{transform:translate(-16px,0) scale(1.3);opacity:.85;z-index:0}100%{transform:translate(0,3px) scale(1.6);opacity:1;z-index:3}}
+.halo .sph.lt{filter:drop-shadow(0 0 2px #fffaf0)}.halo .sph.dk{filter:drop-shadow(0 0 2px #9a5cff)}
+.preview{position:relative}.preview .halo{inset:auto;left:50%;top:4%;width:32px;height:16px;transform:translateX(-50%) scale(1.4)}
+body.tabhidden .halo .sph,body.tabhidden .petbob{animation-play-state:paused}
+@media (prefers-reduced-motion:reduce){.halo .sph{animation:none;opacity:1}.halo .sph.lt{transform:translate(-10px,0) scale(1.4)}.halo .sph.dk{transform:translate(10px,0) scale(1.4)}}

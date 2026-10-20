@@ -1,6 +1,6 @@
 // Late-game gold sinks + pets. Prices, gating and perks are decided by the SERVER (supabase/schema-addendum-shop.sql); this file
 // mirrors the catalog for display (a pglite test checks parity). Nothing here adds combat power except a pet's tiny, server-clamped DPS %.
-// Staff-exclusive items (Vesperveil, the Floor Zero sigil, the Equinox pet) are never in this catalog.
+// Staff-exclusive items (Vesperveil, the Floor Zero sigil, the Solumbra spirit) are never in this catalog.
 export const ARC_PRICE = a => 10 ** (a - 1); // ×1 arc 1, ×10 arc 2
 export const SHOP = [
   { id: 'tr-arc1', kind: 'trophy', arc: 1, price: 300000, label: 'Gatefall Hold Trophy', icon: '🏰' },
@@ -43,6 +43,11 @@ export const PET_GRIDS = {
   pup: ['........', 'a....a..', 'aa..aa..', 'aaaaaaa.', 'aeaaeab.', '.abbbb..', '.a..a...', '........'],
   wisp: ['...a....', '..aa.a..', '.aabaa..', '.abbba..', 'aabebaa.', '.abbba..', '..aaa...', '........'],
 };
-// Staff-only pet (rendered only for the staff hero; the server never grants it): the two halves orbit each other.
-export const EQUINOX = { id: 'pet-equinox', label: 'Equinox', abilities: ["Architect's Light: the Shaper's Decree aura (+5% gold & XP for heroes on the floor) without stacking past it", "Umbra's Eclipse: every 10 min a 20 s eclipse; +3% XP for the staff hero only"] };
+// Staff-only PET Solumbra (top tier, Divine): rendered only for the staff hero; the server never grants it and non-staff saves are stripped of it.
+// "Divine" is its own tier above Unique, used by nothing else (not in PET_RARITY or the gear rarities, so it can never be rolled).
+export const DIVINE = { id: 'divine', label: 'Divine', color: '#f6d77a', ink: '#0b0a0f', glow: '#fffaf0' };
+export const SPIRIT = { id: 'spirit-solumbra', name: 'Solumbra', title: 'Solumbra, Spirit of the First Dawn and Last Dusk', rarity: 'divine', label: 'Pet',
+  abilities: [["Architect's Grace", 'A blessing over everyone on the floor: up to +5% gold & XP, the higher of it and the Shaper\'s Decree, never stacking past 5%.'], ["Umbra's Veil", 'Eclipses the arena for 20 s every 10 min; +3% XP for the staff hero only.']],
+  lore: "When the Architect wrote the tower's first line of code, a spirit woke in the light it cast. When he made Umbra, the spirit split, half light and half shadow. Now it circles the Architect, a reminder that she was born from his own light. It is bound to him alone, and no one else can ever summon it." };
+export const isSpiritId = id => /solumbra|equinox/i.test(String(id || '')); // equinox = the old placeholder id
 export const ECLIPSE = { everyMs: 600000, forMs: 20000, xpMul: 1.03 };

@@ -23,7 +23,7 @@ assert.deepEqual(cat, SHOP.map(i => ({ id: i.id, kind: i.kind, arc: i.arc, price
 assert.deepEqual((await db.query(`select id, price::float8 price from public.decor_items() order by id`)).rows, DECOR.map(d => ({ id: d.id, price: d.price })).sort((a, b) => a.id < b.id ? -1 : 1));
 for (const f of [1, 10, 11, 20]) assert.equal(Number((await db.query(`select public.memorial_price($1) p`, [f])).rows[0].p), memorialPrice(f));
 for (const p of PETS) for (const r of PET_RARITY) assert.equal(Number((await db.query(`select public.pet_perk_v($1, $2) v`, [p.perk, r])).rows[0].v), petPerk(p.sp, r).v, `${p.sp} ${r}`);
-assert(!/equinox/i.test(rd('schema-addendum-shop.sql').replace(/--.*$/gm, '')), 'the staff pet is never granted or sold by the server');
+assert(!/solumbra|equinox|divine/i.test(rd('schema-addendum-shop.sql').replace(/--.*$/gm, '')), 'the staff spirit (and its Divine tier) is never granted or sold by the server');
 // ---- gold is the saved game's; gating by arc
 await floor(5); await gold(A, 1e8);
 assert.match(await err(as(A, `select public.shop_buy('tr-arc1')`)), /not fallen/);
@@ -57,7 +57,7 @@ await as(A, `select public.pet_equip($1)`, [r.pet.id]); assert.equal(Number((awa
 const bp = await as(B, `select public.shop_buy('egg-arc1') r`); assert.match(await err(as(A, `select public.pet_equip($1)`, [bp.pet.id])), /not your pet/);
 const counts = {}; for (let i = 0; i < 400; i++) { const p = (await db.query(`select public.pet_grant($1, 2, 'test') r`, [C])).rows[0].r; counts[p.rarity] = (counts[p.rarity] || 0) + 1; }
 assert((await db.query(`select count(*)::int c from public.pets where uname is not null`)).rows[0].c <= 8, 'uniques are one of a kind'); assert(counts.common > counts.epic);
-assert.equal((await db.query(`select count(*)::int c from public.pets where sp = 'equinox'`)).rows[0].c, 0);
+assert.equal((await db.query(`select count(*)::int c from public.pets where sp in ('solumbra', 'equinox') or rarity = 'divine'`)).rows[0].c, 0);
 assert.match(await err(as(A, `select public.pet_grant($1, 2, 'x')`, [A])), /permission denied/, 'clients cannot grant pets');
 // ---- guild decor: officers/leader, bank-funded; staff guild pays from own gold
 await as(A, `select public.guild_create('Decor Guild', 'DG')`); await as(C, `select public.guild_join('DG')`);

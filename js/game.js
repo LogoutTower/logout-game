@@ -34,8 +34,8 @@ export const heroDps = h => { const c = classOf(h.cls), g = gearBonus(h), e = ef
 const talentDpsMul = h => { const t = talentBonus(h), high = t.highHpDpsPct && heroHp(h) > 0.5 * heroMaxHp(h) ? t.highHpDpsPct : 0; return (1 + (t.dpsPct + t.rallyPct + t.eclipsePct + t.crackPct + high) / 100) * (1 + t.doublePct / 100); };
 const goldMul = heroes => 1 + (gearBonus(heroes[0]).goldPct + talentBonus(heroes[0]).goldPct) / 100, xpMul = heroes => 1 + (gearBonus(heroes[0]).xpPct + talentBonus(heroes[0]).xpPct) / 100;
 /** Shaper's Decree: +5% gold/XP for everyone on a floor while a staff hero is fighting there (ctx.decree, set live or from the server floor state). */
-const decreeMul = save => Math.max(save.ctx?.decree ? 1 + (save.ctx.decreePct || 5) / 100 : 1, save.ctx?.gm && save.equinox ? 1.05 : 1); // Architect's Light: the Decree aura, never stacked past it
-const eclipseMul = save => save.ctx?.gm && save.equinox && save.ctx?.eclipse ? ECLIPSE.xpMul : 1; // Umbra's Eclipse: staff hero only
+const decreeMul = save => Math.max(save.ctx?.decree ? 1 + (save.ctx.decreePct || 5) / 100 : 1, save.ctx?.gm && save.spirit ? 1.05 : 1); // Solumbra, Architect's Grace: the Decree aura, never stacked past it
+const eclipseMul = save => save.ctx?.gm && save.spirit && save.ctx?.eclipse ? ECLIPSE.xpMul : 1; // Solumbra, Umbra's Veil: staff hero only
 const petM = (save, k) => 1 + (petBonus(save)[k] || 0) / 100; // Final Decree / Collapse of Stars: 6%
 export const guildMul = save => save.ctx?.guild && !save.ctx?.gm ? 1 + (save.ctx.guildPct != null ? Math.min(5, save.ctx.guildPct) / 100 : GUILD_BUFF) : 1; // guild members: XP and gold only (staff gets none)
 export const offlineCap = (heroes, base = 12) => base + gearBonus(heroes[0]).capH + talentBonus(heroes[0]).capH;

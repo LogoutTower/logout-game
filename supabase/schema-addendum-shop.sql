@@ -1,7 +1,7 @@
 -- $LOGOUT addendum: LATE-GAME GOLD SINKS + PETS. Idempotent: safe to run more than once. Run after schema-addendum-daily.sql.
 -- All purchases are server-side: the price, gating and ownership are decided here and the gold is taken from the saved game
 -- (same pattern as guild_donate). Nothing sold here adds combat power, except a pet's tiny DPS % (epic+ Ember Wisp: 1-3%),
--- which stays inside submit_damage's clamp. Staff-only items (Vesperveil, Floor Zero sigil, the Equinox pet) are never sold or granted.
+-- which stays inside submit_damage's clamp. Staff-only items (Vesperveil, Floor Zero sigil, the Solumbra spirit) are never sold or granted.
 -- Mirrors js/prestige.js (a pglite test checks parity).
 create table if not exists public.shop_owned (user_id uuid references auth.users on delete cascade, item text, at timestamptz not null default now(), primary key (user_id, item));
 create table if not exists public.shop_tokens (user_id uuid references auth.users on delete cascade, kind text, n int not null default 0 check (n >= 0), primary key (user_id, kind));

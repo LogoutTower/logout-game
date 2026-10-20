@@ -2,7 +2,7 @@
 
 All six sinks are cosmetic or prestige only. Prices, gating, ownership, global prestige prices, pets and perks are decided server-side in
 `supabase/schema-addendum-shop.sql`; `js/prestige.js` mirrors the catalog for display (parity checked in `test/schema-shop.pglite.mjs`).
-Gold comes out of the saved game exactly like `guild_donate` (lock the save row, check, deduct). Staff-only items (Vesperveil, Floor Zero sigil, Equinox) are never sold or granted.
+Gold comes out of the saved game exactly like `guild_donate` (lock the save row, check, deduct). Staff-only items (Vesperveil, Floor Zero sigil, the Solumbra spirit) are never sold or granted.
 Prices scale ×10 per arc.
 
 | Item | Gate | Price |
@@ -37,9 +37,20 @@ Sources: eggs (Goods), the day-7 chest (50%, rolled in a `daily_claims` trigger)
 Odds arc 1: 55 / 27 / 12 / 5 / 0.9 / 0.1 %; arc 2: 35 / 30 / 20 / 10 / 4 / 1 %. A Unique gets one of 8 one-of-a-kind names (unique index); when all are taken it becomes Legendary.
 Perk values are written by the server (`pet_perk_v`), the client clamps to the top tier, and `submit_damage`'s level/forge clamp is unchanged, so no pet passes the caps.
 
-**Equinox (staff only):** two orbiting halves (light: the Architect; shadow: Umbra, violet glow + starlit motes). Rendered only when the staff check passes; the server has no
-function that grants it and non-staff saves are stripped of it. *Architect's Light*: the Decree aura, taken as max() with the Decree (never above +5%). *Umbra's Eclipse*:
-every 10 min a 20 s eclipse overlay and +3% XP for the staff hero only. No party effect beyond the existing Decree; staff stays out of rankings.
+## Staff pet: Solumbra
+**Solumbra, Spirit of the First Dawn and Last Dusk** is a *pet* in the top tier. It is listed first in the pet collection and uses the companion slot (making it follow sends any other pet home).
+Its tier is **Divine** (white → gold → black, `#fffaf0` / `#f6d77a` / `#0b0a0f`), above Unique and used by no other pet. Divine is not in the rollable pet rarities or the gear rarities, so nothing can roll it, and no server function grants it
+(the shop SQL never names it; a pglite test checks this). Non-staff saves are stripped of it and of any `solumbra`/`equinox`/divine pet rows (`sanitizeSave`). It renders only when the staff check passes.
+
+- **Architect's Grace** (light half): a blessing over everyone on the floor of up to +5% gold & XP. It uses the higher of itself and the Shaper's Decree and never stacks past 5%.
+- **Umbra's Veil** (shadow half: violet glow, starlit motes): eclipses the arena for 20 s every 10 min; +3% XP for the staff hero only. No other party effect; staff stays out of rankings.
+
+**Halo:** the two halves orbit together above the staff hero's head on a small ellipse (7 s loop), opposite each other; the back half is smaller, dimmer and drawn behind the head (z-index swap).
+Shown in the arena on every floor and on the Wardrobe portrait (the leaderboard has no avatars). Performance: two 8×8 cached SVG data-URIs, one CSS keyframe animating only transform/opacity
+(compositor-only, no JS per frame, no new assets); paused while the tab is hidden (`body.tabhidden`), a static side-by-side pose under `prefers-reduced-motion`. Staff-gated like the pet itself.
+
+Card lore: "When the Architect wrote the tower's first line of code, a spirit woke in the light it cast. When he made Umbra, the spirit split, half light and half shadow. Now it circles the Architect, a reminder that she was born from his own light. It is bound to him alone, and no one else can ever summon it."
+
 
 ## Rehearsal (100 heroes, full arc 2, `UNTIL_FLOOR=99 node test/rehearsal.pglite.mjs 100 300`)
 Pet perks are in the hero model (each hero follows its best gold/XP/DPS pet). 25% of heroes are collectors (spend above two tonics); the rest buy only

@@ -57,6 +57,9 @@ export class SupabaseBackend {
   async _push(s) { if (this.holdUploads) return; this._lastPush = this.now(); this._dirty = null; const { ctx, ...data0 } = s; const data = JSON.parse(JSON.stringify(data0)); if (!this.isGm()) sanitizeSave(data, false); // no staff data reaches the server without the server role
     try { await this.sb.from('saves').upsert({ user_id: this.user.id, data, updated_at: new Date(s.updatedAt || this.now()).toISOString() }); } catch (e) { this._dirty = s; } } // offline/rate-limited: retried on the next flush
   touch() { this.lastInput = this.now(); } // main.js calls this on input
+  /** App resumed (load, visibilitychange → visible, pageshow, focus): count it as activity and send the offline/background batch now
+   *  instead of waiting for the next 60 s / 10 min / 15 min slot. At most one forced flush per 15 s, so focus/visibility storms cost nothing. */
+  resume() { this.lastInput = this.now(); if (this.now() - (this._resumeAt || 0) < 15000) return false; this._resumeAt = this.now(); this.lastFlush = 0; return true; }
   flushEvery() { const hidden = !!globalThis.document?.hidden; if (this.now() - this.lastInput > CADENCE.idleAfter) return CADENCE.idleMs; return hidden ? CADENCE.hiddenMs : CADENCE.activeMs; }
   /** Public snapshot (GitHub-served JSON); null if missing or stale. Fetched at most every SNAP_MS. */
   async snapshot() { if (this.snapUrl === null || typeof this.now !== 'function' || (!this.fetch && !globalThis.document)) return null; // node tests: never the network
