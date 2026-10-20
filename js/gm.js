@@ -3,6 +3,8 @@ import { CODEX_NAMES, isCodexId } from './codex.js';
 // Everything here is excluded from every generator, pool, picker and Wardrobe list (see test/gm.test.mjs).
 import { CLASSES, STAFF_CLASSES } from './game.js';
 export const GM_CLASS = 'GameMaster';
+// Staff luck: +50% gear-drop chance (rarity tables and staff/Divine rules unchanged) and the Glitch Den edge (schema-addendum-gm-luck.sql). Never boss damage.
+export const GM_LUCK = 50;
 const avg = k => Object.values(CLASSES).reduce((s, c) => s + c[k], 0) / Object.keys(CLASSES).length;
 const avgDps = Object.values(CLASSES).reduce((s, c) => s + c.atk * c.spd, 0) / Object.keys(CLASSES).length;
 /** Combat parity: base DPS and HP equal the average of the three public classes. */

@@ -17,3 +17,10 @@ assert.equal(await denBackend(be).state(), null);
 // local backend never lets gold go below zero
 const save = { gold: 50 }, lb = denBackend({ name: 'local' }); await assert.rejects(lb.play(save, 1, 'flip', 60, 0), /not enough/); assert.equal(save.gold, 50);
 console.log('casino rules ok', EDGE);
+// staff GM luck mirror
+{ const { GM_WHEEL, GM_FLIP } = await import('../js/casino.js'); const ev = WHEEL.reduce((s, x, i) => s + x.w * GM_WHEEL[i], 0) / 1000; assert(ev > 1.03 && ev < 1.07, `gm wheel ev ${ev}`);
+  assert(Math.abs(GM_FLIP.p * GM_FLIP.m - 1.05) < 1e-9); assert.equal(denLimits(1, true).max, 20000); assert.equal(denLimits(1, true).lim, null);
+  assert.equal(checkBet('flip', 100, 0, denLimits(1, true), 1e12, 1e9), null, 'no daily limit for GM'); assert.match(checkBet('flip', 100, 0, denLimits(1, true), 0, 50), /not enough/);
+  assert(denHtml({ ...denLimits(1, true), used: 0 }, { gold: 1e6 }).includes('no daily wager limit')); assert(!denHtml({ ...L, used: 0 }, { gold: 1e6 }).includes('Staff luck')); }
+{ const { cardHtml } = await import('../js/idcard.js'); const base = { v: 1, name: 'Ash', cls: 'Vanguard', level: 5, gear: 1, equip: {}, look: {}, talents: {} };
+  assert(!/Luck/.test(cardHtml(base)), 'players show no Luck stat'); const gm = cardHtml({ ...base, st: true }); assert(/<small>Luck<\/small><b>\+50%<\/b>/.test(gm)); assert(!/GLITCH|52\.5|edge/i.test(gm), 'no den internals on the card'); }

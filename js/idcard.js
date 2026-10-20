@@ -5,7 +5,7 @@ import { CLASSES, heroDps, heroMaxHp, gearBonus } from './game.js';
 import { RARITIES, statLabel, rollItem } from './loot.js';
 import { rng } from './floors.js';
 import { byId, titleOf, nameColorOf, defaultLook, fakeProfile, itemsFor } from './cosmetics.js';
-import { GM_CLASS, GM_TITLE, sanitizeSave, ROOT_KEY } from './gm.js';
+import { GM_CLASS, GM_TITLE, sanitizeSave, ROOT_KEY, GM_LUCK } from './gm.js';
 import { nodeById } from './talents.js';
 import { SHOP, PETS, PERK_LABEL, DIVINE, SPIRIT, spiritStage } from './prestige.js';
 export const CARD_TTL = 300000; // 5 min client cache: re-opening a card costs nothing
@@ -54,7 +54,7 @@ export function cardHtml(card, { fmt = String, esc = String, guildBadge = () => 
   let dps = 0, hp = 0; try { dps = heroDps(h); hp = heroMaxHp(h); } catch {}
   return `<div class="idcard ${st ? 'staff' : ''}"><div class="idhead"><div class="idspr" style="background-image:${spr}"></div><div><div class="idname" style="color:${st ? '#ffd76a' : color}">${st ? '◈ ' : ''}${esc(h.name)}</div><div class="ttl">${esc(title)}</div>
     <div class="sub">Lv ${h.level} · ${esc(h.cls === GM_CLASS ? 'Tower Staff' : h.cls)}${card.sim ? ' · simulated' : ''}</div></div></div>
-    <div class="idstats"><span><small>DPS</small><b>${fmt(dps)}</b></span><span><small>HP</small><b>${fmt(hp)}</b></span><span><small>Forge</small><b>+${h.gear}</b></span><span><small>Gold</small><b>+${g.goldPct || 0}%</b></span><span><small>XP</small><b>+${g.xpPct || 0}%</b></span></div>
+    <div class="idstats"><span><small>DPS</small><b>${fmt(dps)}</b></span><span><small>HP</small><b>${fmt(hp)}</b></span><span><small>Forge</small><b>+${h.gear}</b></span><span><small>Gold</small><b>+${g.goldPct || 0}%</b></span><span><small>XP</small><b>+${g.xpPct || 0}%</b></span>${st ? `<span><small>Luck</small><b>+${GM_LUCK}%</b></span>` : ''}</div>
     <h3>Gear</h3><div class="cgears">${gear}</div><h3>Abilities</h3><ul class="idab">${ab.map(a => `<li>${a}</li>`).join('') || '<li class="sub">none yet</li>'}</ul>
     <div class="idmeta"><span><small>Skin</small>${skin ? esc(skin.label) : '<small class="sub">default</small>'}</span><span><small>Pet</small>${pet}</span><span><small>Guild</small>${gu}</span></div></div>`;
 }

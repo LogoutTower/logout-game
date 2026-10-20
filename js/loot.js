@@ -1,4 +1,5 @@
 // Loot: seeded, reproducible boss drops (stat gear + rare element cosmetics), inventory, equip and salvage. Pure (no DOM, no Math.random).
+import { GM_LUCK } from './gm.js';
 import { talentBonus } from './talents.js';
 import { petBonus } from './prestige.js';
 import { rng, baseHp, isSpecialSlot, bossInfo } from './floors.js';
@@ -146,7 +147,7 @@ export const salvageGold = (save, it) => Math.round(salvageValue(it) * (uniqueFx
 export const salvageValue = it => Math.round(20 * Math.pow(RARITIES.findIndex(r => r.id === it.rarity) + 1, 2) * scale(it.floor));
 /** Apply one kill's drops to a v3 save. Returns { items, cosmetic, salvaged } (salvaged = auto-salvaged gold when the bag is full). */
 export function grantDrops(save, floor, share) {
-  const h = save.heroes[0], d = rollDrops({ heroId: h.id, floor, share, seq: save.lootSeq++, owned: save.progress.drops, ownedU: ownedUniqueNames(save), elementOverride: takeDestiny(save), luck: (uniqueFx(save).has('luck') ? 1.25 : 1) * (1 + talentBonus(h).lootPct / 100) * (1 + (petBonus(save).lootPct || 0) / 100) });
+  const h = save.heroes[0], d = rollDrops({ heroId: h.id, floor, share, seq: save.lootSeq++, owned: save.progress.drops, ownedU: ownedUniqueNames(save), elementOverride: takeDestiny(save), luck: (save.ctx?.gm ? 1 + GM_LUCK / 100 : 1) * (uniqueFx(save).has('luck') ? 1.25 : 1) * (1 + talentBonus(h).lootPct / 100) * (1 + (petBonus(save).lootPct || 0) / 100) });
   let salvaged = 0;
   for (const it of d.items) {
     if (it.rarity === 'unique') { save.inv.push(it); continue; } // never auto-salvaged (may exceed the bag)
