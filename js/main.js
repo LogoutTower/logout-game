@@ -1,3 +1,4 @@
+import { countPoller, countText, clearPlayers } from './towercount.js';
 import { effectsOf, CLASSES, newHero, heroDps, levelCost, gearCost, accrue, offlineProgress, applyXp, heroHp, heroMaxHp, isWorn, effectiveDps, buffsOf, bossName, fmt, fmtDur, xpToNext } from './game.js';
 import { makeBackend, onlineConfigured } from './storage.js';
 import { BUILD } from './build.js';
@@ -48,7 +49,7 @@ const $ = id => document.getElementById(id);
 const H = id => { const e = $(id); return { set innerHTML(v) { if (e._v !== v) { e._v = v; e.innerHTML = v; } }, set textContent(v) { if (e.textContent !== v) e.textContent = v; } }; };
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 let lootLines = [];
-let be, save, floor, pending = 0, recent = { dmg: 0, gold: 0, xp: 0 }, quietSync = true, cls = 'Vanguard', draftLook = defaultLook('Vanguard'), toastT;
+let counts = null, be, save, floor, pending = 0, recent = { dmg: 0, gold: 0, xp: 0 }, quietSync = true, cls = 'Vanguard', draftLook = defaultLook('Vanguard'), toastT;
 const log = (m, color) => { const d = document.createElement('div'); d.textContent = m; if (m.startsWith('System notice')) d.className = 'rune'; if (color) { d.style.color = color; d.className = 'loot'; } if (color === '#7ff6ff') d.className = 'loot uniq'; $('log').prepend(d); };
 function notice(m, color, item = null) { const n = document.createElement('div'); n.className = 'notice' + (color === '#7ff6ff' ? ' uniq' : ''); if (color) n.style.borderColor = color; if (color && cx(save?.heroes?.[0], 'cx-reader')) { n.classList.add('glow-rare'); n.style.setProperty('--glow', color); } /* Thread-Reader */ n.innerHTML = `<small>◈ System notice</small>${item ? ico(item) : ''}<span${color ? ` style="color:${color}"` : ''}>${esc(m)}</span>`; $('notices').append(n); setTimeout(() => n.remove(), color === '#7ff6ff' ? 6000 : 4000); }
 const sessionStart = Date.now(); let hits = 0, lastWhisper = Date.now();
@@ -145,6 +146,7 @@ async function startGame(fresh = false) {
   document.addEventListener('visibilitychange', () => document.body.classList.toggle('tabhidden', document.hidden)); // pauses CSS loops (Solumbra halo, pet bob)
   if (gmValid && save.equinox !== undefined) { if (save.spirit === undefined) save.spirit = save.equinox; delete save.equinox; } if (gmValid && save.spirit === undefined) save.spirit = true; loadShop();
   setInterval(tick, 1000); setInterval(sync, 5000); render(); renderLb();
+  if (be.towerCounts) counts = countPoller({ fetchCounts: () => be.towerCounts(), render: c => { const t = countText(c), el = $('pcount'); el.textContent = t; el.hidden = !t; } });
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
 function tick() {
@@ -694,16 +696,16 @@ function wireCodexExtra(h, n) {
 // ---- Tower Map + progress (shared floor_state + floor_clears history online, local history offline)
 async function openMap() {
   const [hist, heroes] = await Promise.all([be.floorHistory?.().catch(() => []) ?? [], be.floorHeroes?.(floor.floor).catch(() => null) ?? null]);
-  const rows = towerRows({ current: floor.floor, maxFloor: MAX_FLOOR, history: hist }), pr = towerProgress({ current: floor.floor, hp: floor.hp, maxHp: floor.maxHp, maxFloor: MAX_FLOOR });
+  const pp = clearPlayers(counts?.last), rows = towerRows({ current: floor.floor, maxFloor: MAX_FLOOR, history: hist, players: pp }), pr = towerProgress({ current: floor.floor, hp: floor.hp, maxHp: floor.maxHp, maxFloor: MAX_FLOOR });
   const when = at => at ? new Date(at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
   $('mapProg').innerHTML = `<div class="mprog"><b>Floor ${pr.floor} / ${pr.top}</b><span>${pr.cleared} cleared${heroes != null ? ` · ${heroes} hero${heroes === 1 ? '' : 'es'} on this floor` : ''}</span>
     <div class="bar"><i style="width:${pr.pct.toFixed(1)}%"></i></div><small>Tower ${pr.pct.toFixed(0)}% · guardian HP ${fmt(floor.hp)} / ${fmt(floor.maxHp)}</small>
     <div class="bar hp"><i style="width:${(pr.bossPct * 100).toFixed(1)}%"></i></div><p class="sub">Logout returns when Floor ${TOWER_TOP} falls.</p></div>`;
   $('mapTower').innerHTML = rows.map(r => `${r.f === TOWER_TOP ? '<div class="crown" aria-hidden="true">♛</div>' : ''}${r.f % 10 === 0 ? `<div class="band" style="--band:${r.band}"><span>${r.f - 9}–${r.f}</span> ${esc(r.arcName)}${CUTSCENES[r.arc] && (save.cutscenes || []).includes(String(r.arc)) ? ` <button class="replay" data-cs="${r.arc}" title="Replay the ${esc(r.arcName)} cutscene">▶ Replay</button>` : ''}</div>` : ''}<button class="fl ${r.state}${r.crown ? ' top' : ''}${r.special ? ' sp' : ''}${r.finale ? ' fin' : ''}" style="--band:${r.band}" data-f="${r.f}" ${r.state === 'cleared' ? '' : 'aria-disabled="true"'}>
     <span class="fn">${r.f}</span>${r.rival ? '<i class="shade" aria-hidden="true"></i>' : ''}<span class="fname">${esc(r.name)}${r.milestone && r.state !== 'undiscovered' ? ' <em>★</em>' : r.special && r.state !== 'undiscovered' ? ' <em>✦</em>' : ''}</span>
-    <span class="fmeta">${r.state === 'cleared' ? (r.at ? `fell ${esc(when(r.at))}` : 'cleared') : r.state === 'current' ? `<b class="you">◆ You</b> ${Math.round(pr.bossPct * 100)}% HP` : ''}</span></button>`).join('');
+    <span class="fmeta">${r.state === 'cleared' ? (r.at ? `fell ${esc(when(r.at))}` : 'cleared') + (r.players ? `<span class="pp"> · ${r.players.toLocaleString('en-US')} present</span>` : '') : r.state === 'current' ? `<b class="you">◆ You</b> ${Math.round(pr.bossPct * 100)}% HP` : ''}</span></button>`).join('');
   $('mapTower').onclick = e => { const rp = e.target.closest('button.replay'); if (rp) { $('map').close(); playCutscene(rp.dataset.cs).then(() => openMap()); return; } const b = e.target.closest('button.fl.cleared'); if (!b) return; const r = rows.find(x => x.f === +b.dataset.f), d = $('mapDetail');
-    d.hidden = false; d.innerHTML = `<i class="mthumb" style='background-image:${bossSprite(r.f).replace(/'/g, '%27')}'></i><div><b>Floor ${r.f} · ${esc(r.name)}</b><br>${r.at ? `Fell ${esc(when(r.at))}` : 'Cleared (time not recorded)'}<br>${r.top ? `Top damage: ${esc(r.top)}` : 'Top damage: not recorded'}</div><div class="mwslot"></div>`; be.memorialWall?.(r.f).then(n => { const w = d.querySelector('.mwslot'); if (w) w.innerHTML = wallHtml(n || [], esc); }).catch(() => {}); };
+    d.hidden = false; d.innerHTML = `<i class="mthumb" style='background-image:${bossSprite(r.f).replace(/'/g, '%27')}'></i><div><b>Floor ${r.f} · ${esc(r.name)}</b><br>${r.at ? `Fell ${esc(when(r.at))}` : 'Cleared (time not recorded)'}<br>${r.top ? `Top damage: ${esc(r.top)}` : 'Top damage: not recorded'}${r.players ? `<br>${r.players.toLocaleString('en-US')} players trapped when it fell` : ''}</div><div class="mwslot"></div>`; be.memorialWall?.(r.f).then(n => { const w = d.querySelector('.mwslot'); if (w) w.innerHTML = wallHtml(n || [], esc); }).catch(() => {}); };
   $('mapDetail').hidden = true; if (!$('map').open) $('map').showModal();
   requestAnimationFrame(() => { const t = $('mapTower'), c = t.querySelector('.fl.current'); if (c) t.scrollTop = c.offsetTop - t.offsetTop - t.clientHeight / 2; $('map').scrollTop = 0; }); // scroll the tower only, keep the progress panel in view
 }

@@ -109,6 +109,7 @@ export class SupabaseBackend {
     return { ...this.floor, advanced: data.floor !== before && before != null, accepted: Number(data.accepted), clears };
   }
   /** Tower Map history from floor_clears; [] if the table/read is unavailable (never throws). */
+  async towerCounts() { try { const { data, error } = await this.sb.rpc('tower_counts'); return error ? null : data || null; } catch { return null; } } // player counter (player-count addendum); missing RPC -> null
   async floorHistory() { const sn = await this.snapshot(); if (sn?.h) return sn.h.map(([floor, at, top]) => ({ floor, at, top }));
     try { const r = await this.sb.rpc('floor_history'); if (!r.error && Array.isArray(r.data)) return r.data; } catch {} // lean RPC (open-chat addendum); older servers: full rows
     try { const { data, error } = await this.sb.from('floor_clears').select('floor, ranking, at').order('id', { ascending: false }).limit(300); if (error || !data) return [];

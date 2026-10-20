@@ -487,3 +487,6 @@ body.tabhidden .halo .corona{animation-play-state:paused}
 @keyframes gmtpulse{50%{filter:drop-shadow(0 0 3px #fffaf0) drop-shadow(0 0 7px #f6d77a)}}.gearaw-icons{display:flex;gap:10px;margin:6px 0}.gearaw-icons .ico{width:48px;height:48px}
 .cgear .gtier{font-size:10px;color:#ffd76a;letter-spacing:1px}
 .tstaff{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.06em;padding:0 4px;margin-left:3px;border-radius:3px;background:#1d5c45;color:#bff5dc;border:1px solid #3fbf8a;vertical-align:middle}
+
+.pcount{font-size:11px;letter-spacing:1px;color:#9fe0b0;margin-top:3px;opacity:.9}.pcount::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:#5fdc8a;box-shadow:0 0 6px #5fdc8a;margin-right:6px;vertical-align:1px}
+.fmeta .pp{color:#9fe0b0;margin-left:4px}
