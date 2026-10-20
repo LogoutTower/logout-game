@@ -2,7 +2,7 @@
 import assert from 'node:assert'; import fs from 'node:fs';
 import { FLIP_MULT, WHEEL, denLimits, diceMult, resolve } from '../js/casino.js';
 let PGlite; try { ({ PGlite } = await import('@electric-sql/pglite')); } catch { console.log('pglite not installed, casino test skipped'); process.exit(0); }
-const { ADDENDA } = await import('./addenda.mjs'); assert(ADDENDA.at(-1) === 'schema-addendum-casino.sql');
+const { ADDENDA } = await import('./addenda.mjs'); assert(ADDENDA.includes('schema-addendum-casino.sql'));
 const db = new PGlite();
 await db.exec(`create schema auth; create table auth.users (id uuid primary key, is_anonymous boolean default true, email text);
   create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;

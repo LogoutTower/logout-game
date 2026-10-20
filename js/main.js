@@ -107,7 +107,7 @@ function showCreate() {
   picker($('cpick'), CREATION_SLOTS, draftLook, cls, { cleared: [], top3: [], rank1: 0 }, id => { draftLook[byId(id).type] = id; showCreate(); });
   $('start').onclick = async () => {
     const h = newHero($('hname').value.trim(), cls); h.look = { ...draftLook };
-    save = migrateSave({ version: 2, heroes: [h], gold: 0, lastTick: Date.now(), progress: { cleared: [], top3: [], rank1: 0 }, introDue: true, csV: 2 }); // fills v3 fields
+    save = migrateSave({ version: 2, heroes: [h], gold: 0, lastTick: Date.now(), progress: { cleared: [], top3: [], rank1: 0 }, introDue: true, csV: 2, createdAt: Date.now() }); // fills v3 fields
     await be.saveSave(save); $('create').classList.add('hidden'); startGame(true);
   };
 }
@@ -557,7 +557,9 @@ let localStaffDmg = 0;
 const localStaffOnly = () => gmValid && be.name === 'supabase' && !be.isGm();
 async function submitDmg(name, amount, hero) {
   if (localStaffOnly()) { localStaffDmg += amount; const f = await be.getFloor(); return { ...f, advanced: false, accepted: 0, clears: [] }; }
-  return be.submitDamage(name, amount, hero);
+  const r = await be.submitDamage(name, amount, hero);
+  if (r?.wiped) { notice('System notice: the tower was reset for release. Starting fresh.'); setTimeout(() => location.reload(), 1500); }
+  return r;
 }
 
 // ---- Guilds (flag: FEATURES.guilds). +2% XP/gold for members; staff never owns one and adds nothing to a guild total.

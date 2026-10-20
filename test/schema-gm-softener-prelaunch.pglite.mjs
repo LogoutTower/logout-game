@@ -3,7 +3,7 @@
 import assert from 'node:assert'; import fs from 'node:fs';
 let PGlite; try { ({ PGlite } = await import('@electric-sql/pglite')); } catch { console.log('pglite not installed, softener test skipped'); process.exit(0); }
 globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
-const { ADDENDA } = await import('./addenda.mjs'); assert(ADDENDA.at(-1) === 'schema-addendum-gm-softener-prelaunch.sql');
+const { ADDENDA } = await import('./addenda.mjs'); assert(ADDENDA.includes('schema-addendum-gm-softener-prelaunch.sql'));
 const L = await import('../js/loot.js'); const F = await import('../js/floors.js');
 const db = new PGlite();
 await db.exec(`create schema auth; create table auth.users (id uuid primary key, is_anonymous boolean default true, email text);
@@ -67,3 +67,15 @@ assert.equal((await q1(`select count(*)::int c from public.pets`)).c, 0); assert
 assert.equal((await q1(`select prelaunch_enabled e from public.tower_config`)).e, false, 'factor disabled'); assert.equal(Number((await q1(`select public.prelaunch_hp_mul(11) m`)).m), 1);
 assert.equal((await q1(`select count(*)::int c from public.profiles where last_submit is not null`)).c, 0, 'turnout reset');
 console.log('gm softener + prelaunch + reset pglite tests passed');
+// ---- reset epoch (schema-addendum-reset-epoch.sql): bumped by the reset, returned by tick, pre-reset uploads dropped, staff exempt
+{ const ep = (await q1(`select reset_epoch e, floor(extract(epoch from reset_at) * 1000)::float8 at from public.tower_config`)); assert(ep.e >= 2, 'bumped per run');
+  await db.exec(`update public.profiles set last_submit = now() - interval '30 seconds'`);
+  const t = await as(P, `select public.tick(1, 'Player', 1, 0, 0) r`); assert.deepEqual(t.ep.map(Number), [ep.e, ep.at], 'tick returns ep');
+  await as(P, `insert into public.saves (user_id, data) values ('${P}', '{"heroes":[{"level":30}]}') on conflict (user_id) do update set data = excluded.data returning 1 r`);
+  assert.equal((await q1(`select count(*)::int c from public.saves where user_id = $1`, [P])).c, 0, 'pre-reset save upload dropped');
+  await as(P, `insert into public.saves (user_id, data) values ('${P}', jsonb_build_object('heroes', '[{"level":1}]'::jsonb, 'createdAt', ${ep.at + 1000})) returning 1 r`);
+  assert.equal((await q1(`select count(*)::int c from public.saves where user_id = $1`, [P])).c, 1, 'post-reset hero saved');
+  await as(GM, `update public.saves set data = '{"heroes":[{"level":99}]}' where user_id = '${GM}' returning 1 r`);
+  assert.equal((await q1(`select data->'heroes'->0->>'level' l from public.saves where user_id = $1`, [GM])).l, '99', 'staff save never dropped');
+  assert.match(await err(as(P, `select public.reset_info() r`)), /permission denied/); }
+console.log('reset epoch pglite tests passed');

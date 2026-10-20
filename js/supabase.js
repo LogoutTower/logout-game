@@ -10,6 +10,9 @@ export const CADENCE = { activeMs: FLUSH_MS, hiddenMs: 600000, idleMs: 900000, i
 export const SNAPSHOT_URL = 'https://raw.githubusercontent.com/LogoutTower/logout-game/snapshot/snapshot.json', SNAP_MS = 300000, SNAP_STALE = 1800000;
 const SIGN_STATEMENT = 'Sign in to $LOGOUT. This is a signature only: it does not send a transaction, move funds or share your keys.';
 /** Last-write-wins by updatedAt. Ties keep the local copy (the cloud copy may be a staff-stripped mirror of it). */
+/** Pre-release reset (schema-addendum-reset-epoch.sql): discard a local save when the server's reset epoch is newer than the one this
+ *  browser last saw AND the save was created before the reset. Brand-new heroes (createdAt after reset_at) are kept. Staff never calls this. */
+export const shouldDiscard = (save, epoch, resetAt, seen) => !!save && epoch > (seen || 0) && (+save.createdAt || 0) < resetAt;
 export function mergeSaves(local, cloud) {
   if (!cloud) return local || null; if (!local) return cloud;
   return (local.updatedAt || 0) >= (cloud.updatedAt || 0) ? local : cloud;
@@ -50,7 +53,13 @@ export class SupabaseBackend {
     if (s && s !== cloud) await this._push(s); // first bind / offline edits: local copy wins and is uploaded
     return s;
   }
-  async saveSave(s) { // cache locally every time; push to the cloud at most every FLUSH_MS (60 s)
+  /** Tick 'ep' = [reset_epoch, reset_at ms]. Returns true when the local save was discarded (the caller reloads). The staff save is kept. */
+  resetCheck(ep) {
+    if (!Array.isArray(ep)) return false; const [n, at] = ep.map(Number), k = this.k + '.epoch', seen = +this.store.getItem(k) || 0; if (!(n > seen)) return false;
+    const loc = this._local(); this.store.setItem(k, String(n)); if (this.isGm() || !shouldDiscard(loc, n, at, seen)) return false;
+    this.store.removeItem(this.k + '.save'); this.store.removeItem(this.k + '.seenClear'); this._dirty = null; this.pending = 0; this.holdUploads = true; this.wiped = true; return true;
+  }
+  async saveSave(s) { if (this.wiped) return; // discarded by a reset: nothing more is written until the reload // cache locally every time; push to the cloud at most every FLUSH_MS (60 s)
     s.updatedAt = this.now(); this.store.setItem(this.k + '.save', JSON.stringify(s)); this._dirty = s;
     if (this.now() - (this._lastPush || 0) >= SAVE_MS) await this._push(s);
   }
@@ -89,6 +98,7 @@ export class SupabaseBackend {
         this.heads = { chat: d.cv || 0, guild: d.gv || 0 }; const me = args.p_name;
         const clears = (d.cl || []).map(([id, floor, mx, rank, dm]) => { this.seenClear = Math.max(this.seenClear, id); return { floor, rank: Number(rank), ranking: [], dmg: { [me]: Number(dm) }, maxHp: Number(mx) }; });
         if (clears.length) this.store.setItem(this.k + '.seenClear', String(this.seenClear));
+        if (this.resetCheck(d.ep)) return { ...this.floor, advanced: false, accepted: 0, clears: [], wiped: true };
         return { ...this.floor, advanced: d.f !== before && before != null, accepted: Number(d.a), clears, daily: d.dl || null, quests: d.q || null }; }
       if (t.error && /tick|function|schema cache|PGRST202/i.test(t.error.message || '') && !/not signed in/.test(t.error.message || '')) this.noTick = true; // older server: classic path
       else if (t.error) { this.pending += amt; const f = await this.getFloor(); return { ...f, advanced: false, accepted: 0, clears: [], offline: true }; } }

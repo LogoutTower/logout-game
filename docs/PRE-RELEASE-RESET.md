@@ -4,7 +4,8 @@ Two SQL files, run by hand in the Supabase SQL editor. Nothing here runs automat
 
 ## Order
 
-1. **`supabase/schema-addendum-gm-softener-prelaunch.sql`**: run once, any time before the run. It's idempotent, so it's safe to re-run.
+1. **`supabase/schema-addendum-gm-softener-prelaunch.sql`**, then **`supabase/schema-addendum-reset-epoch.sql`**: run each once, any time
+   before the run. Both are idempotent, so they're safe to re-run.
 2. Optional: `select public.prelaunch_suggest(40);` prints the staff hero's level and forge tier, the hours needed at factor 1, and a
    suggested factor for a 40 h run. Apply it with `update public.tower_config set prelaunch_hp_factor = <x> where id = 1;`. The new
    factor applies from the next floor. Re-running the addendum also rescales the floor in progress (it only lowers HP).
@@ -53,8 +54,8 @@ level held fixed; 2x XP makes it faster):
 - **Guild weeklies:** `guild_quests` and `guild_quest_contrib`.
 - **Guild progress:** `guild_ledger` and `guild_decor` are emptied. Non-staff guilds get xp, bank, bonus tier, hall level and banner
   unlocks set back to 0.
-- **Tester heroes** (every account without `role = 'gm'`): their `saves`, `pets`, `shop_owned`, `shop_tokens`, `daily_claims` and
-  `quest_days`, plus their active pet.
+- **Tester heroes** (every account without `role = 'gm'`): their `saves`, `pets`, `shop_owned`, `shop_tokens`, `daily_claims`,
+  `quest_days` and `casino_days` (Glitch Den limits), plus their active pet.
 - **Shop:** `shop_global.sold = 0`, so the climbing prestige prices start over.
 - **Turnout:** `profiles.last_submit = null` for everyone (nobody counts as recently active) and `sanctum = false`.
 - **The tower:** Floor 1 at full HP, scaled by the turnout trigger (0.5× with no recent players). Decree, announce and marks are cleared.
@@ -69,6 +70,15 @@ level held fixed; 2x XP makes it faster):
 - The staff save
 - `max_floor`
 
-**Caveat:** when the cloud save is missing, `loadSave()` (js/supabase.js) keeps the browser's local copy and uploads it again. Testers
-must clear site data for the game before they next open it, or their old progress comes back. A client-side save-epoch check would
-close this gap, but none exists yet.
+## Reset epoch: old browser saves don't come back
+
+`schema-addendum-reset-epoch.sql` adds `tower_config.reset_epoch` and `reset_at`, and each `admin-reset-tower.sql` run bumps them.
+
+- **No extra polling:** every `tick()` already sent by the game now also returns `ep: [reset_epoch, reset_at ms]`.
+- **Player clients:** when `ep` is newer than the epoch this browser last saw (stored in local storage) and the local save was created
+  before `reset_at`, the local save is discarded and the game reloads into hero creation. Heroes created after the reset carry
+  `createdAt` and are kept.
+- **Server guard:** a non-staff save upload with a missing or pre-reset `createdAt` is silently dropped, so a stale browser can't push
+  old progress back up before it sees the new epoch.
+- **The staff save is always kept**, on the client and on the server.
+- **Re-running the reset** starts a new epoch, so heroes made between the two runs are discarded too.
