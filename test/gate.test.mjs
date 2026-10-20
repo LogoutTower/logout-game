@@ -4,8 +4,8 @@ import { FEATURES, LAUNCH_AT, TEAM_PASS_HASH, GM_PASS_HASH } from '../config.js'
 import { computeStamp } from '../scripts/stamp.mjs';
 const root = new URL('..', import.meta.url).pathname, s = computeStamp();
 assert.equal(FEATURES.prelaunchLock, true, 'pre-launch lock is on');
-assert.equal(LAUNCH_AT, '2026-10-22T15:30:00Z', 'gate auto-opens Thu Oct 22, 10:30 AM CT');
-assert.equal(new Date(LAUNCH_AT).toLocaleString('en-US', { timeZone: 'America/Chicago' }), '10/22/2026, 10:30:00 AM');
+assert.equal(LAUNCH_AT, '2026-10-26T15:30:00Z', 'gate auto-opens Mon Oct 26, 10:30 AM CT');
+assert.equal(new Date(LAUNCH_AT).toLocaleString('en-US', { timeZone: 'America/Chicago' }), '10/26/2026, 10:30:00 AM');
 assert.match(TEAM_PASS_HASH, /^[0-9a-f]{64}$/); assert.notEqual(TEAM_PASS_HASH, GM_PASS_HASH);
 assert.deepEqual(s.G, { lock: true, at: LAUNCH_AT, h: [TEAM_PASS_HASH, GM_PASS_HASH] }, 'stamp copies the gate values from config.js');
 const gate = readFileSync(root + 'index.html', 'utf8');
