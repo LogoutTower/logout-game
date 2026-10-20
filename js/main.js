@@ -30,6 +30,7 @@ import { renderGuildV2, invitesHtml } from './guildpanel.js';
 import { bannerBadge, hallArt } from './banner.js';
 import { slotsOf, displayBanner, ZERO_BANNER, staffHall } from './guildsv2.js';
 import { itemIcon } from './icons.js';
+import { openDen } from './casinoui.js';
 import { shopHtml, haloHtml, petHtml, decorHtml, wallHtml, eclipseOn } from './prestigeui.js';
 import { SHOP, spiritStage } from './prestige.js';
 import { SANCTUM, sanctumAllowed, inSanctum, newConstruct, hitConstruct, dpsMeters, constructSprite, towerModelSprite } from './sanctum.js';
@@ -346,6 +347,7 @@ function openTown() {
     else if (b.dataset.sell) { const i = +b.dataset.sell, it = save.inv[i]; if (it.rarity === 'unique' && !confirm(`Sell ${it.name}? A Unique is one of a kind and can never drop again.`)) return; const g = sellItem(save, i, { confirmUnique: true }); if (g) log(`Sold ${it.name} for ${fmt(g)} gold.`); }
     await be.saveSave(save); render(); openTown(); };
   renderGoods(f);
+  openDen({ be, save: () => save, floor: () => floor?.floor || 1, fmt, notice, after: async () => { await be.saveSave(save); render(); $('townGold').textContent = `Gold ${fmt(save.gold)}`; } }); // The Glitch Den (gold only)
   $('townGold').textContent = `Gold ${fmt(save.gold)}`;
   if (!$('town').open) $('town').showModal();
 }
