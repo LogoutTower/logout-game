@@ -146,6 +146,7 @@ export class SupabaseBackend {
   /** The server checks and deducts the gold from the cloud save, so push the current save first, then mirror the deduction locally. */
   async guildDonate(amount, save) { if (this.holdUploads) throw new Error('local staff unlock: nothing is sent'); await this._push(save); const r = await this._rpc('guild_donate', { p_amount: Math.floor(+amount) }); save.gold -= Math.floor(+amount); save.updatedAt = this.now(); await this._push(save); return r; }
   // ---- Late-game shop (supabase/schema-addendum-shop.sql). The server prices, gates and takes the gold from the cloud save, so push first, then adopt its gold.
+  async staffSanctum(on) { return this._rpc('staff_sanctum', { p_on: !!on }); } // gm role only (schema-addendum-sanctum.sql)
   async shopState() { try { return await this._rpc('shop_state', {}); } catch { return null; } } // only when Goods / the pet panel opens
   async _spendRpc(fn, args, save) { if (this.holdUploads) throw new Error('local staff unlock: nothing is sent'); await this._push(save); const r = await this._rpc(fn, args);
     if (r && r.gold != null) { save.gold = Number(r.gold); save.updatedAt = this.now(); this.store.setItem(this.k + '.save', JSON.stringify(save)); } return r; }

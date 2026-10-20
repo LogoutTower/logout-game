@@ -401,3 +401,22 @@ details.cwing{border-top:1px solid #2a1d45;padding:3px 0}details.cwing>summary{c
 .preview{position:relative}.preview .halo{inset:auto;left:50%;top:4%;width:32px;height:16px;transform:translateX(-50%) scale(1.4)}
 body.tabhidden .halo .sph,body.tabhidden .petbob{animation-play-state:paused}
 @media (prefers-reduced-motion:reduce){.halo .sph{animation:none;opacity:1}.halo .sph.lt{transform:translate(-10px,0) scale(1.4)}.halo .sph.dk{transform:translate(10px,0) scale(1.4)}}
+/* ---- Staff Sanctum: black-and-gold drafting hall outside the tower (CSS gradients + tiny pixel sprites; no new image assets) */
+#portalBtn{position:absolute;left:6px;top:6px;z-index:4;min-height:28px;padding:2px 8px;font-size:11px;border:1px solid #d9a93f;background:#0b0a0fcc;color:#f6d77a;border-radius:12px;box-shadow:0 0 8px #d9a93f55}
+#arena.sanctum{background:radial-gradient(1px 1px at 8% 18%,#fffaf0 50%,transparent 51%),radial-gradient(1px 1px at 27% 9%,#f6d77a 50%,transparent 51%),radial-gradient(1px 1px at 63% 14%,#fffaf0 50%,transparent 51%),radial-gradient(1px 1px at 88% 22%,#f6d77a 50%,transparent 51%),
+ linear-gradient(#d9a93f14 1px,transparent 1px) 0 0/16px 16px,linear-gradient(90deg,#d9a93f14 1px,transparent 1px) 0 0/16px 16px,linear-gradient(#0b0a0f,#14100a)!important}
+#arena.sanctum::after{background:repeating-linear-gradient(90deg,#2a2112 0 30px,#d9a93f 30px 31px,#1a140a 31px 32px)!important}
+#arena.sanctum .torch{display:none}
+#sanctumDeco{position:absolute;inset:0;pointer-events:none;z-index:0}
+#sanctumDeco .bp{position:absolute;left:34%;top:10%;width:32%;height:58%;border:1px solid #5fd7ff55;background:linear-gradient(90deg,transparent 49.5%,#5fd7ff33 50%,transparent 50.5%),linear-gradient(transparent 49.5%,#5fd7ff33 50%,transparent 50.5%),
+ repeating-linear-gradient(0deg,transparent 0 9px,#d9a93f22 9px 10px);box-shadow:0 0 12px #5fd7ff22 inset;animation:bpglow 5s ease-in-out infinite}
+#sanctumDeco .bp::before{content:'01 tower.floor(1) { guardian.wake() } · 02 // logout: removed';position:absolute;left:4px;top:3px;font:8px/1.4 monospace;color:#5fd7ffaa;white-space:pre-wrap;width:95%}
+@keyframes bpglow{50%{box-shadow:0 0 18px #5fd7ff44 inset}}
+#sanctumDeco .tmodel{position:absolute;left:47%;bottom:16px;width:16px;height:16px;transform:scale(2.6);transform-origin:bottom;image-rendering:pixelated;background-size:100%;filter:drop-shadow(0 0 2px #d9a93f)}
+#sanctumDeco .lslot{position:absolute;left:24%;top:9%;width:44px;height:16px;border:1px dashed #d9a93f99;border-radius:4px;background:#0b0a0f}
+#sanctumDeco .lslot::after{content:'⏻';position:absolute;inset:0;text-align:center;font-size:11px;line-height:15px;color:#d9a93f33}
+#dpsMeter{position:absolute;right:6px;top:6px;z-index:4;max-width:46%;padding:4px 6px;font-size:11px;background:#0b0a0fdd;border:1px solid #d9a93f88;border-radius:6px;color:#f6d77a}
+#dpsMeter small{color:#bfae84}#dpsMeter input{width:52px;font-size:11px;padding:1px 3px}#dpsMeter label{margin-right:4px}#dpsMeter button{font-size:10px;padding:1px 6px;min-height:22px}
+#dpsMeter .cbar{height:4px;background:#2a2112;border-radius:2px;margin:3px 0}#dpsMeter .cbar i{display:block;height:100%;background:linear-gradient(90deg,#fffaf0,#d9a93f)}
+body.tabhidden #sanctumDeco .bp{animation-play-state:paused}@media (prefers-reduced-motion:reduce){#sanctumDeco .bp{animation:none}}
+#arena.sanctum #boss{filter:drop-shadow(0 0 3px #d9a93f88)}#arena.sanctum .boss{transform:scale(3.4)}

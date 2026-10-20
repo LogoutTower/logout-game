@@ -30,6 +30,7 @@ import { slotsOf, displayBanner, ZERO_BANNER, staffHall } from './guildsv2.js';
 import { itemIcon } from './icons.js';
 import { shopHtml, haloHtml, petHtml, decorHtml, wallHtml, eclipseOn } from './prestigeui.js';
 import { SHOP } from './prestige.js';
+import { SANCTUM, sanctumAllowed, inSanctum, newConstruct, hitConstruct, dpsMeters, constructSprite, towerModelSprite } from './sanctum.js';
 import { sellPrice, sellable, toggleLock, sellItem, bulkPreview, sellBulk } from './town.js';
 const shownRarity = it => it?.gm ? 'unique' : it?.rarity; // staff items display as Unique (see gm.js)
 const ico = (it, cls = 'ico') => `<i class="${cls}${shownRarity(it) === 'unique' ? ' ushim' : ''}" style='background-image:${itemIcon(it).replace(/'/g, '%27')}' aria-hidden="true"></i>`;
@@ -83,10 +84,11 @@ async function boot() {
   if (gmValid) save.heroes[0].hp = null; if (gmValid && save.heroes[0].cls === GM_CLASS) { const f = (await be.getFloor()).floor; gmGear(save, f, legendaryWeaponDps(f), legendaryArmorPct(f)); } // migrate older GM saves: Vesperveil lands in the armor slot // staff perk: always full HP
   { const fl0 = await be.getFloor(), f0 = fl0.floor, bi = bossInfo(f0); myGuild = featureOn(FEATURES, 'guilds', gmValid) && !localStaffOnly() ? await be.myGuild?.().catch(() => null) : null; if (myGuild && gv2On()) gv2Info = await be.guildInfo().catch(() => null); save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid, guild: !!myGuild && !myGuild.is_staff, bossPct: fl0.maxHp ? fl0.hp / fl0.maxHp : 1, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (fl0.gmUntil || 0) > Date.now() }; } // offline maths sees the same floor context
   const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
-  save.gold += p.gold; const ups = applyXp(save.heroes, p.xp, levelCap((await be.getFloor()).floor, gmValid)); pending += p.damage;
-  const offFloor = (await be.getFloor()).floor, trickled = trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
+  const sanc0 = inSanctum(save, sanctumOk()); // offline time accrues to the mode the staff hero was in
+  save.gold += p.gold; const ups = applyXp(save.heroes, p.xp, levelCap((await be.getFloor()).floor, gmValid)); if (sanc0) construct().total += p.damage; else pending += p.damage;
+  const offFloor = (await be.getFloor()).floor, trickled = sanc0 ? [] : trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
   if (p.secs > 30) {
-    const r = await submitDmg(h0.name, pending, h0); pending = 0;
+    const r = sanc0 ? { clears: [] } : await submitDmg(h0.name, pending, h0); if (!sanc0) pending = 0;
     lootLines = []; const got = handleClears(r.clears, true);
     $('awaytxt').innerHTML = `Log out disabled. You fought on for ${fmtDur(p.secs)}${p.capped ? ` (capped at ${cap}h)` : ''}${p.vigilUsed ? ' · Scroll of Vigil burned' : ''}<br>HP: ${Math.round(heroHp(h0))} / ${heroMaxHp(h0)}${p.lowSecs > 0 ? ` · worn down for ${fmtDur(p.lowSecs)} (DPS halved). Rest at the inn.` : ''}<br>Damage: ${fmt(p.damage)}<br>Gold: +${fmt(p.gold)}<br>XP: +${fmt(p.xp)}${ups.length ? `<br>Level ups: ${ups.length}` : ''}${r.advanced ? `<br>Floors cleared: ${r.advanced}. Floor ${r.floor} is open.` : ''}${got.length ? `<br>Cosmetics unlocked: ${got.map(i => esc(i.label)).join(', ')}` : ''}${lootLines.length || trickled.length ? `<br>Loot: ${[...lootLines, ...trickled.map(it => `<span style="color:${rarityOf(it.rarity).color}">${esc(it.name)}</span>`)].join(', ')}` : ''}`;
     $('away').showModal();
@@ -148,9 +150,10 @@ function tick() {
   if (fx.has('whisper') && Date.now() - lastWhisper > 120000) { lastWhisper = Date.now(); log(WHISPERS[Math.floor(Math.random() * WHISPERS.length)], '#b9a8ff'); }
   if (p.damage > 0 && save.sheath && cx(save.heroes[0], 'cx-sheath')) { const extra = Math.round(p.damage * 0.5); p.damage += extra; save.sheath = false; log('Twilight Sheath: the first cut after rest lands +50%.', '#ffd76a'); } // Twilight Sheath
   codexTick(p);
-  save.gold += p.gold; recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp; pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage);
+  const sanc = inSanctum(save, sanctumOk()); save.gold += p.gold; recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp;
+  if (sanc) { const b = hitConstruct(construct(), p.damage, Date.now()); if (b) log(`Sanctum: the training construct broke and re-formed (×${construct().broken}).`, '#d9a93f'); } else { pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage); } // Sanctum: never the shared boss
   if (applyXp(save.heroes, p.xp, levelCap(floor?.floor, gmValid)).length) { log(`System notice: level ${save.heroes[0].level} reached.`); notice(`Level ${save.heroes[0].level} reached · +1 talent point`); }
-  for (const it of trickleDrops(save, p.secs, floor.floor, p.secs > 2 ? TRICKLE.offlineMax : Infinity)) { const R = rarityOf(it.rarity); log(`Loot · ${R.label} ${it.name}${it.salvaged ? ' (bag full: salvaged)' : ''}`, R.color); notice(`${R.label} find — ${it.name}`, R.color, it); }
+  for (const it of sanc ? [] : trickleDrops(save, p.secs, floor.floor, p.secs > 2 ? TRICKLE.offlineMax : Infinity)) { const R = rarityOf(it.rarity); log(`Loot · ${R.label} ${it.name}${it.salvaged ? ' (bag full: salvaged)' : ''}`, R.color); notice(`${R.label} find — ${it.name}`, R.color, it); }
   if (p.damage > 0) { hits++; if (fx.has('tenth') && hits % 10 === 0) { hitFx(p.damage); log('The Tenth Bell rings — double hit.', '#7ff6ff'); } hitFx(p.damage); } $('boss').classList.add('hit'); setTimeout(() => $('boss').classList.remove('hit'), 120); render();
 }
 // Background tabs throttle timers: every tick measures real elapsed time (accrue = offline maths), and we catch up as soon as the tab is visible or focused.
@@ -159,6 +162,7 @@ function catchUp() { if (!save || !floor || Date.now() - lastCatchUp < 500) retu
 document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
 addEventListener('focus', catchUp); addEventListener('pageshow', catchUp);
 async function sync() {
+  if (inSanctum(save, sanctumOk())) { if (recent.dmg > 0) { log(`Sanctum: ${fmt(recent.dmg)} to the construct · +${fmt(recent.gold)} gold · +${fmt(recent.xp)} XP`); recent = { dmg: 0, gold: 0, xp: 0 }; } await be.saveSave(save); render(); return; } // save pushes only: no damage ticks, no floor polls
   if (be.name === 'local') { be.decree = gmValid; be.decreePct = decreePctNow(); }
   const r = await submitDmg(save.heroes[0].name, pending, { ...save.heroes[0], staff: gmValid }); pending = 0;
   if (recent.dmg > 0) { log(`You strike for ${fmt(recent.dmg)} · +${fmt(recent.gold)} gold · +${fmt(recent.xp)} XP`); recent = { dmg: 0, gold: 0, xp: 0 }; }
@@ -202,14 +206,29 @@ async function loadShop() { const st = await be.shopState?.().catch(() => null);
   save.pets = (st.pets || []).map(p => ({ ...p, id: Number(p.id), perk: { k: p.perk.k, v: Number(p.perk.v) } })); save.activePet = st.active != null ? Number(st.active) : null;
   const own = new Set(st.owned || []), lk = save.heroes[0].look; if (lk.skinSet && !own.has(lk.skinSet)) delete lk.skinSet; if (lk.ptitle && !own.has(lk.ptitle)) delete lk.ptitle;
   render(); return st; }
+// ---- Staff Sanctum (js/sanctum.js): private training room outside the tower.
+let constructSt = null; const construct = () => constructSt ||= newConstruct(save.sanctumCfg?.level || 30, save.sanctumCfg?.hpMul || 1);
+function sanctumOk() { return sanctumAllowed({ gmValid, serverRole: !!be?.isGm?.(), local: be?.name === 'local' }); }
+async function setSanctum(on) { if (!sanctumOk()) return; if (on && pending > 0) { await submitDmg(save.heroes[0].name, pending, { ...save.heroes[0], staff: gmValid }); await be.flush?.().catch(() => {}); pending = 0; } // tower damage so far goes out first
+  try { await be.staffSanctum?.(on); } catch (e) { notice(String(e.message || e)); return; } save.sanctum = !!on; recent = { dmg: 0, gold: 0, xp: 0 }; await be.saveSave(save);
+  log(on ? `You step through the portal into ${SANCTUM.name}. The tower fights on without you.` : 'You return to the tower. Your blows land on the guardian again.', '#d9a93f'); if (!on) await sync(); render(); }
+function renderSanctum() { const ok = sanctumOk(), on = inSanctum(save, ok), ar = $('arena'), pb = $('portalBtn'); if (!ar || !pb) return;
+  pb.hidden = !ok; pb.innerHTML = on ? '◈ Tower' : '◈ Sanctum'; pb.title = on ? 'Return to the tower (shared boss)' : `Enter ${SANCTUM.name} (private training)`; pb.onclick = () => setSanctum(!on);
+  ar.classList.toggle('sanctum', on); $('sanctumDeco').hidden = !on; $('dpsMeter').hidden = !on; if (!on) return;
+  $('sanctumDeco').querySelector('.tmodel').style.backgroundImage = towerModelSprite(); const c = construct(), m = dpsMeters(c, Date.now());
+  const dm = $('dpsMeter'); if (!dm.querySelector('.mnum')) { dm.innerHTML = `<div class="mnum"></div><div class="cbar"><i></i></div><label>Lv <input id="cLv" type="number" min="1" max="200" value="${c.level}"></label><label>HP × <input id="cHp" type="number" min="0.1" max="1000" step="0.1" value="${c.hpMul}"></label><button id="cReset">Reset</button>${featureOn(FEATURES, 'sandbox', true) ? '<button id="cTools">GM tools</button>' : ''}`;
+    dm.onchange = () => { save.sanctumCfg = { level: +$('cLv').value, hpMul: +$('cHp').value }; constructSt = null; render(); };
+    dm.onclick = e => { if (e.target.id === 'cReset') { constructSt = null; render(); } if (e.target.id === 'cTools') openSandboxUi(); }; }
+  dm.querySelector('.mnum').innerHTML = `<b>DPS</b> ${fmt(Math.round(m.live))} <small>live 10 s</small> · ${fmt(Math.round(m.avg))} <small>avg</small> · <small>total</small> ${fmt(Math.round(m.total))} · <small>broken</small> ${m.broken}`; dm.querySelector('.cbar i').style.width = `${(100 * c.hp / c.max).toFixed(1)}%`; }
 function render() {
-  const h = save.heroes[0];
+  const h = save.heroes[0]; renderSanctum();
   { const ph = petHtml(save, gmValid); if (ph !== lastPet) { $('pet').innerHTML = ph; lastPet = ph; } }
   $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; $('boss').style.backgroundImage = bossSprite(floor.floor); $('boss').classList.toggle('big', bossIsBig(floor.floor));
   const won = floor.floor >= MAX_FLOOR && floor.hp <= 0, waiting = !won && floor.hp <= 0, bi = bossInfo(floor.floor), arc = arcOf(floor.floor); applyScene(floor.floor);
   // end of content after the last open floor; 'waiting' = the server has not opened the next floor yet (e.g. its floor cap is still lower)
   H('bname').textContent = won ? 'The spire falls silent' : bossName(floor.floor);
   H('floor').textContent = won ? `System notice · Floor ${MAX_FLOOR + 1} is sealed. The next arc has not opened.` : waiting ? `System notice · the stair to Floor ${floor.floor + 1} is opening soon · ${arc.name}` : `${bi.title} · Floor ${floor.floor} / ${MAX_FLOOR} · ${arc.name}`;
+  if (inSanctum(save, sanctumOk())) { $('boss').style.backgroundImage = constructSprite(); $('boss').classList.remove('big'); H('bname').textContent = `Training Construct · Lv ${construct().level}`; H('floor').textContent = `${SANCTUM.name} · ${SANCTUM.sub}`; }
   $('floor').title = bi.lore ? bi.lore.replace(/^System notice: /, '') : '';
   const pct = floor.hp / floor.maxHp, lay = Math.ceil(pct * LAYERS - 1e-9), inLayer = pct * LAYERS - (lay - 1);
   H('layers').innerHTML = Array.from({ length: LAYERS }, (_, i) => `<i class="${i < lay ? 'on' : ''}"></i>`).join('');
