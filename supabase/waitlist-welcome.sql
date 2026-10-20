@@ -1,5 +1,5 @@
 -- $LOGOUT waitlist welcome email bookkeeping. Idempotent: safe to run more than once (after supabase/waitlist.sql).
--- The Edge Function supabase/functions/waitlist-welcome claims a row before sending and marks it after Brevo accepts the mail,
+-- The Edge Function supabase/functions/waitlist-welcome claims a row before sending and marks it after the email provider accepts the mail,
 -- so a retried or duplicated Database Webhook never sends twice. Only the service role (the function) can call these.
 alter table public.waitlist add column if not exists welcomed_at timestamptz;
 alter table public.waitlist add column if not exists welcome_claimed_at timestamptz;
@@ -17,7 +17,7 @@ as $$
   returning email
 $$;
 
--- Mark sent (after Brevo returned 2xx) or release the claim (send failed, so a later retry may try again).
+-- Mark sent (after the provider accepted it) or release the claim (send failed, so a later retry may try again).
 create or replace function public.waitlist_mark_welcome(p_id bigint, p_sent boolean)
 returns void
 language sql
