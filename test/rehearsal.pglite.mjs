@@ -113,7 +113,7 @@ console.error('clears', JSON.stringify(clears));
   const p = heroes[2].uid, capped = await lim(p, levelCap(fl)), cheat = await lim(p, 500); const near = (a, b) => Math.abs(a - b) <= 0.01 * b; assert(near(cheat, capped), `claimed level above the cap adds nothing (${cheat} vs ${capped} at floor ${fl})`); // ±1%: sub-second clock jitter
   const limG = async (uid, g) => { await db.exec(`update public.profiles set last_submit = now() - interval '60 seconds' where id = '${uid}'`); return Number((await as(uid, `select public.submit_damage(1e15::bigint, 'Cap', 1, $1) r`, [g], 'cap_probe'))[0].r.accepted); };
   assert(near(await limG(p, 200), await limG(p, forgeCap(fl))), 'claimed forge tier above the cap adds nothing');
-  await db.exec(`update public.profiles set role = 'gm' where id = '${p}'`); assert(await lim(p, 500) > 1.5 * capped, 'staff is never capped');
+  await db.exec(`update public.profiles set role = 'gm' where id = '${p}'`); { const { refPlayerDps } = await import('../js/loot.js'), sg = await lim(p, 500); assert(sg > 0 && sg <= 1.5 * refPlayerDps(fl) * 62, `staff: level-uncapped but held by the raid softener (${sg})`); }
   assert.equal((await db.query(`select is_staff from public.damage where user_id = $1 and floor = $2`, [p, fl])).rows[0].is_staff, true, 'staff damage counts toward the boss, flagged staff');
   const sn = (await db.query(`select public.snapshot() r`)).rows[0].r; assert(sn.lb.some(r => r[0] === 'Cap' && r[2] === true), 'staff shown on the board with the staff flag');
   const rk = (await db.query(`select bool_or(name = 'Cap') x from public.floor_clears, unnest(ranking) name`)).rows[0].x; assert(!rk, 'staff never in a clear ranking'); await db.exec(`update public.profiles set role = 'player' where id = '${p}'`); }

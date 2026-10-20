@@ -186,6 +186,12 @@ export function salvageItem(save, invIndex) { const it = save.inv[invIndex]; if 
 export const legendaryWeaponDps = f => +(1.5 * scale(f) * 3).toFixed(1);
 /** Base % DPS of a Legendary armor on floor f (parity reference for Vesperveil). */
 export const legendaryArmorPct = f => Math.round((3 + f / 8) * 3);
+// ---- GM raid softener reference: a strong normal player on floor f (class-average base, level cap f+10, forge cap f+8,
+// Legendary weapon + armor of the floor, no talents). Mirrors public.ref_dps() in schema-addendum-gm-softener-prelaunch.sql.
+export const REF_BASE = 5.866666666666667; // average atk×spd of the three public classes (= GM_STATS.atk, checked in tests)
+export const refPlayerDps = f => { f = Math.max(1, Math.floor(f)); return (REF_BASE * (1 + 0.25 * (f + 9)) + legendaryWeaponDps(f)) * (1 + 0.15 * (f + 8)) * (1 + legendaryArmorPct(f) / 100); };
+/** Cap the staff GM's damage to the shared boss over `secs` at mult × refPlayerDps(floor). Gold, XP, the Sanctum and displayed DPS are untouched. */
+export const softenGm = (dmg, secs, floor, mult = 1.5) => Math.min(dmg, Math.floor(Math.max(0, mult) * refPlayerDps(floor) * Math.max(0, secs)));
 export { AFFIXES, scale as gearScale, ELEMENT_WORD, U_PRE, U_BASE, U_EPI, U_EPI2 };
 
 // ---- Codex hooks (staff only; talentBonus/hero class gate them, so they are inert for everyone else)

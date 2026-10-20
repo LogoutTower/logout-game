@@ -14,4 +14,7 @@ export const GM_PASS_HASH = '374da5e28297c53b43468e29236c132652675fbf158573f24da
 // ---- Pre-launch gate (index.html at the site root): only a passcode screen until LAUNCH_AT, or until FEATURES.prelaunchLock is false.
 // Unlocks with the team passcode (SHA-256 below) or the GM passphrase. After editing, run node scripts/stamp.mjs (it copies these into index.html/app.html).
 export const TEAM_PASS_HASH = '05882b977150fcf7838197d682204bea98807c7b3a4919c795eec7bcaade9a2e';
+// ---- GM raid softener: the staff GM's damage to the SHARED tower boss is capped at this multiple of a strong normal player's
+// expected DPS for the floor (refPlayerDps in js/loot.js). Mirrors tower_config.gm_soft_mult (schema-addendum-gm-softener-prelaunch.sql).
+export const GM_SOFTEN_MULT = 1.5;
 export const LAUNCH_AT = '2026-10-26T15:30:00Z'; // Mon Oct 26, 10:30 AM CT

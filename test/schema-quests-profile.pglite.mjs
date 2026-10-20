@@ -1,7 +1,7 @@
 // Daily quests, guild weekly member rewards and player ID cards (schema-addendum-quests-profile.sql), offline in PGlite with every addendum applied twice.
 import assert from 'node:assert'; import fs from 'node:fs';
 let PGlite; try { ({ PGlite } = await import('@electric-sql/pglite')); } catch { console.log('pglite not installed, quests/profile test skipped'); process.exit(0); }
-const { ADDENDA } = await import('./addenda.mjs'); assert(ADDENDA.at(-1) === 'schema-addendum-quests-profile.sql');
+const { ADDENDA } = await import('./addenda.mjs'); assert(ADDENDA.includes('schema-addendum-quests-profile.sql'));
 const db = new PGlite();
 await db.exec(`create schema auth; create table auth.users (id uuid primary key, is_anonymous boolean default true, email text);
   create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;

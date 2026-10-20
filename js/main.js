@@ -7,7 +7,7 @@ import { isSpecialSlot, bossInfo, mechText } from './floors.js';
 import { arcOf, arcIndex, sceneOf, sceneVars } from './arcs.js';
 import { treeOf, nodeById, canLearn, learn, freePoints, totalPoints, spentIn, respec, respecCost } from './talents.js';
 import { TRICKLE, trickleDrops, grantDrops, equipItem, salvageItem, salvageValue, rarityOf, statLabel, INV_SIZE, bagSize, GEAR_SLOTS } from './loot.js';
-import { GM_PASS_HASH, OFFLINE_CAP_HOURS, MAX_FLOOR, FEATURES, SOLANA_RPC, TOKEN_MINT, HOLDER_THRESHOLD } from '../config.js';
+import { GM_PASS_HASH, OFFLINE_CAP_HOURS, MAX_FLOOR, FEATURES, SOLANA_RPC, TOKEN_MINT, HOLDER_THRESHOLD, GM_SOFTEN_MULT } from '../config.js';
 import { featureOn } from './features.js';
 import { checkGuild, GUILD_CAP, GUILD_BUFF, STAFF_GUILD, STAFF_MARK, guildError } from './guilds.js';
 import { cleanChat, CHAT_MAX } from './chatfilter.js';
@@ -15,7 +15,7 @@ import { boardWithStaff, wouldRankLabel } from './ranks.js';
 import { gmGear, wearsVesperveil, STAFF_STAMP, VESPERVEIL, staffActive, GM_CLASS, GM_SIGIL, EVENTIDE, gmOn, checkPass, sanitizeSave, becomeGm, leaveGm, eventide, shouldAnnounce } from './gm.js';
 import { initUI, go as goTab, townPane, syncHall, setDot, setHeroLabels, heroTab } from './ui.js';
 import { openSandbox, sandboxFloor, sandboxFight, sandboxLoot, closeSandbox, sandboxEdit } from './sandbox.js';
-import { enforceOneUnique, legendaryArmorPct, legendaryWeaponDps, rerollItem, chooseDestiny, DESTINY_MS } from './loot.js';
+import { softenGm, enforceOneUnique, legendaryArmorPct, legendaryWeaponDps, rerollItem, chooseDestiny, DESTINY_MS } from './loot.js';
 import { cx, CODEX, isCodex } from './codex.js';
 import { galaxyTier, mountGalaxy } from './galaxy.js';
 import { unwrittenHour, levelCap, atCap, forgeCap } from './game.js';
@@ -87,6 +87,7 @@ async function boot() {
   { const fl0 = await be.getFloor(), f0 = fl0.floor, bi = bossInfo(f0); myGuild = featureOn(FEATURES, 'guilds', gmValid) && !localStaffOnly() ? await be.myGuild?.().catch(() => null) : null; if (myGuild && gv2On()) gv2Info = await be.guildInfo().catch(() => null); save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid, guild: !!myGuild && !myGuild.is_staff, bossPct: fl0.maxHp ? fl0.hp / fl0.maxHp : 1, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (fl0.gmUntil || 0) > Date.now() }; } // offline maths sees the same floor context
   const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
   const sanc0 = inSanctum(save, sanctumOk()); // offline time accrues to the mode the staff hero was in
+  if (!sanc0 && gmValid) p.damage = softenGm(p.damage, p.secs, (await be.getFloor()).floor, GM_SOFTEN_MULT); // raid softener
   save.gold += p.gold; const ups = applyXp(save.heroes, p.xp, levelCap((await be.getFloor()).floor, gmValid)); if (sanc0) construct().total += p.damage; else pending += p.damage;
   const offFloor = (await be.getFloor()).floor, trickled = sanc0 ? [] : trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
   if (p.secs > 30) {
@@ -152,7 +153,8 @@ function tick() {
   if (fx.has('whisper') && Date.now() - lastWhisper > 120000) { lastWhisper = Date.now(); log(WHISPERS[Math.floor(Math.random() * WHISPERS.length)], '#b9a8ff'); }
   if (p.damage > 0 && save.sheath && cx(save.heroes[0], 'cx-sheath')) { const extra = Math.round(p.damage * 0.5); p.damage += extra; save.sheath = false; log('Twilight Sheath: the first cut after rest lands +50%.', '#ffd76a'); } // Twilight Sheath
   codexTick(p);
-  const sanc = inSanctum(save, sanctumOk()); save.gold += p.gold; recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp;
+  const sanc = inSanctum(save, sanctumOk()); if (!sanc && gmValid) p.damage = softenGm(p.damage, p.secs, floor.floor, GM_SOFTEN_MULT); // raid softener (shared boss only; server enforces too)
+  save.gold += p.gold; recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp;
   if (sanc) { const b = hitConstruct(construct(), p.damage, Date.now()); if (b) log(`Sanctum: the training construct broke and re-formed (×${construct().broken}).`, '#d9a93f'); } else { pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage); } // Sanctum: never the shared boss
   if (applyXp(save.heroes, p.xp, levelCap(floor?.floor, gmValid)).length) { log(`System notice: level ${save.heroes[0].level} reached.`); notice(`Level ${save.heroes[0].level} reached · +1 talent point`); }
   for (const it of sanc ? [] : trickleDrops(save, p.secs, floor.floor, p.secs > 2 ? TRICKLE.offlineMax : Infinity)) { const R = rarityOf(it.rarity); log(`Loot · ${R.label} ${it.name}${it.salvaged ? ' (bag full: salvaged)' : ''}`, R.color); notice(`${R.label} find — ${it.name}`, R.color, it); }
