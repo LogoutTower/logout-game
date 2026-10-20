@@ -187,13 +187,27 @@ export class SupabaseBackend {
   async chatPost(name, body) { const m = await this._rpc('chat_post', { p_name: name, p_body: body }); (this.mine ||= new Set()).add(m?.id); return m; } // own posts never light the badge
   async chatReport(id, reason = null) { return this._rpc('chat_report', { p_id: id, p_reason: reason }); }
   // ---- identity ("bind your identity"). Wallet = message signature only; never transactions, never keys, never funds.
+  isWallet(u = this.user) { return u?.app_metadata?.provider === 'web3' || !!u?.identities?.some?.(i => i.provider === 'web3'); }
+  /** Connect Phantom as a durable sign-in for THIS account (schema-addendum-wallet-link.sql). supabase-js cannot link a web3 identity,
+   *  so the current session issues a one-time code, the wallet signs in, and the wallet session claims the code: a fresh wallet takes over
+   *  this account's save, role and rows. A wallet that already has an account is never overwritten; this device just signs into it.
+   *  Returns { save, mode: 'linked' | 'signedin' }. */
   async bindWallet(wallet = globalThis.window?.phantom?.solana) {
     if (!wallet) throw new Error('Phantom not found');
-    const local = this._local();
+    let code = null;
+    if (!this.isWallet()) {
+      const loc = this._local(); if (loc && !this.holdUploads) await this._push(loc); // the cloud copy is what moves
+      const { data, error } = await this.sb.rpc('wallet_link_issue');
+      if (error) throw new Error(/wallet_link|function|schema cache|PGRST202/i.test(error.message || '') ? 'wallet linking is not live yet' : error.message);
+      code = data;
+    }
     const { data, error } = await this.sb.auth.signInWithWeb3({ chain: 'solana', statement: SIGN_STATEMENT, wallet });
-    if (error) throw error; this.user = data.user || data.session?.user; await this._profile();
-    if (local) { const s = await this.loadSave(); return s; } // merge local progress into the bound account
-    return null;
+    if (error) throw error; this.user = data.user || data.session?.user;
+    let mode = 'signedin';
+    if (code) { const { data: r, error: e } = await this.sb.rpc('wallet_link_claim', { p_code: code }); if (e) throw new Error(e.message); if (r?.moved) mode = 'linked'; }
+    if (mode === 'signedin') { this.store.removeItem(this.k + '.save'); this._dirty = null; this.pending = 0; } // the wallet's own account wins over this device's guest
+    await this._profile();
+    return { save: await this.loadSave(), mode };
   }
   async bindEmail(email) { // anonymous → permanent via updateUser keeps the same user id (progress carries over); else magic link
     const opts = { emailRedirectTo: this.redirectTo };

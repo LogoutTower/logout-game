@@ -6,6 +6,7 @@ Online mode is **on** (`FEATURES.online: 'all'`). Set it back to `'off'` to retu
 2. **Auth providers** (Authentication → Sign In / Providers):
    - **Anonymous sign-ins**: enable (guests get a server identity instantly).
    - **Web3 Wallet → Solana**: enable (Sign in with Solana via Phantom; message signature only).
+   - **Wallet linking** (attach Phantom to an existing guest/email account, same save and role on every device): run `schema-addendum-wallet-link.sql`. No manual-linking setting is needed.
    - **Email**: enable, with magic link / OTP. Keep "Confirm email" on.
 3. **URL configuration** (Authentication → URL Configuration): Site URL `https://logouttower.github.io/logout-game/`, and add the same URL under Redirect URLs.
 4. **Rate limits** (Authentication → Rate Limits): keep anonymous sign-ins low (e.g. 30 per hour per IP), email sends at the default (2–4 per hour), token refreshes default, Web3 sign-ins ~30 per 5 min per IP. Optionally turn on CAPTCHA for anonymous sign-ins if abuse shows up.

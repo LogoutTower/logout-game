@@ -483,7 +483,8 @@ async function openSystem() {
   const why = !online && be.fallback ? `<p class="sub" id="sysWhy">Reason: ${esc(be.fallback)}</p>${onlineConfigured() ? '<button id="retryOnline">Try online again</button>' : ''}` : '';
   $('sysBody').innerHTML = `<div class="sysnote"><p id="sysStatus">${esc(status)}</p>${why}${uid}<p class="sub">Build ${esc(BUILD)}</p>
     ${canBind ? `<div class="bind ${online ? '' : 'off'}"><h3>Bind your identity</h3>
-      <button id="bindWallet" class="cta" ${online ? '' : 'disabled'}>Sign in with Solana (Phantom)</button>
+      <button id="bindWallet" class="cta" ${online ? '' : 'disabled'}>${be.isWallet?.() ? 'Wallet connected · reconnect Phantom' : 'Connect Phantom wallet'}</button>
+      <p class="sub">First device: connecting attaches this account (save, gear, title, role) to your wallet. Other devices: connect the same wallet to load that account; that device's guest progress is replaced.</p>
       <p class="sub">Signature only. $LOGOUT asks your wallet to sign a short message. It never requests a transaction, never sees your keys and never touches your funds.</p>
       <div class="mail"><input id="bindEmail" type="email" placeholder="email for a magic link" ${online ? '' : 'disabled'} autocomplete="email"><button id="bindMail" ${online ? '' : 'disabled'}>Send link</button></div>
       ${online ? '' : `<p class="sub">${onlineConfigured() ? 'Binding needs the tower connection (see the reason above).' : 'Online mode is switched off on this server.'}</p>`}</div>` : ''}
@@ -492,9 +493,9 @@ async function openSystem() {
     <details class="settings"><summary>Settings</summary>${online ? '<button id="sever">Sever link (switch account)</button><p class="sub">Disconnects this browser from the bound identity. Your bound progress stays safe in the tower.</p>' : '<p class="sub">Nothing to sever: this browser is not linked to an online identity.</p>'}<div id="gmSlot"></div></details></div>`;
   const msg = m => { log(`System notice: ${m}`); notice(m); };
   if ($('retryOnline')) $('retryOnline').onclick = () => location.reload();
-  if ($('bindWallet')) $('bindWallet').onclick = async () => { try { const s = await be.bindWallet(); if (s) save = migrateSave(s);
+  if ($('bindWallet')) $('bindWallet').onclick = async () => { try { const r = await be.bindWallet(); if (r?.save) save = migrateSave(r.save);
       const pk = window.phantom?.solana?.publicKey?.toString?.(); const hs = await holderStatus(pk, { rpc: SOLANA_RPC, mint: TOKEN_MINT, threshold: HOLDER_THRESHOLD }); if (hs.enabled) save.holder = hs.holder;
-      await be.saveSave(save); msg('identity bound to your wallet'); render(); openSystem(); } catch (e) { msg(`binding failed: ${e.message || e}`); } };
+      await be.saveSave(save); msg(r?.mode === 'linked' ? 'wallet linked: sign in with it on any device' : 'signed in with your wallet'); render(); openSystem(); } catch (e) { msg(`binding failed: ${e.message || e}`); } };
   if ($('bindMail')) $('bindMail').onclick = async () => { const em = $('bindEmail').value.trim(); if (!/^\S+@\S+\.\S+$/.test(em)) return notice('Enter a valid email'); try { await be.bindEmail(em); msg('magic link sent, check your inbox'); } catch (e) { msg(`binding failed: ${e.message || e}`); } };
   if ($('copyId')) $('copyId').onclick = () => navigator.clipboard?.writeText(be.user.id).then(() => notice('Tower ID copied'), () => {});
   if ($('sever')) $('sever').onclick = async () => { if (!confirm('Sever the link to this identity on this browser?')) return; await be.sever(); location.reload(); };

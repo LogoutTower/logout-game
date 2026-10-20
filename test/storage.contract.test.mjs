@@ -14,14 +14,18 @@ function mockClient({ role = 'player' } = {}) {
       maybeSingle: async () => ({ data: rows()[0] || null }), single: async () => ({ data: rows()[0] }), then: (res, rej) => Promise.resolve({ data: rows() }).then(res, rej),
       upsert: async (row) => { calls.push(['upsert', name]); const i = T[name].findIndex(x => x.user_id === row.user_id); if (i >= 0) T[name][i] = row; else T[name].push(row); return {}; } };
     return api; };
-  const newUser = (anon) => { const u = { id: 'u' + (T.profiles.length + 1), is_anonymous: anon }; T.profiles.push({ id: u.id, role }); return u; };
+  let uid = 0; const newUser = (anon) => { const u = { id: 'u' + (++uid), is_anonymous: anon }; T.profiles.push({ id: u.id, role }); return u; };
   return { T, calls,
     auth: { getSession: async () => ({ data: { session: user ? { user } : null } }),
       getUser: async () => { if (T.netDown) throw new TypeError('Load failed'); return user && !(T.deleted || []).includes(user.id) ? { data: { user } } : { data: { user: null }, error: { status: 403, message: 'User from sub claim in JWT does not exist' } }; }, signInAnonymously: async () => { user = newUser(true); return { data: { session: { user } } }; },
-      signInWithWeb3: async ({ chain, statement }) => { calls.push(['web3', chain, statement]); user = newUser(false); return { data: { user, session: { user } } }; },
+      signInWithWeb3: async ({ chain, statement, wallet }) => { calls.push(['web3', chain, statement]); const key = wallet?.key || 'w'; T.wallets ||= {};
+        user = T.wallets[key] ||= Object.assign(newUser(false), { app_metadata: { provider: 'web3' } }); return { data: { user, session: { user } } }; },
       updateUser: async ({ email }) => { calls.push(['updateUser', email]); return {}; }, signInWithOtp: async ({ email }) => { calls.push(['otp', email]); return {}; }, signOut: async () => { user = null; return {}; } },
     from: q,
     rpc: async (fn, a) => { calls.push(['rpc', fn]);
+      if (fn === 'wallet_link_issue') { T.codes ||= {}; const c = 'c' + Object.keys(T.codes).length; T.codes[c] = user.id; return { data: c }; }
+      if (fn === 'wallet_link_claim') { const src = T.codes?.[a.p_code]; delete T.codes[a.p_code]; if (T.saves.some(x => x.user_id === user.id)) return { data: { moved: false, reason: 'existing' } };
+        T.saves.filter(x => x.user_id === src).forEach(x => x.user_id = user.id); const p = T.profiles.find(x => x.id === src); if (p) { T.profiles = T.profiles.filter(x => x.id !== user.id); p.id = user.id; } return { data: { moved: true } }; }
       if (fn !== 'submit_damage') return { data: null };
       const fs = T.floor_state[0], staff = T.profiles.find(p => p.id === user.id).role === 'gm', acc = Math.max(0, a.p_amount);
       let d = T.damage.find(x => x.user_id === user.id && x.floor === fs.floor); if (!d) T.damage.push(d = { user_id: user.id, floor: fs.floor, name: a.p_name, damage: 0, is_staff: staff }); d.damage += acc; fs.hp -= acc;
@@ -58,6 +62,12 @@ assert.equal(mergeSaves({ updatedAt: 5, a: 1 }, { updatedAt: 3, a: 2 }).a, 1); a
   await be.saveSave({ version: 5, gold: 42, heroes: [{ name: 'A' }] }); await be.bindWallet({});
   const web3 = c.calls.find(x => x[0] === 'web3'); assert.equal(web3[1], 'solana'); assert(/signature only/.test(web3[2]) && /does not send a transaction/.test(web3[2]), 'signature-only statement');
   assert(!be.isAnonymous()); assert.equal(c.T.saves.find(s => s.user_id === be.user.id).data.gold, 42, 'local merged into cloud on bind');
+  assert(c.calls.some(x => x[1] === 'wallet_link_issue') && c.calls.some(x => x[1] === 'wallet_link_claim'), 'wallet attaches through a link code');
+  // device 2: a different guest connects the same wallet and loads the linked account; its own guest save never overwrites it
+  const wid = be.user.id; const b2 = new SupabaseBackend(c, { storage: mem(), now: () => t + 1e6 });
+  await c.auth.signOut(); await b2.init(); await b2.saveSave({ version: 5, gold: 1, heroes: [{ name: 'guest' }] }); const r2 = await b2.bindWallet({});
+  assert.equal(b2.user.id, wid, 'same account'); assert.equal(r2.mode, 'signedin'); assert.equal(r2.save.gold, 42, 'linked save wins on device 2');
+  assert.equal(c.T.saves.find(s => s.user_id === wid).data.gold, 42);
   await be.bindEmail('x@example.invalid'); assert(c.calls.some(x => x[0] === 'otp'), 'magic link when already bound');
   const g = new SupabaseBackend(mockClient(), { storage: mem(), now: () => t }); await g.init(); await g.bindEmail('y@example.invalid'); assert(g.sb.calls.some(x => x[0] === 'updateUser'), 'anonymous → email upgrade keeps the user');
   await be.sever(); assert.equal(be.user, null); assert.equal(globalThis.localStorage.getItem('logout.v1.save'), null, 'sever link clears the local cache');
