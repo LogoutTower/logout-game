@@ -470,3 +470,4 @@ body.tabhidden #sanctumDeco .bp{animation-play-state:paused}@media (prefers-redu
 .notice.evolve{display:flex;flex-direction:column;align-items:center;gap:6px;border-color:#f6d77a}.notice.evolve span{color:#f6d77a}.notice.evolve .halo{position:relative;inset:auto;width:32px;height:16px;transform:scale(2);margin:10px 0}
 body.tabhidden .halo .corona{animation-play-state:paused}
 @media (prefers-reduced-motion:reduce){.halo .corona{animation:none}}
+.cgear.dvgear{border:2px solid transparent;background:linear-gradient(#0b0a0f,#0b0a0f) padding-box,linear-gradient(135deg,#fffaf0,#f6d77a 35%,#0b0a0f 50%,#f6d77a 65%,#fffaf0) border-box}

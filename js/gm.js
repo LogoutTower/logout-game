@@ -26,7 +26,7 @@ export const GM_LOOK = { skin: 'skin-1', hairColor: 'hc-ink', hairStyle: 'gm-hoo
 export const EVENTIDE = { id: 'gm-eventide', name: 'Eventide, the Final Shape', lore: 'System notice: this object has no origin. It was here before the tower.', ability: "Shaper's Decree: while you fight on a floor, every hero there gets +5% XP and gold." };
 export const DECREE_MUL = 1.05;
 export const VESPERVEIL = GM_ITEMS.find(i => i.id === 'gm-coat');
-export const GM_NAMES = ['GameMaster', 'Architect of the Cosmos', 'Shaper of Destiny', 'Eventide', 'Final Shape', "Shaper's Decree", 'Vesperveil', 'Mantle of the Unwritten', 'Galaxy of the Unwritten', 'Unsheathed', 'The Unwritten Hour', 'Unwritten Hour', ...CODEX_NAMES];
+export const GM_NAMES = ['GameMaster', 'Architect of the Cosmos', 'Shaper of Destiny', 'Eventide', 'Final Shape', "Shaper's Decree", 'Vesperveil', 'Mantle of the Unwritten', 'Galaxy of the Unwritten', 'Unsheathed', 'The Unwritten Hour', 'Unwritten Hour', 'The Root Key', 'Root Key', 'Every Door', ...CODEX_NAMES];
 export const isGmId = id => typeof id === 'string' && id.startsWith('gm-');
 /** Eventide: a Legendary-parity weapon of the given floor (base stat only, no Unique ability). */
 // Staff items DISPLAY as Unique (label, colour, shimmer) but stay rarity 'legendary' underneath: Legendary-parity stats, no generated
@@ -38,10 +38,19 @@ export const VESPER_ID = 'gm-vesperveil';
 export const vesperveil = (floor, legendaryArmorPct) => ({ id: VESPER_ID, gm: true, slot: 'armor', rarity: 'legendary', show: 'unique', stamp: STAFF_STAMP, floor, element: 'void',
   name: VESPERVEIL.label, lore: VESPERVEIL.lore, staffPower: VESPERVEIL.ability, stats: { dpsPct: legendaryArmorPct }, affixes: [] });
 export const wearsVesperveil = h => h?.equip?.armor?.id === VESPER_ID;
+/** The Root Key: a staff-only TRINKET, displayed at Divine (Solumbra's tier), Legendary-parity stats underneath like the other staff gear.
+ *  Passive "Every Door": +5% offline gains, never past the public offline-bonus ceiling (OFFLINE_PCT_MAX) and never past the 24h cap. */
+export const ROOT_KEY = { id: 'gm-rootkey', name: 'The Root Key', lore: 'The first key the Architect ever cut. It opens every door in the tower, all but the one Umbra locked.',
+  ability: 'Every Door: +5% gains while offline (never past the usual offline bonus ceiling or the 24h cap).', offlinePct: 5 };
+export const OFFLINE_PCT_MAX = 35; // the most a public hero can reach (Idle Hands 3/3 + Phantom Watch)
+export const rootKey = (floor, legendaryTrinketPct) => ({ id: ROOT_KEY.id, gm: true, divine: true, slot: 'trinket', rarity: 'legendary', show: 'divine', stamp: STAFF_STAMP, floor, element: 'void',
+  name: ROOT_KEY.name, lore: ROOT_KEY.lore, staffPower: ROOT_KEY.ability, stats: { goldPct: legendaryTrinketPct, xpPct: legendaryTrinketPct }, affixes: [] });
+export const legendaryTrinketPct = f => Math.round((3 + f / 12) * 3); // same formula as a rolled Legendary trinket (loot.js)
+export const wearsRootKey = h => h?.cls === GM_CLASS && h?.equip?.trinket?.id === ROOT_KEY.id;
 /** Keep the staff hero's two staff items equipped at the current floor's parity (also migrates older GM saves without the armor). */
 export function gmGear(save, floor, legendaryDps, legendaryArmorPct) {
   const h = save.heroes[0]; if (h.cls !== GM_CLASS) return false; h.equip = h.equip || {}; save.inv = save.inv || []; let ch = false;
-  for (const [slot, id, make] of [['weapon', EVENTIDE.id, () => eventide(floor, legendaryDps)], ['armor', VESPER_ID, () => vesperveil(floor, legendaryArmorPct)]]) {
+  for (const [slot, id, make] of [['weapon', EVENTIDE.id, () => eventide(floor, legendaryDps)], ['armor', VESPER_ID, () => vesperveil(floor, legendaryArmorPct)], ['trinket', ROOT_KEY.id, () => rootKey(floor, legendaryTrinketPct(floor))]]) {
     const bi = save.inv.findIndex(it => it?.id === id);
     if (h.equip[slot]?.id === id) { if (h.equip[slot].floor !== floor) { h.equip[slot] = make(); ch = true; } } // parity follows the floor
     else if (bi >= 0) { if (save.inv[bi].floor !== floor) { save.inv[bi] = make(); ch = true; } } // unequipped by choice: refresh in the bag
@@ -80,10 +89,10 @@ export function becomeGm(save, legendaryDps, floor, legendaryArmorPct = Math.rou
   const h = save.heroes[0]; if (h.cls !== GM_CLASS) h.prevCls = h.cls;
   h.cls = GM_CLASS; h.prevLook = h.prevLook || { ...h.look }; h.look = { ...h.look, ...GM_LOOK };
   h.hp = null; // full HP (null resolves to max)
-  const old = h.equip?.weapon; h.equip = h.equip || {}; if (old && !old.gm) save.inv.push(old); h.equip.weapon = eventide(floor, legendaryDps); const oa = h.equip.armor; if (oa && !oa.gm) save.inv.push(oa); h.equip.armor = vesperveil(floor, legendaryArmorPct); if (!Object.keys(h.talents || {}).some(isCodexId)) { h.prevTalents = { ...(h.talents || {}) }; h.talents = {}; } // Codex replaces the class tree; current level's points, free respec
+  const old = h.equip?.weapon; h.equip = h.equip || {}; if (old && !old.gm) save.inv.push(old); h.equip.weapon = eventide(floor, legendaryDps); const oa = h.equip.armor; if (oa && !oa.gm) save.inv.push(oa); h.equip.armor = vesperveil(floor, legendaryArmorPct); const ot = h.equip.trinket; if (ot && !ot.gm) save.inv.push(ot); h.equip.trinket = rootKey(floor, legendaryTrinketPct(floor)); if (!Object.keys(h.talents || {}).some(isCodexId)) { h.prevTalents = { ...(h.talents || {}) }; h.talents = {}; } // Codex replaces the class tree; current level's points, free respec
 }
 export function leaveGm(save) {
-  const h = save.heroes[0]; if (h.cls !== GM_CLASS) return; h.cls = CLASSES[h.prevCls] ? h.prevCls : 'Vanguard'; h.look = { ...(h.prevLook || {}) }; delete h.prevLook; if (h.equip?.weapon?.gm) h.equip.weapon = null; if (h.equip?.armor?.gm) h.equip.armor = null; h.talents = { ...(h.prevTalents || {}) }; delete h.prevTalents;
+  const h = save.heroes[0]; if (h.cls !== GM_CLASS) return; h.cls = CLASSES[h.prevCls] ? h.prevCls : 'Vanguard'; h.look = { ...(h.prevLook || {}) }; delete h.prevLook; if (h.equip?.weapon?.gm) h.equip.weapon = null; if (h.equip?.armor?.gm) h.equip.armor = null; if (h.equip?.trinket?.gm) h.equip.trinket = null; h.talents = { ...(h.prevTalents || {}) }; delete h.prevTalents;
 }
 /** Entrance announcement rate limit: once per floor per 10 minutes. */
 export function shouldAnnounce(last, floor, now) { return !(last && last.floor === floor && now - last.at < GM_PERKS.announceEveryMs); }

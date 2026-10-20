@@ -5,7 +5,7 @@ import { CLASSES, heroDps, heroMaxHp, gearBonus } from './game.js';
 import { RARITIES, statLabel, rollItem } from './loot.js';
 import { rng } from './floors.js';
 import { byId, titleOf, nameColorOf, defaultLook, fakeProfile, itemsFor } from './cosmetics.js';
-import { GM_CLASS, GM_TITLE, sanitizeSave } from './gm.js';
+import { GM_CLASS, GM_TITLE, sanitizeSave, ROOT_KEY } from './gm.js';
 import { nodeById } from './talents.js';
 import { SHOP, PETS, PERK_LABEL, DIVINE, SPIRIT, spiritStage } from './prestige.js';
 export const CARD_TTL = 300000; // 5 min client cache: re-opening a card costs nothing
@@ -44,7 +44,10 @@ export function cardHtml(card, { fmt = String, esc = String, guildBadge = () => 
   const tal = Object.entries(h.talents).filter(([, r]) => r > 0).map(([id, r]) => ({ n: nodeById(id), r })).filter(x => x.n).sort((a, b) => b.r - a.r).slice(0, 8);
   const ab = [c ? `${c.icon || ''} ${esc(h.cls)} class` : st ? '◈ GameMaster' : '', ...SLOTS.flatMap(k => h.equip[k]?.ability ? [`<b style="color:${rc('unique')}">${esc(h.equip[k].ability.text || h.equip[k].ability.id)}</b> <small class="sub">· ${esc(h.equip[k].drawback?.text || '')}</small>`] : []),
     ...tal.map(x => `${esc(x.n.name || x.n.id)} <small class="sub">rank ${x.r}</small>`)].filter(Boolean);
-  const gear = SLOTS.map(k => { const it = h.equip[k]; return `<div class="cgear" style="--rc:${it ? (it.gm ? '#ffd76a' : rc(it.rarity)) : '#3a2a5a'}"><small class="sub">${k}</small>${it ? `<b>${esc(it.name || '')}</b><small style="color:${it.gm ? '#ffd76a' : rc(it.rarity)}">${esc(it.gm ? 'Staff' : rl(it.rarity))}${it.floor ? ` · F${it.floor}` : ''}</small><small>${Object.entries(it.stats || {}).map(([s, v]) => esc(statLabel(s, v) || '')).join(' · ')}</small>` : '<small class="sub">empty</small>'}</div>`; }).join('');
+  // The server strips staff flags/ids from every card, so the staff card recognises the Root Key by slot + name (staff cards only).
+  const dv = it => st && it?.slot === 'trinket' && it.name === ROOT_KEY.name;
+  if (st && dv(h.equip.trinket)) ab.push(`<b style="color:${DIVINE.color}">${esc(ROOT_KEY.ability)}</b> <small class="sub">· ${esc(ROOT_KEY.name)}</small>`);
+  const gear = SLOTS.map(k => { const it = h.equip[k]; if (dv(it)) return `<div class="cgear dvgear" style="--rc:${DIVINE.color}"><small class="sub">${k}</small><b>${esc(it.name)}</b><small class="divine">${DIVINE.label}${it.floor ? ` · F${it.floor}` : ''}</small><small>${Object.entries(it.stats || {}).map(([s, v]) => esc(statLabel(s, v) || '')).join(' · ')}</small></div>`; return `<div class="cgear" style="--rc:${it ? (it.gm ? '#ffd76a' : rc(it.rarity)) : '#3a2a5a'}"><small class="sub">${k}</small>${it ? `<b>${esc(it.name || '')}</b><small style="color:${it.gm ? '#ffd76a' : rc(it.rarity)}">${esc(it.gm ? 'Staff' : rl(it.rarity))}${it.floor ? ` · F${it.floor}` : ''}</small><small>${Object.entries(it.stats || {}).map(([s, v]) => esc(statLabel(s, v) || '')).join(' · ')}</small>` : '<small class="sub">empty</small>'}</div>`; }).join('');
   const p = card.pet, pet = st && card.spirit ? `<span style="color:${DIVINE.color}">${esc(spiritStage(h.level).name)}</span> <small class="sub">${DIVINE.label} · stage ${spiritStage(h.level).n} of 3</small>`
     : p ? `<span style="color:${rc(p.rarity)}">${esc(p.name || PETS.find(x => x.sp === p.sp)?.label || p.sp)}</span> <small class="sub">${esc(rl(p.rarity))}${p.perk && PERK_LABEL[p.perk] ? ' · ' + esc(PERK_LABEL[p.perk](p.v)) : ''}</small>` : '<small class="sub">none</small>';
   const gu = card.guild ? `${guildBadge(card.guild)}[${esc(card.guild.tag)}] ${esc(card.guild.name || '')}` : '<small class="sub">no guild</small>';
