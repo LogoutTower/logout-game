@@ -1,3 +1,5 @@
+import { baseHp } from './floors.js';
+const baseHpR = f => baseHp(Math.max(1, f)) / baseHp(1);
 // Guilds v2 rules, shared by the client, LocalBackend and mirrored 1:1 in supabase/schema-addendum-guilds-v2.sql
 // (the pglite test checks the quest generator and level maths agree). XP/gold bonus only, never damage, ranks or rewards.
 export const ROLES = ['leader', 'officer', 'member'];
@@ -24,7 +26,11 @@ export const canKick = (actor, target) => actor === 'leader' ? target !== 'leade
 export const canPromote = actor => actor === 'leader'; // promote / demote / transfer
 // ---- weekly quests: 3 of 4 kinds, seeded by week number
 export const WEEK_S = 604800;
-export const weekOf = ms => Math.floor(ms / 1000 / WEEK_S);
+export const WEEK_OFFSET_S = 345600; // weeks start Monday 00:00 UTC (the epoch was a Thursday); mirrors gv2_week()
+export const weekOf = ms => Math.floor((ms / 1000 - WEEK_OFFSET_S) / WEEK_S);
+// Member reward for a finished weekly quest (mirrors gq_member_reward / gq_eligible): gold × floor tier + 30% of a level's XP.
+export const memberReward = f => ({ g: Math.round(250 * (baseHpR(f))), x: 0.3 });
+export const eligible = (kind, target, mine) => (mine || 0) > 0 && (!['damage', 'donate'].includes(kind) || mine >= Math.max(1, Math.ceil(target * 0.01)));
 export const QUEST_KINDS = ['damage', 'floors', 'active', 'donate'];
 const qh = (week, k) => (week * 2654435761 + k * 40503) % 2147483647;
 export function weekQuests(week) {

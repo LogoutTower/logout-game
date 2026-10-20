@@ -89,7 +89,7 @@ export class SupabaseBackend {
         this.heads = { chat: d.cv || 0, guild: d.gv || 0 }; const me = args.p_name;
         const clears = (d.cl || []).map(([id, floor, mx, rank, dm]) => { this.seenClear = Math.max(this.seenClear, id); return { floor, rank: Number(rank), ranking: [], dmg: { [me]: Number(dm) }, maxHp: Number(mx) }; });
         if (clears.length) this.store.setItem(this.k + '.seenClear', String(this.seenClear));
-        return { ...this.floor, advanced: d.f !== before && before != null, accepted: Number(d.a), clears, daily: d.dl || null }; }
+        return { ...this.floor, advanced: d.f !== before && before != null, accepted: Number(d.a), clears, daily: d.dl || null, quests: d.q || null }; }
       if (t.error && /tick|function|schema cache|PGRST202/i.test(t.error.message || '') && !/not signed in/.test(t.error.message || '')) this.noTick = true; // older server: classic path
       else if (t.error) { this.pending += amt; const f = await this.getFloor(); return { ...f, advanced: false, accepted: 0, clears: [], offline: true }; } }
     const { data, error } = await this.sb.rpc('submit_damage', args);
@@ -146,6 +146,13 @@ export class SupabaseBackend {
   /** The server checks and deducts the gold from the cloud save, so push the current save first, then mirror the deduction locally. */
   async guildDonate(amount, save) { if (this.holdUploads) throw new Error('local staff unlock: nothing is sent'); await this._push(save); const r = await this._rpc('guild_donate', { p_amount: Math.floor(+amount) }); save.gold -= Math.floor(+amount); save.updatedAt = this.now(); await this._push(save); return r; }
   // ---- Late-game shop (supabase/schema-addendum-shop.sql). The server prices, gates and takes the gold from the cloud save, so push first, then adopt its gold.
+  // ---- Daily quests + guild weekly member rewards + ID cards (schema-addendum-quests-profile.sql). Before it runs these return null / throw a clear message.
+  async questState(h = {}) { try { return await this._rpc('quest_state', { p_level: h.level || 1, p_gear: h.gear || 0 }); } catch { return null; } } // only when the panel opens without today's defs
+  async questClaim(i, save) { return this._spendRpc('quest_claim', { p_idx: i }, save); }
+  async guildQuestClaim(week, idx, save) { return this._spendRpc('guild_quest_claim', { p_week: week, p_idx: idx }, save); }
+  /** Read-only public card by board name or chat author; one call per card per CARD_TTL (cached in main.js). null if unknown or the SQL isn't live. */
+  async playerCard({ name = null, author = null } = {}) { if (this.noCard) return null; const { data, error } = await this.sb.rpc('player_card', { p_name: name, p_author: author && /^[0-9a-f]{12}$/.test(author) ? author : null });
+    if (error) { if (/player_card|function|schema cache|PGRST202/i.test(error.message || '')) this.noCard = true; return null; } return data || null; }
   async staffSanctum(on) { return this._rpc('staff_sanctum', { p_on: !!on }); } // gm role only (schema-addendum-sanctum.sql)
   async shopState() { try { return await this._rpc('shop_state', {}); } catch { return null; } } // only when Goods / the pet panel opens
   async _spendRpc(fn, args, save) { if (this.holdUploads) throw new Error('local staff unlock: nothing is sent'); await this._push(save); const r = await this._rpc(fn, args);

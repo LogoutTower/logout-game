@@ -22,6 +22,8 @@ import { unwrittenHour, levelCap, atCap, forgeCap } from './game.js';
 import { TONICS, TONIC_MAX, tonicPrice, buyTonic, TAILOR, buyCosmetic, DONATE_STEPS } from './sinks.js';
 import { claimReward, localDaily, calendarHtml, savesLeft } from './daily.js';
 import { playCutscene } from './cutscene-player.js';
+import { adoptQuests, questsToday, questsHtml, localQuest, claimLocal, claimServer, claimable, bankXp, DQ_GAP_S, RESET_DQ } from './quests.js';
+import { cardFromSave, fakeCard, cardHtml, CardCache } from './idcard.js';
 import { pendingCutscene, CUTSCENES } from './cutscenes.js';
 import { towerRows, towerProgress, TOWER_TOP } from './towermap.js';
 import { renderGuildV2, invitesHtml } from './guildpanel.js';
@@ -172,8 +174,39 @@ async function sync() {
   { const dl = r.daily || (be.name === 'local' ? localDaily(save) : null); if (dl) { const s = claimReward(save, dl.d, floor?.floor || r.floor || 1, { gm: gmValid, seq: save.lootSeq++ }); if (dl.d === 7) { if (be.name === 'local' && Math.random() < 0.5) be.petGrantLocal(Math.ceil((floor?.floor || 1) / 10), 'chest').then(loadShop); else setTimeout(loadShop, 3000); } // day-7 chest: 50% pet (server-rolled online)
       if (dl.sv && !dl.local) save.daily.saveMonth = new Date().toISOString().slice(0, 7);
       log(`System notice: daily reward, day ${dl.d} of 7 · ${s}.${dl.sv ? ' Streak save used.' : ''}`, '#ffd76a'); notice(`Day ${dl.d} reward · ${s}`, '#ffd76a'); setDot('dotMore', true, 'Daily reward claimed'); } }
+  questSync(r);
   floor = await be.getFloor(); arcCheck(); csCheck(); gmFloorChecks(); await be.saveSave(save); render(); renderLb();
 }
+// ---- Daily quests (js/quests.js). Online: progress arrives inside tick() (no extra polling); offline: counted on this browser.
+let dqLastSync = 0;
+const dqCtx = () => ({ inGuild: !!myGuild && !myGuild.is_staff, gm: gmValid });
+function dqLocal(kind, amt) { if (be.name !== 'local' || localStaffOnly()) return false; const done = localQuest(save, kind, amt, floor?.floor || 1, dqCtx()); if (done) questReady(); return done; }
+function questReady() { notice('Daily quest complete · claim it in Town → Goods', '#ffd76a'); setDot('dotMore', true, 'Daily quest ready to claim'); }
+function questSync(r) {
+  if (be.name === 'local') { const now = Date.now(), gap = dqLastSync ? (now - dqLastSync) / 1000 : 0; dqLastSync = now; const me = save.heroes[0].name;
+    dqLocal('dmg', r.accepted || 0); if (gap > 0 && gap <= DQ_GAP_S) dqLocal('online', Math.floor(gap)); for (const c of r.clears || []) if ((c.dmg?.[me] || 0) > 0) dqLocal('clear', 1); return; }
+  if (r.quests && adoptQuests(save, r.quests)) questReady();
+}
+async function claimQuest(i) { const f = floor?.floor || 1; let out;
+  if (be.name === 'local') out = claimLocal(save, i, f, gmValid);
+  else { try { const r = await be.questClaim(i, save); out = claimServer(save, i, r, f, gmValid); } catch (e) { notice(`Not claimed: ${/quest_claim|function|schema/i.test(e.message) ? 'quests open soon' : e.message}`); return; } }
+  if (out) { log(`System notice: daily quest reward · +${fmt(out.add)} gold and banked XP.`, '#ffd76a'); notice(`Quest reward · +${fmt(out.add)}g + XP`, '#ffd76a'); }
+  await be.saveSave(save); render(); }
+async function claimGuildQuest(week, idx) { const r = await be.guildQuestClaim(week, idx, save); bankXp(save, Number(r?.xp) || 0, floor?.floor || 1, gmValid); await be.saveSave(save);
+  log(`System notice: weekly guild quest share · +${fmt(r?.add || 0)} gold and banked XP.`, '#ffd76a'); notice(`Guild quest share · +${fmt(r?.add || 0)}g + XP`, '#ffd76a'); render(); }
+// ---- Player ID card: tap a name on the board, in chat or on the roster. One read-only fetch per card per 5 min (CardCache).
+const cards = new CardCache();
+async function openCard(name, author = null) {
+  if (!name && !author) return; const me = save.heroes[0], d = $('idCard'), body = $('idCardBody'); body.innerHTML = '<p class="sub">Loading…</p>'; if (!d.open) d.showModal();
+  let card = null, guild = null;
+  if (name === me.name && !author) { const g = gv2Info?.guild || myGuild; guild = g ? { tag: g.tag, name: g.name, banner: g.banner, staff: !!g.is_staff } : null; card = cardFromSave(save, { guild, staff: gmValid }); }
+  else if (be.name === 'local') { const gs = be._g?.(), m = gs?.members.find(x => x.name === name), gu = m && gs.guilds.find(x => x.id === m.guild_id); card = fakeCard(name, floor?.floor || 1, gu ? { tag: gu.tag, name: gu.name, banner: gu.banner, staff: !!gu.is_staff } : null); }
+  else if (be.playerCard) card = await cards.get(author ? 'a:' + author : 'n:' + name, () => be.playerCard({ name: author ? null : name, author })).catch(() => null);
+  $('idCardSub').textContent = card ? '· hero ID' : '';
+  body.innerHTML = card ? cardHtml(card, { fmt, esc, sprite: heroSprite, guildBadge: g => gv2On() && g.banner ? bannerBadge(displayBanner(g.banner, g.staff), g.tag) : '' })
+    : `<p class="sub">${be.playerCard && !be.noCard ? 'No ID card for this hero yet. They need to play and sync once.' : 'ID cards open soon.'}</p>`;
+}
+document.addEventListener('click', e => { const t = e.target.closest?.('[data-card]'); if (!t || !save) return; e.preventDefault(); e.stopPropagation(); openCard(t.dataset.card, t.dataset.author || null); }, true);
 // ---- Arc scenes (js/arcs.js): one scene per 10 floors, per-floor tint toward the guardian's element.
 let sceneFor = 0;
 function applyScene(f) {
@@ -283,8 +316,8 @@ async function renderLb() {
   $('top3').innerHTML = `<span class="t3h">Top damage</span>${top.map((r, i) => `<span class="t3 ${r.name === h.name ? 'me' : ''}"><b>${i + 1}</b>${badge(r.name)}${esc(r.name)} <small>${fmt(r.damage)}</small></span>`).join('') || '<span class="sub">No hits yet</span>'}${mine && mine.rank > 3 ? `<span class="t3 me"><b>${mine.rank}</b>you</span>` : ''}`;
   $('lb').innerHTML = $('lbSide').innerHTML = rows.map(r => {
     const me = r.name === h.name, pr = me ? { title: titleOf(h), color: nameColorOf(h) } : fakeProfile(r.name);
-    if (r.staff) return `<li class="staff" value="0"><small>${esc(wouldRankLabel(r))}</small><span class="gmname">${GM_SIGIL} ${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(me ? titleOf(h) : 'Tower Staff')}</span></li>`;
-    return `<li class="${me ? 'me' : ''}" value="${r.rank}">${badge(r.name)}<span style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span>${me && r.rank > 3 ? '<div class="climb">Climb: Train, Forge and equip loot to raise DPS. Top 3 on a kill earns rare rewards.</div>' : ''}</li>`;
+    if (r.staff) return `<li class="staff" value="0"><small>${esc(wouldRankLabel(r))}</small><span class="gmname cardlink" data-card="${esc(r.name)}" role="button" tabindex="0">${GM_SIGIL} ${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(me ? titleOf(h) : 'Tower Staff')}</span></li>`;
+    return `<li class="${me ? 'me' : ''}" value="${r.rank}">${badge(r.name)}<span class="cardlink" data-card="${esc(r.name)}" role="button" tabindex="0" style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span>${me && r.rank > 3 ? '<div class="climb">Climb: Train, Forge and equip loot to raise DPS. Top 3 on a kill earns rare rewards.</div>' : ''}</li>`;
   }).join('');
 }
 // ---- Town (safe zone of the current floor): inn + rotating shop
@@ -332,13 +365,16 @@ function renderGoods(f) {
   const own = save.progress?.drops || [], g = gv2Info?.guild;
   const row = (l, s, btn) => `<div class="srow"><div><b>${l}</b><small>${s}</small></div>${btn}</div>`;
   const ds = save.daily || {}, today = Math.floor(Date.now() / 864e5), open = ds.day == null ? !ds.lastClaim || Math.floor(ds.lastClaim / 864e5) < today : ds.day < today;
-  $('goodsBody').innerHTML = `<h3>Daily streak <small>· day ${ds.streak || 0} of 7</small></h3>${calendarHtml(ds.streak || 0, open, savesLeft(save), f, fmt)}<h3>Apothecary</h3><p class="sub">30 min each, up to 2 h banked. XP still stops at the level cap.</p>` +
+  const dq = questsToday(save); if (!dq && be.name !== 'local' && be.questState && Date.now() - (renderGoods.dqAt || 0) > 600000) { renderGoods.dqAt = Date.now(); be.questState(save.heroes[0]).then(q => { if (q && adoptQuests(save, q) !== null && questsToday(save) && $('town').open) renderGoods(f); }); }
+  if (!dq && be.name === 'local') localQuest(save, 'dmg', 0, f, dqCtx());
+  $('goodsBody').innerHTML = `<h3>Daily quests <small>· ${claimable(save)} ready</small></h3>${questsHtml(questsToday(save), fmt)}<p class="sub">${RESET_DQ}</p><h3>Daily streak <small>· day ${ds.streak || 0} of 7</small></h3>${calendarHtml(ds.streak || 0, open, savesLeft(save), f, fmt)}<h3>Apothecary</h3><p class="sub">30 min each, up to 2 h banked. XP still stops at the level cap.</p>` +
     TONICS.map(t => { const left = (save.buffs?.[t.id] || 0), p = gmValid ? 0 : tonicPrice(t, f); return row(esc(t.name), `${t.desc}${left ? ` · ${fmtDur(left)} left` : ''}`, `<button data-tonic="${t.id}" ${save.gold < p || left + 1800 > TONIC_MAX ? 'disabled' : ''}>${fmt(p)}g</button>`); }).join('') +
     `<h3>Tailor</h3>` + TAILOR.map(c => { const it = byId(c.id), has = own.includes(c.id); return row(esc(it.label), `${it.type === 'nameColor' ? 'Name tint' : it.type === 'title' ? 'Title' : 'Aura'}${has ? ' · owned (Wardrobe)' : ''}`, `<button data-tailor="${c.id}" ${has || save.gold < c.price ? 'disabled' : ''}>${has ? 'Owned' : `${fmt(c.price)}g`}</button>`); }).join('') +
     `<h3>Guild bank</h3>` + (g && !g.is_staff ? `<p class="sub">Gold for guild upgrades and banner unlocks (Guild → Bank).</p><div class="gdon">${DONATE_STEPS.map(s => `<button data-don="${s}" ${save.gold < 100 ? 'disabled' : ''}>${Math.round(s * 100)}% · ${fmt(Math.floor(save.gold * s))}g</button>`).join('')}</div>` : '<p class="sub">Join a guild to fund its bank and banner upgrades.</p>');
   $('goodsBody').insertAdjacentHTML('beforeend', `<div id="shopWing">${shopHtml(shopSt, save, f, { fmt, esc, gm: gmValid })}</div>`);
   if (!renderGoods.loading) { renderGoods.loading = true; loadShop().then(st => { renderGoods.loading = false; const w = $('shopWing'); if (st && w) w.innerHTML = shopHtml(st, save, f, { fmt, esc, gm: gmValid }); }); }
   $('goodsBody').onclick = async e => { const t = e.target.closest('button'); if (!t) return;
+    if (t.dataset.dq != null) { t.disabled = true; await claimQuest(+t.dataset.dq); renderGoods(f); return; }
     if (await shopClick(t, f)) return;
     if (t.dataset.tonic && buyTonic(save, f, t.dataset.tonic)) notice('Tonic active');
     else if (t.dataset.tailor && buyCosmetic(save, t.dataset.tailor)) notice(`Tailor · ${byId(t.dataset.tailor).label} added to your Wardrobe`);
@@ -523,7 +559,7 @@ let gTags = {}, gTagsAt = 0; const tagBanner = tag => { const t = Object.values(
 async function refreshTags() { if (!gv2On() || Date.now() - gTagsAt < 300000) return; gTagsAt = Date.now(); try { gTags = await be.guildTags(floor.floor) || {}; } catch {} }
 async function openGuild() {
   if (gv2On() && !localStaffOnly()) { try { gv2Info = await be.guildInfo(); } catch (e) { gv2Info = null; } } guildSeen();
-  if (gv2Info?.guild) { $('guildSub').textContent = `· [${gv2Info.guild.tag}] ${gv2Info.guild.name}`; renderGuildV2(gv2Info, { be, save, el: $('guildBody'), name: save.heroes[0].name, canPost: (be.canChat?.() ?? true) && !localStaffOnly(), staff: gmValid, log: m => log(`System notice: ${m}`), refresh: async () => { myGuild = await be.myGuild(); if (save.ctx) save.ctx.guild = !!myGuild; render(); await openGuild(); } }); if (!$('guild').open) $('guild').showModal(); return; }
+  if (gv2Info?.guild) { $('guildSub').textContent = `· [${gv2Info.guild.tag}] ${gv2Info.guild.name}`; renderGuildV2(gv2Info, { be, save, claimQuest: claimGuildQuest, el: $('guildBody'), name: save.heroes[0].name, canPost: (be.canChat?.() ?? true) && !localStaffOnly(), staff: gmValid, log: m => log(`System notice: ${m}`), refresh: async () => { myGuild = await be.myGuild(); if (save.ctx) save.ctx.guild = !!myGuild; render(); await openGuild(); } }); if (!$('guild').open) $('guild').showModal(); return; }
   const blocked = localStaffOnly() ? '<p class="sub">Local staff unlock: guilds need the server role (nothing is sent from this device).</p>' : '';
   let board = []; try { board = await be.guildBoard(guildAll); } catch {}
   const rows = board.map(g => `<tr class="${myGuild?.id === g.id ? 'mine' : ''}"><td>${g.rank}</td><td>${gv2On() ? bannerBadge(g.banner, g.tag) : ''}[${esc(g.tag)}] ${esc(g.name)}${gv2On() && g.level ? ` <small class="sub">Lv ${g.level}${g.open === false ? ' · invite-only' : ''}</small>` : ''}</td><td>${g.members}/${gv2On() && g.level ? slotsOf(g.level) : GUILD_CAP}</td><td>${fmt(g.damage)}</td>${!myGuild && !blocked ? `<td><button data-join="${esc(g.tag)}">Join</button></td>` : '<td></td>'}</tr>`).join('');
@@ -546,7 +582,7 @@ let chatLast = 0, chatFloor = null, chatTimer = null; const chatMsgs = [];
 const muted = () => JSON.parse(localStorage.getItem('logout.v1.muted') || '[]');
 function renderChat() {
   const mu = muted(), el = $('chatLog'), atEnd = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-  el.innerHTML = chatMsgs.filter(m => !mu.includes(m.author)).map(m => `<div class="msg ${m.author === 'me' || m.name === save.heroes[0].name ? 'me' : ''} ${m.is_staff ? 'staff' : ''}"><span class="mod"><button data-mute="${esc(m.author)}" title="Mute">Mute</button><button data-rep="${m.id}" title="Report">Report</button></span>${m.guild_tag ? `${gv2On() && tagBanner(m.guild_tag) ? bannerBadge(tagBanner(m.guild_tag), m.guild_tag) : ''}<span class="tag">[${esc(m.guild_tag)}]</span>` : ''}<b>${m.is_staff ? GM_SIGIL + ' ' : ''}${esc(m.name)}</b><time>${new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time><br>${esc(m.body)}</div>`).join('') || '<p class="sub">Quiet on this floor.</p>';
+  el.innerHTML = chatMsgs.filter(m => !mu.includes(m.author)).map(m => `<div class="msg ${m.author === 'me' || m.name === save.heroes[0].name ? 'me' : ''} ${m.is_staff ? 'staff' : ''}"><span class="mod"><button data-mute="${esc(m.author)}" title="Mute">Mute</button><button data-rep="${m.id}" title="Report">Report</button></span>${m.guild_tag ? `${gv2On() && tagBanner(m.guild_tag) ? bannerBadge(tagBanner(m.guild_tag), m.guild_tag) : ''}<span class="tag">[${esc(m.guild_tag)}]</span>` : ''}<b class="cardlink" data-card="${esc(m.name)}"${/^[0-9a-f]{12}$/.test(m.author || '') ? ` data-author="${esc(m.author)}"` : ''} role="button" tabindex="0">${m.is_staff ? GM_SIGIL + ' ' : ''}${esc(m.name)}</b><time>${new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time><br>${esc(m.body)}</div>`).join('') || '<p class="sub">Quiet on this floor.</p>';
   if (atEnd) el.scrollTop = el.scrollHeight;
   el.querySelectorAll('[data-mute]').forEach(b => b.onclick = () => { localStorage.setItem('logout.v1.muted', JSON.stringify([...new Set([...muted(), b.dataset.mute])])); renderChat(); });
   el.querySelectorAll('[data-rep]').forEach(b => b.onclick = async () => { const id = +b.dataset.rep; try { await be.chatReport(id, 'player report'); } catch {} const i = chatMsgs.findIndex(m => m.id === id); if (i >= 0) chatMsgs.splice(i, 1); renderChat(); $('chatNote').textContent = 'Reported. Thanks: it is hidden for you, and for everyone after a few reports.'; });
@@ -587,7 +623,7 @@ async function openChat() {
   $('chatIn').disabled = $('chatSend').disabled = !can;
   $('chatNote').textContent = can ? `Max ${CHAT_MAX} characters, 1 message every 10 s, 30 an hour. Links and addresses are blocked.${be.isAnonymous?.() ? ' Guests can post after a few minutes of climbing.' : ''}` : localStaffOnly() ? 'Local staff unlock: chat needs the server role.' : 'Chat is not available on this device right now.';
   $('chatForm').onsubmit = async e => { e.preventDefault(); const r = cleanChat($('chatIn').value); if (!r.ok) { $('chatNote').textContent = 'Not sent: ' + r.reason; return; }
-    try { await be.chatPost(save.heroes[0].name, $('chatIn').value, meArg()); $('chatIn').value = ''; $('chatNote').textContent = ''; await pollChat(); } catch (err) { $('chatNote').textContent = 'Not sent: ' + err.message; } };
+    try { await be.chatPost(save.heroes[0].name, $('chatIn').value, meArg()); dqLocal('chat', 1); $('chatIn').value = ''; $('chatNote').textContent = ''; await pollChat(); } catch (err) { $('chatNote').textContent = 'Not sent: ' + err.message; } };
   if (!$('chat').open) $('chat').showModal(); renderChat(); await pollChat(); chatSeen = Math.max(chatSeen || 0, chatLast); chatSeenFloor = floor.floor;
   clearInterval(chatTimer); chatTimer = setInterval(() => { if (!$('chat').open) clearInterval(chatTimer); else pollChat(); }, 4000);
 }

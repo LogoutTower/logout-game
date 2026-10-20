@@ -448,3 +448,16 @@ body.tabhidden #sanctumDeco .bp{animation-play-state:paused}@media (prefers-redu
 #phaseBanner.show{animation:pbn 4.2s ease-out forwards}
 @keyframes pbn{0%{opacity:0;transform:scaleY(0)}8%{opacity:1;transform:scaleY(1.1)}12%{transform:scaleY(1)}85%{opacity:1}100%{opacity:0}}
 @media (prefers-reduced-motion:reduce){#arena.awakened #boss,#arena.awakening,#arena.awakening::after,#phaseBanner.show{animation:none}}
+/* Daily quests (Town → Goods) and guild weekly shares */
+.dquests{display:grid;gap:6px}.dquest,.gquest{display:flex;gap:10px;align-items:center}.dquest{border:1px solid var(--line);border-radius:4px;padding:6px 8px}.dquest>div,.gquest>div{flex:1;min-width:0}
+.dquest.done{border-color:#ffd76a}.dquest.done b{color:#ffd76a}.dquest.got{opacity:.7}.dquest.got b{color:#5cff8a}.dquest button,.gquest button{min-width:92px;min-height:40px}
+/* Player ID card */
+.cardlink{cursor:pointer;text-decoration:underline dotted rgba(244,241,255,.35);text-underline-offset:3px}.cardlink:hover,.cardlink:focus-visible{text-decoration-color:currentColor;outline:none}
+#idCard{width:min(520px,92vw)}.idcard{display:grid;gap:8px}.idcard h3{margin:6px 0 0}
+.idhead{display:flex;gap:12px;align-items:center}.idspr{width:72px;height:72px;flex:none;background-size:contain;background-repeat:no-repeat;background-position:center;image-rendering:pixelated;border:1px solid var(--line);border-radius:8px;background-color:#0b0620}
+.idname{font-weight:700;font-size:18px;overflow-wrap:anywhere}.idcard.staff .idspr{border-color:#ffd76a;box-shadow:0 0 12px #ffd76a55}
+.idstats{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}.idstats span,.idmeta span{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:4px;padding:4px 6px;min-width:0}.idstats small,.idmeta>span>small:first-child{opacity:.7;font-size:11px}
+.cgears{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.cgear{display:flex;flex-direction:column;gap:2px;border:1px solid var(--rc);border-radius:4px;padding:6px;min-width:0;box-shadow:inset 0 0 10px color-mix(in srgb,var(--rc) 25%,transparent)}.cgear b{color:var(--rc);overflow-wrap:anywhere}
+.idab{margin:0;padding-left:18px;display:grid;gap:2px}.idmeta{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+@media(max-width:640px){#idCard{width:100vw}.idstats{grid-template-columns:repeat(3,1fr)}.cgears,.idmeta{grid-template-columns:1fr}.cgear{flex-direction:row;flex-wrap:wrap;align-items:baseline;column-gap:8px}.dquest{flex-wrap:wrap}.dquest button,.gquest button{min-width:84px}.cardlink{padding:2px 0}}
+#idCard{background:linear-gradient(180deg,rgba(29,15,66,.98),rgba(16,8,40,.99))} /* opens on top of the board/chat/roster sheets: opaque so they do not show through */

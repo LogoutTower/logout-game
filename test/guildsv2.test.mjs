@@ -32,8 +32,8 @@ assert.match(await err(be.guildDonate(6000, save)), /daily donation cap/); asser
 assert.match(await err(be.guildUpgrade('bonus')), /level 5/); await be.guildUpgrade('banner'); await be.guildUpgrade('hall').catch(() => {}); I = await be.guildInfo(); assert.equal(I.guild.banner_unlocks, 1); assert.equal(I.ledger[0].kind, 'spend');
 assert.match(await err(be.guildSetBanner('skull', '#ffd76a', '#2a1450')), /locked/); await be.guildSetBanner('moon', '#7ff6ff', '#2a1450'); assert.equal((await be.guildInfo()).guild.banner.sigil, 'moon');
 // server-side-style XP from damage, staff adds nothing, quests progress
-const x0 = (await be.guildInfo()).guild.xp; await be.submitDamage('Tess', 4000, {}); await be.submitDamage('Tess', 9999, { staff: true }); I = await be.guildInfo();
-assert.equal(I.guild.xp - x0 - I.quests.filter(q => q.done).reduce((a, q) => a + q.xp, 0), 4000); const dq = I.quests.find(q => q.kind === 'damage'); if (dq) assert.equal(dq.progress, 4000);
+const I0 = await be.guildInfo(), x0 = I0.guild.xp, done0 = new Set(I0.quests.filter(q => q.done).map(q => q.idx)); await be.submitDamage('Tess', 4000, {}); await be.submitDamage('Tess', 9999, { staff: true }); I = await be.guildInfo();
+assert.equal(I.guild.xp - x0 - I.quests.filter(q => q.done && !done0.has(q.idx)).reduce((a, q) => a + q.xp, 0), 4000); const dq = I.quests.find(q => q.kind === 'damage'); if (dq) assert.equal(dq.progress, 4000);
 // chat: filter + slow mode
 assert.match(await err(be.guildChatPost('Tess', 'see evil.com')), /links/); const m1 = await be.guildChatPost('Tess', 'what the fuck'); assert.equal(m1.body, 'what the ****'); assert.match(await err(be.guildChatPost('Tess', 'again')), /slow mode/);
 assert((await be.guildChatFetch(0)).some(m => m.id === m1.id));
