@@ -37,7 +37,7 @@ const ico = (it, cls = 'ico') => `<i class="${cls}${shownRarity(it) === 'unique'
 import { ELEMENT_WORD } from './loot.js'; const ELEMENTS = Object.keys(ELEMENT_WORD);
 import { classOf } from './game.js';
 import { holderStatus } from './supabase.js';
-import { bossSprite, bossIsBig, heroSprite } from './sprites.js';
+import { bossSprite, bossIsBig, heroSprite, bossPhase, AWAKEN_NAME, AWAKEN_TITLE } from './sprites.js';
 import { SLOTS, CREATION_SLOTS, itemsFor, isUnlocked, unlockText, defaultLook, migrateSave, recordClear, equip, titleOf, nameColorOf, fakeProfile, byId, SAVE_VERSION } from './cosmetics.js';
 const $ = id => document.getElementById(id);
 // Write only when changed: avoids rebuilding nodes (and layout shifts that eat clicks) on every 1s tick.
@@ -224,14 +224,31 @@ function renderSanctum() { const ok = sanctumOk(), on = inSanctum(save, ok), ar 
     dm.onchange = () => { save.sanctumCfg = { level: +$('cLv').value, hpMul: +$('cHp').value }; constructSt = null; render(); };
     dm.onclick = e => { if (e.target.id === 'cReset') { constructSt = null; render(); } if (e.target.id === 'cTools') openSandboxUi(); }; }
   dm.querySelector('.mnum').innerHTML = `<b>DPS</b> ${fmt(Math.round(m.live))} <small>live 10 s</small> · ${fmt(Math.round(m.avg))} <small>avg</small> · <small>total</small> ${fmt(Math.round(m.total))} · <small>broken</small> ${m.broken}`; dm.querySelector('.cbar i').style.width = `${(100 * c.hp / c.max).toFixed(1)}%`; }
+// Floor 100 phase change: derived from the shared HP (same for everyone). Seen live, or first time after loading into phase 2: a short
+// glitch transition on the arena plus a full-width banner (fixed, safe-area aware, tap to dismiss). Shown once per device (localStorage).
+let lastPhase = null;
+function awakenCheck(f, phase, won) {
+  const ar = $('arena'); ar.classList.toggle('awakened', phase === 2 && !won);
+  if (phase === 2 && !won && lastPhase !== 2) { const k = 'logout.v1.awakenSeen', seen = (localStorage.getItem(k) || '').split(',');
+    if (!seen.includes(String(f))) { localStorage.setItem(k, [...seen.filter(Boolean), f].join(',')); playAwaken(); } }
+  lastPhase = phase;
+}
+function playAwaken() {
+  const ar = $('arena'), b = $('phaseBanner'); ar.classList.remove('awakening'); void ar.offsetWidth; ar.classList.add('awakening'); setTimeout(() => ar.classList.remove('awakening'), 2400);
+  b.innerHTML = `<small>Phase 2 · System override</small><b>${esc(AWAKEN_NAME)}</b><span>${esc(AWAKEN_TITLE)}</span>`; b.hidden = false; b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+  const hide = () => { b.hidden = true; b.classList.remove('show'); }; b.onclick = hide; clearTimeout(playAwaken.t); playAwaken.t = setTimeout(hide, 4200);
+  log(`${AWAKEN_NAME}: the Queen rewrites her own code. Phase 2 begins.`, '#ff2a6a');
+}
 function render() {
   const h = save.heroes[0]; renderSanctum();
   { const ph = petHtml(save, gmValid); if (ph !== lastPet) { $('pet').innerHTML = ph; lastPet = ph; } }
-  $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; $('boss').style.backgroundImage = bossSprite(floor.floor); $('boss').classList.toggle('big', bossIsBig(floor.floor));
+  $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; const phase = bossPhase(floor.floor, floor.hp, floor.maxHp); $('boss').style.backgroundImage = bossSprite(floor.floor, phase); $('boss').classList.toggle('big', bossIsBig(floor.floor));
   const won = floor.floor >= MAX_FLOOR && floor.hp <= 0, waiting = !won && floor.hp <= 0, bi = bossInfo(floor.floor), arc = arcOf(floor.floor); applyScene(floor.floor);
   // end of content after the last open floor; 'waiting' = the server has not opened the next floor yet (e.g. its floor cap is still lower)
   H('bname').textContent = won ? 'The spire falls silent' : bossName(floor.floor);
   H('floor').textContent = won ? `System notice · Floor ${MAX_FLOOR + 1} is sealed. The next arc has not opened.` : waiting ? `System notice · the stair to Floor ${floor.floor + 1} is opening soon · ${arc.name}` : `${bi.title} · Floor ${floor.floor} / ${MAX_FLOOR} · ${arc.name}`;
+  if (!won && phase === 2 && !inSanctum(save, sanctumOk())) { H('bname').textContent = AWAKEN_NAME; H('floor').textContent = `${AWAKEN_TITLE} · Floor ${floor.floor} / ${MAX_FLOOR} · ${arc.name}`; }
+  awakenCheck(floor.floor, inSanctum(save, sanctumOk()) ? 1 : phase, won);
   if (inSanctum(save, sanctumOk())) { $('boss').style.backgroundImage = constructSprite(); $('boss').classList.remove('big'); H('bname').textContent = `Training Construct · Lv ${construct().level}`; H('floor').textContent = `${SANCTUM.name} · ${SANCTUM.sub}`; }
   $('floor').title = bi.lore ? bi.lore.replace(/^System notice: /, '') : '';
   const pct = floor.hp / floor.maxHp, lay = Math.ceil(pct * LAYERS - 1e-9), inLayer = pct * LAYERS - (lay - 1);

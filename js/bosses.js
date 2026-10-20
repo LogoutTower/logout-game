@@ -221,7 +221,37 @@ export const EXTRA = [
     ell(16, 7, 5, 4, 'H'); ell(16, 8, 3, 3, 'S'); px(15, 8, 'E'); px(17, 8, 'E'); line(11, 6, 8, 3, 'H'); line(21, 6, 24, 3, 'H');
   } },
 ];
-export const SHAPES = Object.fromEntries([...BOSSES, ...ARC2, ...EXTRA].map(b => [b.key, b]));
+// Floor 100 final guardian (two phases). Never in the generated pool: SHAPES carries them, GEN_BASES filters on .rival.
+export const RIVAL_SHAPES = [
+  { key: 'umbra', noun: 'Shadow Queen', no: 'wings,horns,crown,plates,aura,chains', big: true, rival: true,
+    pal: { V: '#2a1048', P: '#5a2a8a', L: '#9a6ad8', G: '#e8c06a', S: '#e8dcf4', H: '#140826', W: '#f4ead8', E: '#c79bff', k: K }, draw: ({ rect, ell, line, tri, flare, px }) => {
+    tri([16, 9], [1, 30], [31, 30], 'H'); for (let x = 3; x <= 29; x += 4) px(x, 30, 'P');                                                   // shadow train / cape
+    flare(14, 30, 16, 3, 10, 'V'); for (let y = 18; y <= 29; y += 3) { px(16 - (y - 10) / 2, y, 'P'); px(16 + (y - 10) / 2, y, 'P'); } line(16, 14, 16, 29, 'L'); // gown
+    rect(13, 13, 7, 6, 'P'); rect(15, 15, 3, 1, 'G'); px(16, 16, 'E');                                                                         // bodice, brooch
+    ell(10, 13, 3, 2, 'V'); ell(22, 13, 3, 2, 'V'); for (const x of [8, 24]) px(x, 11, 'G');                                                   // shoulder mantles
+    ell(16, 8, 3, 4, 'S'); ell(16, 5, 5, 2, 'H'); rect(11, 6, 2, 8, 'H'); rect(20, 6, 2, 8, 'H'); px(15, 8, 'E'); px(17, 8, 'E'); rect(15, 10, 3, 1, 'P'); // face, hair
+    rect(12, 3, 9, 1, 'G'); for (const x of [12, 14, 16, 18, 20]) line(x, 2, x, x === 16 ? 0 : 1, 'G'); px(16, 2, 'E');                        // tall crown
+    line(11, 14, 7, 20, 'P', 2); rect(6, 20, 2, 2, 'S'); line(21, 14, 25, 18, 'P', 2); rect(25, 17, 2, 2, 'S');                                // arms
+    line(26, 4, 26, 29, 'G'); ell(26, 4, 2, 2, 'L'); px(26, 4, 'E'); px(24, 4, 'G'); px(28, 4, 'G');                                           // sceptre, void orb
+    for (const [x, y] of [[3, 8], [29, 12], [5, 24], [2, 16]]) px(x, y, 'E');                                                                   // shadow motes
+  } },
+  { key: 'umbraAwake', noun: 'Awakened Queen', no: 'wings,horns,crown,plates,aura,chains', big: true, rival: true,
+    pal: { V: '#0c0418', P: '#3a0a2a', L: '#ff2a6a', G: '#8a6a2a', S: '#bfb0d0', H: '#05020a', C: '#3dff8a', M: '#ff4fd8', E: '#ff2a6a', k: K }, draw: ({ rect, ell, line, tri, flare, px }) => {
+    for (const [x0, y, n] of [[2, 3, 6], [22, 6, 7], [3, 20, 4], [25, 25, 5], [1, 13, 3], [27, 15, 4]]) for (let i = 0; i < n; i++) if ((i * 7 + y) % 3) px(x0 + i, y, i % 2 ? 'C' : 'M'); // rewritten code
+    tri([16, 9], [0, 30], [31, 30], 'H'); for (let x = 2; x <= 30; x += 3) px(x, 30 - (x % 2), 'L');                                        // torn shadow train
+    flare(14, 30, 16, 3, 11, 'V'); for (let y = 16; y <= 29; y += 2) px(16 + ((y * 5) % 7) - 3, y, 'L'); line(16, 14, 16, 29, 'P');            // gown cracked with red seams
+    for (const y of [19, 23, 27]) { const o = y % 2 ? 2 : -2; rect(8 + o, y, 17, 1, 'k'); rect(9 + o, y, 3, 1, 'C'); }                       // glitch slices
+    rect(13, 13, 7, 6, 'P'); px(16, 16, 'C'); px(15, 15, 'L'); px(17, 17, 'L');
+    ell(10, 12, 4, 2, 'V'); ell(22, 12, 4, 2, 'V'); line(6, 11, 4, 8, 'S'); line(26, 11, 28, 8, 'S');                                         // jagged mantles
+    ell(16, 8, 3, 4, 'S'); ell(16, 5, 6, 2, 'H'); rect(10, 6, 2, 9, 'H'); rect(21, 6, 2, 9, 'H'); line(17, 6, 18, 11, 'k'); rect(14, 8, 2, 1, 'E'); px(18, 8, 'C'); // cracked face, mismatched eyes
+    rect(11, 3, 4, 1, 'G'); line(11, 3, 11, 1, 'G'); line(13, 3, 13, 2, 'G'); rect(18, 2, 4, 1, 'G'); line(21, 2, 22, 0, 'G'); px(16, 1, 'L');   // broken crown, split in two
+    for (let a = 0; a < 16; a++) if (a % 5 !== 2) px(16 + Math.round(9 * Math.cos(a * 0.393)), 4 + Math.round(2 * Math.sin(a * 0.393)), a % 2 ? 'M' : 'L'); // fractured halo
+    line(11, 14, 5, 18, 'P', 2); for (const [x, y] of [[4, 19], [3, 18], [5, 20]]) px(x, y, 'C'); line(21, 14, 27, 17, 'P', 2);              // arms; left hand dissolving into code
+    line(28, 6, 26, 29, 'G'); line(27, 14, 29, 13, 'k'); ell(28, 5, 2, 2, 'L'); px(28, 5, 'C');                                               // fractured sceptre
+    for (const [x, y] of [[2, 27], [30, 3], [6, 1], [29, 21]]) px(x, y, 'E');
+  } },
+];
+export const SHAPES = Object.fromEntries([...BOSSES, ...ARC2, ...EXTRA, ...RIVAL_SHAPES].map(b => [b.key, b]));
 export const ARC2_KEYS = ARC2.map(b => b.key);
 export const HANDMADE = BOSSES.map(b => b.key);
 // Element palettes: every base colour is remapped by brightness onto a 4-step ramp; E becomes the element glow.

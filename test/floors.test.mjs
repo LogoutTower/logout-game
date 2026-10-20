@@ -11,11 +11,11 @@ for (const f of ALL) { assert.deepEqual(again.bossInfo(f), bossInfo(f), `floor $
 for (const f of ALL) {
   const i = bossInfo(f);
   if (f >= 11 && f <= 20) { assert.equal(i.kind, 'handmade'); assert.equal(i.name, ARC2[f - 11].name, `arc 2 floor ${f}`); }
-  else if (isSpecialSlot(f)) { assert.notEqual(i.kind, 'generated', `floor ${f} must not be generated`); assert.equal(i.placeholder_special, true); }
+  else if (isSpecialSlot(f)) { assert.notEqual(i.kind, 'generated', `floor ${f} must not be generated`); assert.equal(i.placeholder_special, f !== 100); }
   else if (f > 9) assert.equal(i.kind, 'generated');
 }
 for (const f of [10, 20, 30, 40, 50, 60, 70, 80, 90, ...Array.from({ length: 10 }, (_, i) => 91 + i)]) assert(isSpecialSlot(f));
-assert.equal(bossInfo(100).name, (await import('../js/cutscenes.js')).RIVAL_NAME); assert.ok(bossInfo(100).sealed); // final guardian placeholder (sprite still the Last Warden shape)
+assert.equal(bossInfo(100).name, (await import('../js/cutscenes.js')).RIVAL_NAME); assert.ok(bossInfo(100).sealed); assert.equal(bossInfo(100).base, 'umbra'); // final guardian: own two-phase sprite (test/umbra.test.mjs)
 // no adjacent repeats of base or element (generated neighbours)
 for (let f = 2; f <= PLAN_FLOORS; f++) { const a = bossInfo(f - 1), b = bossInfo(f); assert.notEqual(a.base, b.base, `floors ${f - 1}/${f} share base`); if (a.kind === 'generated' || b.kind === 'generated') assert.notEqual(a.element, b.element); }
 // generated names and titles

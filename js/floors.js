@@ -29,7 +29,7 @@ export const floorBossHp = f => f < ARC_HP.from ? ARC1_HP[Math.max(1, f) - 1] : 
 // ---- seeded RNG
 export function rng(seed) { let a = (seed * 2654435761 ^ 0x5eed1337) >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const pick = (r, arr) => arr[Math.floor(r() * arr.length)];
-const GEN_BASES = Object.keys(SHAPES).filter(k => !ARC2_KEYS.includes(k)), GEN_ELEMENTS = Object.keys(ELEMENTS);
+const GEN_BASES = Object.keys(SHAPES).filter(k => !ARC2_KEYS.includes(k) && !SHAPES[k].rival), GEN_ELEMENTS = Object.keys(ELEMENTS);
 const plan = [];
 // Loot element for the hand-made bosses (generated bosses use their own element).
 const NATIVE_ELEMENT = { knight: 'holy', hydra: 'fire', boneking: 'shadow', seraph: 'fire', lich: 'venom', choir: 'storm', golem: 'frost', wyrm: 'storm', dryad: 'venom', dreadknight: 'void' };
@@ -56,13 +56,16 @@ function makeInfo(f) {
     while (addons.length < count) { const a = pick(r, allowed.filter(x => !addons.includes(x))); addons.push(a); }
     info = { floor: f, kind: 'generated', placeholder_special: false, base, element, addons, name: `${ADDONS[addons[0]]} ${ELEMENTS[element].adj} ${SHAPES[base].noun}`, big: !!SHAPES[base].big };
   }
-  if (f === PLAN_FLOORS) info = { ...info, name: RIVAL_NAME, rival: true, sealed: true, bossTitle: RIVAL_TITLE, element: 'native', native: 'void' }; // final guardian placeholder: design still sealed
+  if (f === PLAN_FLOORS) info = { ...info, name: RIVAL_NAME, rival: true, sealed: true, bossTitle: RIVAL_TITLE, element: 'native', native: 'void', kind: 'handmade', placeholder_special: false, base: 'umbra', addons: [], big: true, phases: 2 }; // final guardian: two phases (see bossPhase)
   return { mech: null, lore: null, sig: [], finale: false, ...info, lootElement: info.element === 'native' ? (info.native || NATIVE_ELEMENT[info.base]) : info.element, title: info.bossTitle || `Guardian of Floor ${f}`, hp: floorBossHp(f), milestone: isMilestone(f) };
 }
 export const bossName = f => bossInfo(f).name;
 export const bossIsBig = f => bossInfo(f).big;
 export function bossShape(f) { const i = bossInfo(f); return i.kind === 'generated' ? composeShape(i.base, i.element, i.addons) : composeShape(i.base); }
-export const bossGrid = f => shadeShape(bossShape(f));
+export const bossGrid = (f, phase = 1) => shadeShape(phase === 2 && bossInfo(f).phases === 2 ? composeShape('umbraAwake') : bossShape(f));
+// ---- Two-phase guardians (Floor 100). Phase is derived only from the shared boss HP, so every player sees the same phase; no server state.
+export const AWAKEN_AT = 0.5, AWAKEN_NAME = `${RIVAL_NAME} Awakened`, AWAKEN_TITLE = 'The Tower Rewrites Itself';
+export const bossPhase = (f, hp, maxHp) => bossInfo(f).phases === 2 && maxHp > 0 && hp > 0 && hp / maxHp <= AWAKEN_AT ? 2 : 1;
 
 // ---- Signature mechanics (arc 2). Live-only context (save.ctx.mech / bossPct / element); offline maths ignore them, so they never cut
 // offline progress. All effects are small and use the existing systems: HP layers, enrage (last layer), element weakness, drain.
