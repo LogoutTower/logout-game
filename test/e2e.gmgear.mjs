@@ -15,7 +15,7 @@ const openBag = async p => { await p.evaluate(() => { document.querySelectorAll(
   await p.evaluate(() => [...document.querySelectorAll('button')].find(x => /^\s*Bag/.test(x.textContent) && x.offsetParent)?.click()); await p.waitForSelector('#bag[open] #eqrow .item'); };
 for (const [lv, n, label] of [[28, 1, 'Tier I'], [35, 2, 'Tier II'], [50, 3, 'Tier III'], [65, 4, 'Awakened']]) {
   const { ctx, p, hits } = await page(true, false, lv); await p.waitForTimeout(500); const [wt, at, wn] = await gear(p); assert.equal(wt, n); assert.equal(at, n);
-  if (n === 4) { assert.equal(wn, 'Eventide, Awakened'); } else assert.equal(wn, 'Eventide, the Final Shape');
+  if (n === 4) { assert.equal(wn, 'Eventide, Blade of the Last Dusk'); } else assert.equal(wn, 'Eventide, the Final Shape');
   if (n > 1) { assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('logout.v1.save')).gmTierSeen), n, 'banner marker'); }
   await openBag(p); const t = await p.locator('#eqrow').textContent(); assert(t.includes(label), `${label} on the item card`);
   await p.locator('#bag').screenshot({ path: `${SHOTS}/gmgear-tier${n}.png` });
@@ -23,7 +23,7 @@ for (const [lv, n, label] of [[28, 1, 'Tier I'], [35, 2, 'Tier II'], [50, 3, 'Ti
   assert.deepEqual(hits, []); await ctx.close(); }
 { const { ctx, p, hits } = await page(true, true, 65); await p.waitForTimeout(300);
   await p.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close())); await p.evaluate(() => [...document.querySelectorAll('.cardlink')].find(e => e.dataset.card === 'Builder')?.click());
-  await p.waitForSelector('#idCard[open] .idcard'); const t = await p.textContent('#idCardBody'); assert.match(t, /Eventide, Awakened/); assert.match(t, /Vesperveil, Awakened/); assert.match(t, /Awakened/);
+  await p.waitForSelector('#idCard[open] .idcard'); const t = await p.textContent('#idCardBody'); assert.match(t, /Eventide, Blade of the Last Dusk/); assert.match(t, /Vesperveil, Mantle of the First Dawn/); assert.match(t, /Awakened/);
   assert(!/Dusk Remembered|Gilded Unwriting/.test(t), 'no staff internals'); await p.screenshot({ path: `${SHOTS}/gmgear-tier4-idcard-mobile.png` }); assert.deepEqual(hits, []); await ctx.close(); }
 { const { ctx, p, hits } = await page(false); const [wt] = await gear(p); assert.equal(wt, undefined, 'players never get staff gear'); assert.deepEqual(hits, []); await ctx.close(); }
 assert.deepEqual(errs, []); await b.close(); console.log('gm gear e2e ok');

@@ -505,7 +505,7 @@ async function openSystem() {
 // ---- Staff (gm): entrance notice, Eventide upkeep, hidden unlock field, sandbox.
 let lastAnnSeen = 0, lastFloorSeen = 0;
 function gearAwaken(t) { const h = save.heroes[0], n = document.createElement('div'); n.className = `notice bigsys evolve gearaw t${t.n}`; n.id = 'gearBanner';
-  const w = h.equip?.weapon, a = h.equip?.armor; n.innerHTML = `<small>◈ ${t.n === 4 ? 'Divine Awakening' : 'Staff gear ascends'} · ${esc(t.label)}</small><div class="gearaw-icons">${w?.gm ? ico(w, 'ico big') : ''}${a?.gm ? ico(a, 'ico big') : ''}</div><span>${esc(t.n === 4 ? 'Eventide and Vesperveil awaken' : `Eventide and Vesperveil reach ${t.label}`)}</span>`;
+  const w = h.equip?.weapon, a = h.equip?.armor; n.innerHTML = `<small>◈ ${t.n === 4 ? 'Divine Awakening' : 'Staff gear ascends'} · ${esc(t.label)}</small><div class="gearaw-icons">${w?.gm ? ico(w, 'ico big') : ''}${a?.gm ? ico(a, 'ico big') : ''}</div><span>${esc(t.n === 4 ? `${w?.name || 'Eventide'} · ${a?.name || 'Vesperveil'}` : `Eventide and Vesperveil reach ${t.label}`)}</span>`;
   document.querySelector('#gearBanner')?.remove(); document.body.append(n); setTimeout(() => n.remove(), 6000); log(`System notice: ${t.n === 4 ? 'Divine Awakening' : t.label} · your staff gear answers your level.`, '#f6d77a'); }
 function spiritEvolve(st) { const n = document.createElement('div'); n.className = `notice bigsys evolve s${st.n}`; n.id = 'evolveBanner';
   n.innerHTML = `<small>◈ ${st.n === 1 ? 'Solumbra awakens' : 'Solumbra evolves'} · stage ${st.n} of 3</small>${haloHtml(st.n)}<span>${esc(st.name)}</span>`; document.querySelector('#evolveBanner')?.remove(); document.body.append(n); setTimeout(() => n.remove(), 6000);

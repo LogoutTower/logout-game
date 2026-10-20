@@ -9,7 +9,7 @@ const e = [1, 2, 3, 4].map(t => G.eventide(f, wd, t)), v = [1, 2, 3, 4].map(t =>
 assert.deepEqual(e[0], { ...G.eventide(f, wd), tier: 1, tierLabel: 'Tier I' }, 'tier I = the current version'); assert.equal(e[0].stats.dps, wd); assert.equal(v[0].stats.dpsPct, ap);
 for (let i = 1; i < 4; i++) { assert(e[i].stats.dps > e[i - 1].stats.dps && v[i].stats.dpsPct >= v[i - 1].stats.dpsPct, `tier ${i + 1} bump`); }
 assert(e[3].stats.dps <= wd * 1.2 + 0.1 && v[3].stats.dpsPct <= Math.round(ap * 1.2), 'within the Unique band');
-assert.equal(e[3].name, 'Eventide, Awakened'); assert.equal(v[3].name, 'Vesperveil, Awakened'); assert(e[3].divine && v[3].divine && e[3].show === 'divine');
+assert.equal(e[3].name, 'Eventide, Blade of the Last Dusk'); assert.equal(v[3].name, 'Vesperveil, Mantle of the First Dawn'); assert(e[3].divine && v[3].divine && e[3].show === 'divine');
 assert.equal(e[3].stats.dpsPct, 3); assert.equal(v[3].stats.goldPct, 3); assert(e[3].staffPower.includes('Dusk Remembered') && v[3].staffPower.includes('Gilded Unwriting'));
 assert.equal(e[3].rarity, 'legendary', 'internal rarity unchanged (never in a pool)');
 assert.deepEqual([1, 2, 3, 4].map(t => Ic.iconShape(e[t - 1])), ['katana', 'katana', 'katana2', 'katanaD']); assert.deepEqual([1, 2, 3, 4].map(t => Ic.iconShape(v[t - 1])), ['armor', 'armor', 'armor2', 'armorD']);

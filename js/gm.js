@@ -40,8 +40,8 @@ export const STAFF_STAMP = 'Forged before Floor 1';
 export const GM_TIERS = [{ n: 1, min: 1, label: 'Tier I', mul: 1 }, { n: 2, min: 30, label: 'Tier II', mul: 1.06 }, { n: 3, min: 45, label: 'Tier III', mul: 1.12 }, { n: 4, min: 60, label: 'Divine Awakening', mul: 1.2 }];
 export const gmTier = level => [...GM_TIERS].reverse().find(t => (level | 0) >= t.min) || GM_TIERS[0];
 export const AWAKENED = {
-  weapon: { name: 'Eventide, Awakened', lore: 'System notice: origin found. It was the first shape the dusk ever took, and it remembers.', power: 'Dusk Remembered: +3% damage (still held by the raid softener).', stats: { dpsPct: 3 } },
-  armor: { name: 'Vesperveil, Awakened', lore: 'System notice: wearer identity found. The tower bows and writes the name in gold.', power: 'Gilded Unwriting: +3% gold.', stats: { goldPct: 3 } } };
+  weapon: { name: 'Eventide, Blade of the Last Dusk', lore: 'System notice: origin found. It was the first shape the dusk ever took, and it remembers.', power: 'Dusk Remembered: +3% damage (still held by the raid softener).', stats: { dpsPct: 3 } },
+  armor: { name: 'Vesperveil, Mantle of the First Dawn', lore: 'System notice: wearer identity found. The tower bows and writes the name in gold.', power: 'Gilded Unwriting: +3% gold.', stats: { goldPct: 3 } } };
 export const GM_GEAR_NAMES = [EVENTIDE.name, 'Vesperveil, Mantle of the Unwritten', AWAKENED.weapon.name, AWAKENED.armor.name];
 const tiered = (it, tier, slot) => { const t = GM_TIERS[Math.min(4, Math.max(1, tier | 0)) - 1]; it.tier = t.n; it.tierLabel = t.label;
   for (const k of Object.keys(it.stats)) it.stats[k] = k === 'dps' ? +(it.stats[k] * t.mul).toFixed(1) : Math.round(it.stats[k] * t.mul);
