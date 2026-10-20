@@ -103,7 +103,7 @@ function showCreate() {
   picker($('cpick'), CREATION_SLOTS, draftLook, cls, { cleared: [], top3: [], rank1: 0 }, id => { draftLook[byId(id).type] = id; showCreate(); });
   $('start').onclick = async () => {
     const h = newHero($('hname').value.trim(), cls); h.look = { ...draftLook };
-    save = migrateSave({ version: 2, heroes: [h], gold: 0, lastTick: Date.now(), progress: { cleared: [], top3: [], rank1: 0 } }); // fills v3 fields
+    save = migrateSave({ version: 2, heroes: [h], gold: 0, lastTick: Date.now(), progress: { cleared: [], top3: [], rank1: 0 }, introDue: true, csV: 2 }); // fills v3 fields
     await be.saveSave(save); $('create').classList.add('hidden'); startGame(true);
   };
 }
@@ -187,9 +187,13 @@ const ELEMENT_GLOW = { fire: '#ff8a2e', frost: '#9fd8ff', void: '#9a5cff', storm
 // "Entering <arc>": once per device when the shared floor first reaches a new arc (silent on the very first visit).
 // Cutscenes: shown once per player (save.cutscenes), driven by the shared server floor; intro only for brand-new heroes.
 let csBusy = false;
+// Marked seen only after it was actually shown to the end (or skipped): a reload, deploy refresh or killed phone tab mid-cutscene replays it next load.
+// csV 2: before this fix arc cutscenes were marked seen before playing and were unwatchable on phones, so arc 1 is re-queued once for everyone.
 async function csCheck(fresh = false) { if (csBusy || !save || (navigator.webdriver && !localStorage.getItem('logout.v1.csTest'))) return; save.cutscenes = save.cutscenes || []; // automated runs opt in via logout.v1.csTest
-  const k = pendingCutscene(floor, MAX_FLOOR, save.cutscenes, { fresh }); if (!k) return;
-  csBusy = true; save.cutscenes.push(k); be.saveSave(save).catch(() => {}); await playCutscene(k); csBusy = false; csCheck(); }
+  if ((save.csV || 0) < 2) { save.cutscenes = save.cutscenes.filter(k => k !== '1'); save.csV = 2; }
+  const k = pendingCutscene(floor, MAX_FLOOR, save.cutscenes, { fresh: fresh || !!save.introDue }); if (!k) return;
+  csBusy = true; const ok = await playCutscene(k).catch(() => false); csBusy = false;
+  if (ok) { if (!save.cutscenes.includes(k)) save.cutscenes.push(k); if (k === 'intro') delete save.introDue; await be.saveSave(save).catch(() => {}); csCheck(); } }
 function arcCheck() { const a = arcIndex(floor.floor), k = 'logout.v1.arcSeen', seen = +localStorage.getItem(k) || 0;
   if (seen && a > seen) { const n = arcOf(floor.floor).name; log(`System notice: Entering ${n}.`, '#9fd8ff'); setTimeout(() => notice(`Entering ${n}`, '#9fd8ff'), 3200); }
   if (a > seen) localStorage.setItem(k, String(a)); }
@@ -380,6 +384,7 @@ $('tnext').onclick = () => tourShow(tourAt + 1); $('tback').onclick = () => tour
 async function checkDeploy() {
   try { const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' }); if (!r.ok) return; const { build } = await r.json();
     if (!build || build === BUILD || sessionStorage.getItem('logout.v1.reloadFor') === build) return;
+    if (document.getElementById('cutscene')?.open) return; // never reload mid-cutscene; the next check (visibility / 5 min) picks it up
     sessionStorage.setItem('logout.v1.reloadFor', build); if (save && be) await be.saveSave(save); location.reload();
   } catch { /* offline or blocked: keep playing */ }
 }

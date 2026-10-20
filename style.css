@@ -356,6 +356,16 @@ nav.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:35;display:flex;justif
 @media (prefers-reduced-motion:reduce){#cutscene.near .cs-h{animation:none}}
 .fl .shade{width:12px;height:18px;background:radial-gradient(circle at 35% 38%,#c79bff 0 1px,transparent 2px),radial-gradient(circle at 65% 38%,#c79bff 0 1px,transparent 2px),linear-gradient(#2c1a4a,#07040c);border-radius:7px 7px 2px 2px;box-shadow:0 0 6px #8a5aff}
 #cutscene{width:100vw;height:100vh;max-width:none;max-height:none;margin:0;padding:0;border:0}#cutscene:not([open]){display:none}#cutscene::backdrop{background:#05030a}
+/* Cutscene is a full-viewport overlay on every screen: these beat the mobile bottom-sheet dialog rules (inset/width/max-height !important,
+   sheet animation, sticky full-width last button) that otherwise turned it into a shifted sheet with Skip stretched over the art. */
+#cutscene[open]{position:fixed!important;inset:0!important;width:100%!important;max-width:none!important;height:100%!important;height:100dvh!important;max-height:none!important;margin:0!important;
+ padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)!important;border:0!important;border-radius:0!important;clip-path:none!important;animation:none!important;transform:none!important;
+ overflow:hidden!important;box-sizing:border-box;display:flex;touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+#cutscene .cs-art{display:block;width:min(100%,calc((100dvh - 230px) * 160 / 96),900px);height:auto;max-height:none}
+#cutscene .cs-box{box-sizing:border-box;width:min(calc(100% - 24px),720px);max-height:42dvh;overflow-y:auto}
+#cutscene .cs-skip{position:absolute!important;top:calc(10px + env(safe-area-inset-top))!important;right:calc(10px + env(safe-area-inset-right))!important;bottom:auto!important;left:auto!important;width:auto!important;
+ min-height:44px;margin:0!important;border-radius:6px;z-index:2}
+@media(max-width:640px){#cutscene .cs-t{font-size:15px}.band .replay{min-height:32px;font-size:12px;padding:4px 10px}}
 .dcal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:4px 0}.dday{border:1px solid #3a3160;border-radius:6px;padding:3px 0;text-align:center;display:flex;flex-direction:column;font-size:11px;opacity:.7}
 .dday b{font-size:13px}.dday.done{border-color:#ffd76a;opacity:1;background:#ffd76a14}.dday.next{border-color:#3ff7ff;opacity:1;box-shadow:0 0 6px #3ff7ff66}.gdon{display:flex;gap:6px;flex-wrap:wrap}
 /* ---- pets (one cached 8×8 sprite, CSS bob only) + Solumbra spirit (staff) + eclipse */

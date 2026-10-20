@@ -53,19 +53,19 @@ export function playCutscene(key, { onEnd } = {}) {
   const cs = CUTSCENES[key]; if (!cs) return Promise.resolve(false);
   document.getElementById('cutscene')?.remove();
   const el = document.createElement('dialog'); el.id = 'cutscene'; el.setAttribute('aria-label', cs.title); el.tabIndex = -1;
-  el.innerHTML = `<canvas class="cs-art"></canvas><div class="cs-box"><small class="cs-h">System notice · ${cs.title}</small><p class="cs-t" aria-live="polite"></p><small class="cs-n"></small></div><button class="cs-skip" type="button">Skip ▸▸</button>`;
+  el.innerHTML = `<button class="cs-skip" type="button">Skip ▸▸</button><canvas class="cs-art" width="${W}" height="${H}"></canvas><div class="cs-box"><small class="cs-h">System notice · ${cs.title}</small><p class="cs-t" aria-live="polite"></p><small class="cs-n"></small></div>`;
   document.body.append(el); el.showModal?.(); el.addEventListener('cancel', e => { e.preventDefault(); end(); }); el.focus(); // top layer: above any open dialog
   const cv = el.querySelector('canvas'), tx = el.querySelector('.cs-t'), nn = el.querySelector('.cs-n'), rm = reduced();
-  let i = -1, typing = 0, full = '', raf = 0, t0 = 0, done;
+  let i = -1, typing = 0, full = '', raf = 0, t0 = 0, tt = 0, ended = false, done;
   const name = n => ARC_NAMES[n] || arcOf(n * 10).name;
   const anim = now => { const p = cs.panels[i], t = rm ? 1 : Math.min(1, (now - t0) / 1400); drawPanel(cv, p, t); if (t < 1) raf = requestAnimationFrame(anim); };
-  const type = () => { if (typing >= full.length) return; typing += 2; tx.textContent = full.slice(0, typing); setTimeout(type, 24); };
+  const type = () => { if (typing >= full.length) return; typing += 2; tx.textContent = full.slice(0, typing); tt = setTimeout(type, 24); };
   const show = () => { i++; if (i >= cs.panels.length) return end(); const p = cs.panels[i]; full = fillText(p.text, cs, name); nn.textContent = `${i + 1} / ${cs.panels.length} · tap to continue`; el.querySelector('.cs-h').textContent = p.glitch ? `Sys̶tem n0t̷ice · ${cs.title}` : `System notice · ${cs.title}`; el.classList.toggle('near', !!p.glitch);
     if (!rm) { el.classList.remove('glitch'); void el.offsetWidth; el.classList.add('glitch'); }
-    cancelAnimationFrame(raf); t0 = performance.now(); raf = requestAnimationFrame(anim); if (rm) { typing = full.length; tx.textContent = full; } else { typing = 0; tx.textContent = ''; type(); } };
+    cancelAnimationFrame(raf); clearTimeout(tt); drawPanel(cv, p, rm ? 1 : 0); t0 = performance.now(); raf = requestAnimationFrame(anim); if (rm) { typing = full.length; tx.textContent = full; } else { typing = 0; tx.textContent = ''; type(); } };
   const next = () => { if (typing < full.length) { typing = full.length; tx.textContent = full; } else show(); };
-  const end = () => { cancelAnimationFrame(raf); el.close?.(); el.remove(); document.removeEventListener('keydown', key2); onEnd?.(); done(true); };
+  const end = () => { if (ended) return; ended = true; cancelAnimationFrame(raf); clearTimeout(tt); el.close?.(); el.remove(); document.removeEventListener('keydown', key2); onEnd?.(); done(true); };
   const key2 = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); next(); } };
-  el.addEventListener('click', e => { if (e.target.closest('.cs-skip')) end(); else next(); }); document.addEventListener('keydown', key2);
+  el.addEventListener('click', e => { e.stopPropagation(); if (e.target.closest('.cs-skip')) end(); else next(); }); document.addEventListener('keydown', key2);
   return new Promise(r => { done = r; show(); });
 }
