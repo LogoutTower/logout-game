@@ -13,6 +13,7 @@ import { featureOn } from './features.js';
 import { checkGuild, GUILD_CAP, GUILD_BUFF, STAFF_GUILD, STAFF_MARK, guildError } from './guilds.js';
 import { cleanChat, CHAT_MAX } from './chatfilter.js';
 import { boardWithStaff, wouldRankLabel } from './ranks.js';
+import { GM_TIERS } from './gm.js';
 import { gmTier, gmGear, wearsVesperveil, STAFF_STAMP, VESPERVEIL, staffActive, GM_CLASS, GM_LUCK, GM_SIGIL, EVENTIDE, gmOn, checkPass, sanitizeSave, becomeGm, leaveGm, eventide, shouldAnnounce } from './gm.js';
 import { initUI, go as goTab, townPane, syncHall, setDot, setHeroLabels, heroTab } from './ui.js';
 import { openSandbox, sandboxFloor, sandboxFight, sandboxLoot, closeSandbox, sandboxEdit } from './sandbox.js';
@@ -314,6 +315,9 @@ function render() {
   H('stats').innerHTML = `${classOf(h.cls).icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${effectiveDps(save).toFixed(1)}</b> · HP <b>${Math.round(heroHp(h))}/${heroMaxHp(h)}</b> · Gold <b>${fmt(save.gold)}</b>${gmValid ? ` · Luck <b>+${GM_LUCK}%</b>` : ''}`;
   const capNow = levelCap(floor?.floor, gmValid), capped = atCap(h, capNow);
   H('lvlL').textContent = capped ? 'Lv cap' : `Train ${fmt(levelCost(h))}g`; if (capped) { $('lvl').title = `Level cap ${capNow}: clearing Floor ${floor.floor} raises it to ${capNow + 1}`; } $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`; $('lvl').disabled = capped || save.gold < levelCost(h); if (!capped) $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`;
+  { const gr = $('gmReplay'), on = gmValid && h.cls === GM_CLASS, n = on ? gmTier(h.level).n : 1, html = on && n >= 2 ? `<small>Replay awakening:</small> ${GM_TIERS.filter(t => t.n >= 2 && t.n <= n).map(t => `<button data-gmt="${t.n}">${t.n === 4 ? 'Divine' : t.label}</button>`).join('')}` : '';
+    if (gr.dataset.h !== html) { gr.dataset.h = html; gr.innerHTML = html; gr.hidden = !html; gr.onclick = e => { const b = e.target.closest('[data-gmt]'); if (!b) return; const t = +b.dataset.gmt, f = floor?.floor || 1, d = legendaryWeaponDps(f), a = eventide(f, d, t - 1), z = eventide(f, d, t), T = GM_TIERS[t - 1];
+      playForge('evolve', a, z, true, it => ico(it, 'ico fbig'), { kicker: `Staff gear · ${t === 4 ? 'Divine Awakening' : T.label}`, title: z.name, text: `${T.label} · Vesperveil awakens with it · replay only` }); }; } } // cosmetic replay, changes nothing
   H('equipped').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip?.[s]; return `<span class="eq" style="${it ? `color:${rarityOf(shownRarity(it)).color}` : ''}">${s[0].toUpperCase() + s.slice(1)}: ${it ? esc(it.name) + (it.up ? ` +${it.up}` : '') : '—'}</span>`; }).join('');
   { const fp = treeOf(h.cls).length ? freePoints(h) : 0, bs = bagSize(save), full = save.inv.length >= bs - 2; setHeroLabels({ bag: `Bag ${save.inv.length}/${bs}`, talents: isCodex(h) ? 'Codex' : fp > 0 ? `Talents · ${fp}` : 'Talents', talentsDot: fp > 0, bagDot: full });
     setDot('dotHero', fp > 0 || full, [fp > 0 ? `${fp} talent point${fp > 1 ? 's' : ''} to spend` : '', full ? (save.inv.length >= bs ? 'Bag full' : 'Bag nearly full') : ''].filter(Boolean).join(' · '));

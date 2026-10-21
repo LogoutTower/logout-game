@@ -32,7 +32,9 @@ export const effectsOf = h => new Set(['weapon', 'armor'].flatMap(k => { const w
 export const FX = { tenthMul: 1.1, heavyMul: 0.95, lastLayer: { below: 0.2, mul: 1.3 }, lifesteal: 0.65, drain: 1.2, steadyLowMul: 0.85, hearthHp: 0.5, momentum: { perMin: 0.01, max: 0.3 }, milestoneMul: 1.5, thornsMul: 1.08, aegis: 0.8, stillness: 0.65, dodgeDrain: 0.9, dodgeMul: 1.03, restfulPerMin: 0.01, innkeep: 0.6 };
 // Weapon upgrades +1..+10 (js/forge.js): +3% damage per level on the equipped weapon. Staff gear (it.gm) never counts.
 export const UP_DPS = 0.03;
-export const upMul = h => { const w = h?.equip?.weapon; return w && !w.gm ? 1 + UP_DPS * Math.max(0, Math.min(10, w.up | 0)) : 1; };
+export const EVO_DPS = 0.08, EVO_CAP = 5; // prestige: +8% base damage per evo tier, Evo V max (schema-addendum-forge-prestige.sql)
+export const evoTier = w => w?.evo && !w.gm ? Math.max(1, Math.min(EVO_CAP, w.evo.tier | 0 || 1)) : 0; // old evolved weapons (no tier) are Evo I
+export const upMul = h => { const w = h?.equip?.weapon; return w && !w.gm ? (1 + UP_DPS * Math.max(0, Math.min(10, w.up | 0))) * (1 + EVO_DPS * evoTier(w)) : 1; };
 export const heroDps = h => { const c = classOf(h.cls), g = gearBonus(h), e = effectsOf(h); return +((c.atk * c.spd * (1 + 0.25 * (h.level - 1)) + g.dps) * (1 + 0.15 * h.gear) * upMul(h) * (1 + g.dpsPct / 100) * talentDpsMul(h) * (e.has('tenth') ? FX.tenthMul : 1) * (e.has('heavy') ? FX.heavyMul : 1) * (e.has('thorns') ? FX.thornsMul : 1) * (e.has('dodge') ? FX.dodgeMul : 1)).toFixed(3); };
 const talentDpsMul = h => { const t = talentBonus(h), high = t.highHpDpsPct && heroHp(h) > 0.5 * heroMaxHp(h) ? t.highHpDpsPct : 0; return (1 + (t.dpsPct + t.rallyPct + t.eclipsePct + t.crackPct + high) / 100) * (1 + t.doublePct / 100); };
 const goldMul = heroes => 1 + (gearBonus(heroes[0]).goldPct + talentBonus(heroes[0]).goldPct) / 100, xpMul = heroes => 1 + (gearBonus(heroes[0]).xpPct + talentBonus(heroes[0]).xpPct) / 100;

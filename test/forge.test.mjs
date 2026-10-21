@@ -11,8 +11,10 @@ const h = newHero('A', 'Blade'); h.equip = { weapon: W({ up: 5 }) }; const s = {
 const d0 = heroDps(h); let r = forgeLocal(s, () => 99); assert(!r.ok); assert.equal(h.equip.weapon.up, 5); assert.equal(s.gold, 1e9); assert.equal(s.mats.shard, 0);
 assert.throws(() => forgeLocal(s, () => 0), /materials/);
 s.mats = { shard: 10, ess2: 3 }; r = forgeLocal(s, () => 0); assert(r.ok); assert.equal(h.equip.weapon.up, 6); assert(heroDps(h) > d0);
-h.equip.weapon = W({ up: 10 }); s.mats.sigil20 = 1; r = forgeLocal(s, () => 50); assert(r.ok && h.equip.weapon.evo && h.equip.weapon.name.startsWith('Tideforged') === false);
-assert.equal(nextCost(h.equip.weapon), null);
+h.equip.weapon = W({ up: 10 }); s.mats.sigil20 = 9; r = forgeLocal(s, () => 50); assert(r.ok && h.equip.weapon.evo.tier === 1 && h.equip.weapon.up === 0 && h.equip.weapon.name === 'Rimeforged Blade' === false);
+for (let i = 2; i <= 5; i++) { h.equip.weapon.up = 10; forgeLocal(s, () => 0); assert.equal(h.equip.weapon.evo.tier, i); } assert.match(h.equip.weapon.name, / V$/); h.equip.weapon.up = 10; assert.equal(nextCost(h.equip.weapon), null);
+{ const a = newHero('A', 'Blade'), b = newHero('B', 'Blade'); a.equip = { weapon: W({ up: 10 }) }; b.equip = { weapon: W({ up: 10, evo: { tier: 5 } }) }; assert(Math.abs(heroDps(b) / heroDps(a) - 1.4) < 1e-3, 'Evo V = +40% base'); }
+assert.equal(nextCost(W({ up: 10, rarity: 'uncommon' })), null, 'uncommon cannot evolve');
 // GM gear never gains the upgrade multiplier
 const g = newHero('G', 'Blade'); g.equip = { weapon: { slot: 'weapon', gm: true, up: 10, stats: { dps: 5 } } }; const g2 = newHero('G', 'Blade'); g2.equip = { weapon: { slot: 'weapon', gm: true, stats: { dps: 5 } } }; assert.equal(heroDps(g), heroDps(g2));
 // drops: deterministic from time, no cores outside farm

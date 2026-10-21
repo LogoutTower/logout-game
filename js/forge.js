@@ -1,8 +1,9 @@
 // Weapon upgrades +1..+10 and materials. Pure (no DOM). Mirrors supabase/schema-addendum-forge.sql (pglite test checks parity).
 // Online the SERVER rolls (forge_upgrade RPC); this file mirrors the rules for display and rolls on this browser in local mode only.
 // Materials are in-game only: never the token, never real value. Staff gear (Eventide / Vesperveil, it.gm) keeps its own tier path.
-import { UP_DPS } from './game.js';
-export { UP_DPS };
+import { UP_DPS, EVO_DPS, EVO_CAP, evoTier } from './game.js';
+export { UP_DPS, EVO_DPS, EVO_CAP, evoTier };
+export const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
 export const MAX_UP = 10;
 /** Success chance (%) by target level: +1..+5 never fail. A fail burns the materials only (gold, weapon and level are kept). */
 export const UP_RATE = [100, 100, 100, 100, 100, 100, 90, 75, 60, 45, 30];
@@ -20,16 +21,26 @@ export const matName = key => { const k = kindOf(key), n = +key.slice(k.length);
 export const matIcon = key => { const m = MAT_KINDS[kindOf(key)]; return `<i class="mat mat-${kindOf(key)}" style="color:${m.color}" title="${m.label} · ${m.rarity}">${m.icon}</i>`; };
 export const canForge = it => !!it && it.slot === 'weapon' && !it.gm && !String(it.id || '').startsWith('gm-');
 export const wFloor = it => Math.max(1, Math.min(100, Math.floor(+it?.floor || 1)));
-export const upGold = (it, t) => Math.round(120 * Math.pow(1.6, t) * (1 + (wFloor(it) - 1) / 4));
-/** Cost of reaching level t (t = 11 means evolve). Materials only from +6 up. */
-export function upCost(it, t) {
+/** Gold for level t at evo tier e: +50% per tier. */
+export const upGold = (it, t, e = 0) => Math.round(120 * Math.pow(1.6, t) * (1 + (wFloor(it) - 1) / 4) * (1 + 0.5 * e));
+// Prestige pacing (tuned for ~10 weeks of active play to Evo V +10; see the forge-prestige SQL header): material counts ×(1 + 0.75e),
+// sigils to evolve into Evo I..V: 1, 1, 2, 2, 3.
+export const EVO_SIGILS = [1, 1, 2, 2, 3];
+const scale = (n, e) => Math.round(n * (1 + 0.75 * e));
+/** Cost of reaching level t (t = 11 means evolve / prestige) at evo tier e. Materials only from +6 up. */
+export function upCost(it, t, e = 0) {
   const f = wFloor(it), s = setOf(f), m = {};
-  if (t === 6) { m.shard = 10; m['ess' + s] = 3; } else if (t === 7) { m.shard = 20; m['ess' + s] = 5; }
-  else if (t === 8) { m['ess' + s] = 8; m['core' + f] = 2; } else if (t === 9) { m['ess' + s] = 12; m['core' + f] = 4; }
-  else if (t === 10) m['core' + f] = 6; else if (t === 11) m['sigil' + milestoneOf(f)] = 1;
-  return { t, gold: upGold(it, t), mats: m, rate: t > MAX_UP ? 100 : UP_RATE[t] };
+  if (t === 6) { m.shard = scale(10, e); m['ess' + s] = scale(3, e); } else if (t === 7) { m.shard = scale(20, e); m['ess' + s] = scale(5, e); }
+  else if (t === 8) { m['ess' + s] = scale(8, e); m['core' + f] = scale(2, e); } else if (t === 9) { m['ess' + s] = scale(12, e); m['core' + f] = scale(4, e); }
+  else if (t === 10) m['core' + f] = scale(6, e); else if (t === 11) m['sigil' + milestoneOf(f)] = EVO_SIGILS[Math.min(4, e)];
+  return { t, e, gold: upGold(it, t, e), mats: m, rate: t > MAX_UP ? 100 : UP_RATE[t] };
 }
-export const nextCost = it => canForge(it) ? (it.up || 0) < MAX_UP ? upCost(it, (it.up || 0) + 1) : it.evo ? null : upCost(it, 11) : null;
+/** Only Rare or better can evolve (rarity scale in js/loot.js: common < uncommon < rare < epic < legendary < unique). */
+export const RANK = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4, unique: 5 };
+export const EVO_MIN_RARITY = 'rare';
+export const rankOf = it => RANK[it?.rarity] ?? 0;
+export const canEvolve = it => canForge(it) && rankOf(it) >= RANK[EVO_MIN_RARITY];
+export const nextCost = it => { if (!canForge(it)) return null; const e = evoTier(it); return (it.up || 0) < MAX_UP ? upCost(it, (it.up || 0) + 1, e) : e < EVO_CAP && canEvolve(it) ? upCost(it, 11, e) : null; };
 export const lacking = (save, c) => [...(save.gold < c.gold ? ['gold'] : []), ...Object.entries(c.mats).filter(([k, n]) => (save.mats?.[k] || 0) < n).map(([k]) => k)];
 // Evolution: one form per 10-floor set of the weapon (a new name, a new look, one bonus effect). Never Eventide/Vesperveil.
 export const EVOS = [
@@ -47,11 +58,15 @@ export function applyAttempt(save, it, c, roll) {
   if (ok) { save.gold -= c.gold; if (c.t > MAX_UP) evolve(it); else it.up = c.t; }
   return { ok, roll, rate: c.rate, t: c.t };
 }
-export function evolve(it) { const e = evoOf(it); it.evo = { base: it.name, pre: e.pre, hue: e.hue, text: e.text }; it.name = `${e.pre} ${it.name}`.slice(0, 60); it.stats = { ...it.stats, [e.k]: (it.stats?.[e.k] || 0) + e.v }; return it; }
+/** Evolve / prestige: Evo I the first time (name, look, one bonus effect), then Evo II..V. Always resets the weapon to +0. */
+export function evolve(it) { const e = evoOf(it), n = evoTier(it) + 1;
+  if (!it.evo) { it.evo = { base: it.name, pre: e.pre, hue: e.hue, text: e.text }; it.stats = { ...it.stats, [e.k]: (it.stats?.[e.k] || 0) + e.v }; }
+  it.evo.tier = n; it.name = evoName(it); it.up = 0; return it; }
+export const evoName = it => `${it.evo.pre} ${it.evo.base}${evoTier(it) > 1 ? ' ' + ROMAN[evoTier(it)] : ''}`.slice(0, 64);
 /** Local roll (offline / local mode). Throws a readable reason. */
 export function forgeLocal(save, rnd = n => Math.floor(Math.random() * n)) {
   const it = save.heroes[0]?.equip?.weapon; if (!it) throw new Error('equip a weapon first'); if (!canForge(it)) throw new Error('staff gear has its own path');
-  const c = nextCost(it); if (!c) throw new Error('this weapon is fully evolved'); if (lacking(save, c).length) throw new Error(lacking(save, c)[0] === 'gold' ? 'not enough gold' : 'not enough materials');
+  const c = nextCost(it); if (!c) throw new Error(`this weapon is at Evo ${ROMAN[EVO_CAP]}, the final form`); if (lacking(save, c).length) throw new Error(lacking(save, c)[0] === 'gold' ? 'not enough gold' : 'not enough materials');
   return applyAttempt(save, it, c, rnd(100));
 }
 // ---- Material drops (per hour of fighting; fractional carry so they are deterministic from timestamps, like gold).
@@ -79,6 +94,31 @@ export function lootKey(set, upTo = set * 10) {
 }
 const perH = n => n ? n >= 0.5 ? `${n}/h` : `1 per ${Math.round(1 / n)}h` : "—";
 export function lootKeyHtml(set, upTo) {
-  return `<table class="lootkey"><caption>Loot key · Floors ${(set - 1) * 10 + 1}–${set * 10}</caption><tr><th></th><th>Material</th><th>Fighting</th><th>Farming</th></tr>${lootKey(set, upTo).map(r =>
+  return `<table class="lootkey"><caption>Loot key · Floors ${(set - 1) * 10 + 1}–${set * 10}<br><small>Cores and Sigils drive the Forge prestige loop: each Evo tier (I–V) of a weapon from this set costs more of them.</small></caption><tr><th></th><th>Material</th><th>Fighting</th><th>Farming</th></tr>${lootKey(set, upTo).map(r =>
     `<tr><td><i class="mat" style="color:${r.color}" title="${r.rarity}">${r.icon}</i></td><td><b style="color:${r.color}">${r.name}</b><br><small>${r.rarity} · ${r.where}</small></td><td>${perH(r.fight)}</td><td>${perH(r.farm)}</td></tr>`).join('')}</table>`;
 }
+// ---- Transfer (a MOVE, never a copy): the equipped weapon's evo tier goes onto a bag weapon of equal or higher rarity (Rare+, not staff
+// gear). The target ends at the higher of the two tiers (keeping its own form if it was already evolved). The target arrives at +0 (its +levels are not kept): the tier's +8% each moves, the +6..+10 climb is redone at that tier's costs, so a
+// transfer can't skip the grind. The source keeps its stats minus the evo bonus effect, returns to its base name and +0, and goes to the bag.
+// Fee scales with the tier moved AND the rarity gap: ×1.5 per rarity step up (same rarity = base fee). Grind costs never depend on rarity.
+export const XFER_STEP = 1.5;
+export const transferGap = (src, dst) => Math.max(0, rankOf(dst) - rankOf(src));
+export const transferCost = (src, dst) => { const e = evoTier(src), m = Math.pow(XFER_STEP, transferGap(src, dst)), r = n => Math.round(n * m);
+  return { gold: r(upGold(dst, 10, e)), mats: { shard: r(30 * e), ['ess' + setOf(wFloor(dst))]: r(10 * e) }, gap: transferGap(src, dst), mul: m }; };
+export function transferCheck(save, i, id) {
+  const src = save.heroes[0]?.equip?.weapon, dst = save.inv?.[i];
+  if (!src || !canForge(src) || !evoTier(src)) return 'equip an evolved weapon first';
+  if (!dst || dst.id !== id || dst.slot !== 'weapon' || !canForge(dst)) return 'pick a weapon from your bag';
+  if (!canEvolve(dst) || rankOf(dst) < rankOf(src)) return 'the target must be Rare or better and at least the same rarity';
+  return null;
+}
+export function applyTransfer(save, i) {
+  const src = save.heroes[0].equip.weapon, dst = save.inv[i], e = evoTier(src), c = transferCost(src, dst), ev = EVOS.find(x => x.pre === src.evo.pre) || evoOf(src);
+  save.gold -= c.gold; for (const [k, n] of Object.entries(c.mats)) save.mats[k] = (save.mats[k] || 0) - n;
+  const st = { ...src.stats }; st[ev.k] = (st[ev.k] || 0) - ev.v; if (!st[ev.k]) delete st[ev.k];
+  const back = { ...src, name: src.evo.base, stats: st, up: 0 }; delete back.evo;
+  const te = Math.max(e, evoTier(dst)); if (!dst.evo) evolve(dst); dst.evo.tier = te; dst.name = evoName(dst); dst.up = 0; // a MOVE: the target keeps the higher tier, the source is wiped
+  save.inv[i] = back; save.heroes[0].equip.weapon = dst; return { e, from: back.name, to: dst.name };
+}
+export function transferLocal(save, i, id) { const err = transferCheck(save, i, id); if (err) throw new Error(err); const c = transferCost(save.heroes[0].equip.weapon, save.inv[i]);
+  if (lacking(save, c).length) throw new Error(lacking(save, c)[0] === 'gold' ? 'not enough gold' : 'not enough materials'); return applyTransfer(save, i); }

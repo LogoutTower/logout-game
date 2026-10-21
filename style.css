@@ -527,3 +527,4 @@ body.tabhidden .halo .corona{animation-play-state:paused}
 .fanim.evo .fcard{border-color:#c26bff;box-shadow:0 0 24px #c26bff66}.fcard small{color:#c26bff;letter-spacing:.2em;text-transform:uppercase}.fcard b{font-size:20px;color:#ffd76a}.fcard b.bad{color:#ff7a7a}
 @keyframes fcard{from{transform:translateY(10px);opacity:0}}.fskip{position:absolute;bottom:18px;opacity:.5}
 @media (prefers-reduced-motion:reduce){.fweap{animation:none}}
+.gmreplay{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}.gmreplay button{min-height:0;padding:4px 10px;font-size:12px}

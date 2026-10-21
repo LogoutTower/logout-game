@@ -41,7 +41,7 @@ await put({ gold: 1e9, mats: { sigil10: 1 }, heroes: [{ equip: { weapon: W({ up:
 await put({ gold: 1e9, mats: { sigil10: 1 }, heroes: [{ equip: { weapon: W({ up: 10 }) } }] }); assert.match(await err(up()), /evolve/);
 let r = await up(true); assert(r.ok); d = await get(); const w = d.heroes[0].equip.weapon;
 assert.equal(w.name, 'Cinderborn Runed Blade'); assert.equal(w.stats.dpsPct, 8); assert.equal(w.evo.base, 'Runed Blade'); assert.equal(d.mats.sigil10, 0);
-assert.match(await err(up(true)), /fully evolved/);
+assert.equal(w.up, 0, 'prestige addendum: evolving resets to +0'); assert.equal(w.evo.tier, 1);
 // staff gear refused; no weapon refused
 await put({ gold: 1e9, heroes: [{ equip: { weapon: W({ id: 'gm-katana', gm: true }) } }] }); assert.match(await err(up()), /staff gear/);
 await put({ gold: 1e9, heroes: [{ equip: { weapon: W({ id: 'x', gm: true }) } }] }); assert.match(await err(up()), /staff gear/);

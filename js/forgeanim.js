@@ -12,7 +12,9 @@ function sparks(cv, n, hue) {
   step(); return () => cancelAnimationFrame(raf);
 }
 /** ico: (item) => html. Resolves when the animation ends (or is tapped away). */
-export async function playForge(kind, before, after, ok, ico) {
+const RN = ['', 'I', 'II', 'III', 'IV', 'V'];
+/** card (optional): { kicker, title, text } overrides the name card (GM tier replays). */
+export async function playForge(kind, before, after, ok, ico, card0 = null) {
   const reduced = matchMedia?.('(prefers-reduced-motion: reduce)').matches, evo = kind === 'evolve' && ok;
   const o = document.createElement('div'); o.className = 'fanim' + (evo ? ' evo' : ''); o.setAttribute('role', 'status');
   o.innerHTML = `<canvas class="fspark"></canvas><div class="fstage"><div class="fweap">${ico(before)}</div><div class="fhammer" aria-hidden="true">🔨</div><div class="fanvil" aria-hidden="true"></div></div><div class="fcard" hidden></div><small class="fskip">tap to skip</small>`;
@@ -26,7 +28,7 @@ export async function playForge(kind, before, after, ok, ico) {
     w.innerHTML = [0, 1, 2, 3].map(i => `<span class="shard s${i}">${ico(before)}</span>`).join(''); w.classList.add('shatter'); await wait(reduced ? 80 : 550);
     w.classList.remove('shatter'); w.innerHTML = ico(after); w.classList.add('spinin'); await wait(reduced ? 80 : 800);
   } else if (!skip && ok) { w.innerHTML = ico(after); w.classList.add('glint'); }
-  card.hidden = false; card.innerHTML = evo ? `<small>Evolved</small><b>${esc(after.name)}</b><span>${esc(after.evo?.text || '')}</span>` : ok ? `<b>+${after.up || 0}</b><span>${esc(after.name)}</span>` : `<b class="bad">Failed</b><span>The materials burned. Your weapon held at +${after.up || 0}.</span>`;
+  card.hidden = false; card.innerHTML = card0 ? `<small>${esc(card0.kicker)}</small><b>${esc(card0.title)}</b><span>${esc(card0.text || '')}</span>` : evo ? `<small>Evolved · Evo ${RN[Math.max(1, Math.min(5, after.evo?.tier | 0 || 1))]}</small><b>${esc(after.name)}</b><span>${esc(after.evo?.text || '')} · +${8 * Math.max(1, Math.min(5, after.evo?.tier | 0 || 1))}% base damage</span>` : ok ? `<b>+${after.up || 0}</b><span>${esc(after.name)}</span>` : `<b class="bad">Failed</b><span>The materials burned. Your weapon held at +${after.up || 0}.</span>`;
   const hold = Date.now(); while (!skip && Date.now() - hold < (evo ? 1800 : 700)) await wait(50);
   o.classList.remove('on'); await wait(200); o.remove();
 }
