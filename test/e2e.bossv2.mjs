@@ -22,7 +22,7 @@ const info = p => p.evaluate(() => { const bo = document.getElementById('boss'),
 const RUNS = [['desktop', { viewport: { width: 1280, height: 900 } }], ['mobile', devices['iPhone 13']]];
 const results = [];
 // non-staff: classic sprite
-{ const { ctx, p, errs } = await page(RUNS[0][1], false, 1); const i = await info(p); assert.equal(i.v2, false, 'non-staff: no v2'); assert.match(i.bg, /svg/); assert.deepEqual(errs, []); await ctx.close(); console.log('non-staff classic ok'); }
+{ const { ctx, p, errs } = await page(RUNS[0][1], false, 1); const i = await info(p); const ALL = (await import('../config.js')).FEATURES.bossV2 === 'all'; assert.equal(i.v2, ALL, `non-staff: v2 ${ALL ? 'on' : 'off'}`); assert.match(i.bg, ALL ? /png/ : /svg/); assert.deepEqual(errs, []); await ctx.close(); console.log('non-staff ok'); }
 for (const [name, dev] of RUNS) for (const f of FLOORS) {
   const { ctx, p, errs } = await page(dev, true, f); const i = await info(p); results.push({ name, f, ...i });
   assert.equal(i.v2, true, `${name} F${f}: v2 on for staff`); assert.match(i.bg, /png/, 'canvas PNG');
