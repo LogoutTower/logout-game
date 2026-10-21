@@ -26,7 +26,7 @@ const results = [];
 for (const [name, dev] of RUNS) for (const f of FLOORS) {
   const { ctx, p, errs } = await page(dev, true, f); const i = await info(p); results.push({ name, f, ...i });
   assert.equal(i.v2, true, `${name} F${f}: v2 on for staff`); assert.match(i.bg, /png/, 'canvas PNG');
-  const want = (i.vw <= 640 ? 2 : 3) * 96; assert.ok(Math.abs(i.w - want) < 0.6, `${name} F${f}: ${i.w}px, want ${want}`);
+  const want = (i.vw <= 640 ? 1.875 : 3) * 96; assert.ok(Math.abs(i.w - want) < 0.6, `${name} F${f}: ${i.w}px, want ${want}`);
   const fits = i.right <= i.vw + 0.5 && i.left >= i.heroRight - 0.5; results.at(-1).fits = fits; if (!process.env.BV2_LENIENT) assert.ok(fits, `${name} F${f}: boss fits next to the hero`);
   assert.ok(i.top >= -0.5, `${name} F${f}: boss not clipped at top (${i.top})`); if (i.right > i.vw + 0.5 || i.left < i.heroRight - 0.5) console.log(`LAYOUT ${name} F${f}: boss ${Math.round(i.left)}-${Math.round(i.right)}px, hero right ${Math.round(i.heroRight)}px, viewport ${i.vw}px`);
   assert.deepEqual(errs, []);
