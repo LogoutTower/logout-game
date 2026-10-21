@@ -22,6 +22,7 @@ for (let f = 1; f <= 20; f++) { const i = bossInfo(f), e = BOSSES_V2[i.base]; as
 assert.equal(bossGrid(1).rows.length, 32, 'flag off: classic path'); assert.equal(bossGrid(21, 1, true).rows.length, 32, 'no v2 entry: classic path'); assert.equal(bossGrid(91, 1, true).rows.length, 32, 'placeholder reusing a v2 shape stays classic'); assert.equal(bossGrid(20, 2, true).rows.length, 32, 'phase 2 classic');
 for (let f = 21; f <= 100; f++) assert.equal(bossGrid(f, 1, true).rows.length, 32, `floor ${f} keeps 32x32 (generated/placeholder floors never pick up v2 art)`);
 const N = 96, rows = Array.from({ length: N }, (_, y) => [...Array(N)].map((_, x) => (x > 20 && x < 76 && y > 10 ? '1' : '.')).join(''));
-assert.equal(prepV2({ key: 'x', preshaded: true, pal: { 1: '#000000' }, rows }, { stripPedestal: true }).rows[82], '.'.repeat(N));
+{ const s = prepV2({ key: 'x', preshaded: true, pal: { 1: '#000000' }, rows }, { stripPedestal: true }); assert.equal(s.dropped, 14, 'no keys: row cut at 82, then grounded'); assert.equal(s.rows[24], '.'.repeat(N)); assert.notEqual(s.rows[95], '.'.repeat(N)); }
+for (const e of Object.values(BOSSES_V2)) { const g = bossGrid(e.floor, 1, true); assert.notEqual(g.rows[95], '.'.repeat(96), `F${e.floor} grounded`); const glow = new Set(['K', 'P', 'Q'].filter(c => /pedestal (edge|tile)/i.test(e.keys?.[c] || '') && !/merged/.test(e.keys[c]))); for (const r of g.rows.slice(70)) for (const ch of r) assert(!glow.has(ch), `F${e.floor}: pedestal tile/edge left`); }
 assert.throws(() => prepV2({ key: 'y', preshaded: false, pal: {}, rows }), /pre-shaded/); assert.throws(() => prepV2({ key: 'z', preshaded: true, pal: {}, rows }), /colour/);
 console.log('boss v2 tests passed');
