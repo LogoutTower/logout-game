@@ -47,6 +47,7 @@ import { ELEMENT_WORD } from './loot.js'; const ELEMENTS = Object.keys(ELEMENT_W
 import { classOf } from './game.js';
 import { holderStatus } from './supabase.js';
 import { loadTeam, isTeam, teamTag } from './teamstaff.js';
+import { setBossV2, bossIsV2 } from './sprites.js';
 import { bossSprite, bossIsBig, heroSprite, bossPhase, AWAKEN_NAME, AWAKEN_TITLE } from './sprites.js';
 import { SLOTS, CREATION_SLOTS, itemsFor, isUnlocked, unlockText, defaultLook, migrateSave, recordClear, equip, titleOf, nameColorOf, fakeProfile, byId, SAVE_VERSION } from './cosmetics.js';
 const $ = id => document.getElementById(id);
@@ -72,6 +73,9 @@ function hitFx(dmg, mine = true) {
   if (gmHit && cx(save.heroes[0], 'cx-orbit')) { const u = document.createElement('span'); u.className = 'dmg dust'; u.textContent = '✦'; u.style.left = (x - 40 + Math.random() * 80) + 'px'; u.style.top = (y - 10 + Math.random() * 30) + 'px'; fx.append(u); setTimeout(() => u.remove(), 1000); } // Orbit stardust
 }
 const SLOT_LABEL = { skin: 'Skin', hairColor: 'Hair colour', hairStyle: 'Hair style', outfitColor: 'Outfit colour', outfitStyle: 'Outfit style', trim: 'Armor trim', weapon: 'Weapon', weaponColor: 'Weapon finish', aura: 'Aura', title: 'Title', nameColor: 'Name colour' };
+const bossV2On = () => featureOn(FEATURES, 'bossV2', gmValid); // boss art v2 (js/bosses-v2.js): 'gm' = staff preview, 'all' = everyone
+/** Art v2 boss: 96px box at a whole-number CSS scale, taller arena (style.css --boss-v2-scale / --boss-v2-big). */
+function bossV2Look(f, phase) { const v = bossIsV2(f, phase), big = v && bossIsBig(f), b = $('boss'), a = $('arena'); if (b.classList.contains('v2') !== v) b.classList.toggle('v2', v); if (a.classList.contains('bv2') !== v) a.classList.toggle('bv2', v); if (a.classList.contains('bv2big') !== big) a.classList.toggle('bv2big', big); }
 const COLOR_SLOTS = ['skin', 'hairColor', 'outfitColor', 'trim', 'weaponColor', 'nameColor', 'aura'];
 const toast = m => notice(m.replace(/^System notice: /, ''));
 
@@ -86,7 +90,7 @@ function picker(el, slots, look, heroCls, progress, onPick) {
 async function boot() {
   $('maxf').textContent = MAX_FLOOR;
   be = await makeBackend(); const localUnlock = await checkPass(localStorage.getItem('logout.v1.gm'), GM_PASS_HASH);
-  gmValid = staffActive({ serverRole: !!be.isGm?.(), localUnlock }); // policy lives in gm.js
+  gmValid = staffActive({ serverRole: !!be.isGm?.(), localUnlock }); setBossV2(bossV2On()); // policy lives in gm.js
   if (be.name === 'supabase') be.holdUploads = gmValid && !be.isGm(); // local-only staff: no save, name or damage ever leaves this device
   save = migrateSave(await be.loadSave()); if (save) { delete save.ctx; enforceOneUnique(save); } // live-only context, never trusted from storage
   if (save && sanitizeSave(save, gmValid)) { save = migrateSave(save); await be.saveSave(save); } // pasted staff ids are stripped
@@ -290,7 +294,7 @@ function render() {
   { const ph = petHtml(save, gmValid); if (ph !== lastPet) { $('pet').innerHTML = ph; lastPet = ph; } }
   if (gmValid && h.cls === GM_CLASS && floor?.floor) { const t = gmTier(h.level); gmGear(save, floor.floor, legendaryWeaponDps(floor.floor), legendaryArmorPct(floor.floor)); if ((save.gmTierSeen || 1) < t.n) { save.gmTierSeen = t.n; gearAwaken(t); } } // staff gear follows the level tier; banner once per tier
   if (gmValid && save.spirit) { const ss = spiritStage(save.heroes[0].level); if ((save.spiritSeen || 0) < ss.n) { save.spiritSeen = ss.n; spiritEvolve(ss); } } // staff only: first time each stage is reached
-  $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; const phase = bossPhase(floor.floor, floor.hp, floor.maxHp); $('boss').style.backgroundImage = bossSprite(floor.floor, phase); $('boss').classList.toggle('big', bossIsBig(floor.floor));
+  $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; const phase = bossPhase(floor.floor, floor.hp, floor.maxHp); $('boss').style.backgroundImage = bossSprite(floor.floor, phase); $('boss').classList.toggle('big', bossIsBig(floor.floor)); bossV2Look(floor.floor, phase);
   const won = floor.floor >= MAX_FLOOR && floor.hp <= 0, waiting = !won && floor.hp <= 0, bi = bossInfo(floor.floor), arc = arcOf(floor.floor); applyScene(floor.floor);
   // end of content after the last open floor; 'waiting' = the server has not opened the next floor yet (e.g. its floor cap is still lower)
   H('bname').textContent = won ? 'The spire falls silent' : bossName(floor.floor);
@@ -299,7 +303,7 @@ function render() {
   awakenCheck(floor.floor, inSanctum(save, sanctumOk()) ? 1 : phase, won);
   if (inSanctum(save, sanctumOk())) { $('boss').style.backgroundImage = constructSprite(); $('boss').classList.remove('big'); H('bname').textContent = `Training Construct · Lv ${construct().level}`; H('floor').textContent = `${SANCTUM.name} · ${SANCTUM.sub}`; }
   { const fm = inSanctum(save, sanctumOk()) ? 0 : farmFloor(save, floor.floor); $('boss').classList.toggle('echo', !!fm); $('arena').classList.toggle('farming', !!fm);
-    if (fm) { $('boss').style.backgroundImage = bossSprite(fm); $('boss').classList.toggle('big', bossIsBig(fm)); H('bname').textContent = `Echo of ${bossName(fm)}`; H('floor').textContent = `Farming Floor ${fm} echo · no live-boss damage`; } }
+    if (fm) { $('boss').style.backgroundImage = bossSprite(fm); $('boss').classList.toggle('big', bossIsBig(fm)); bossV2Look(fm, 1); H('bname').textContent = `Echo of ${bossName(fm)}`; H('floor').textContent = `Farming Floor ${fm} echo · no live-boss damage`; } }
   $('floor').title = bi.lore ? bi.lore.replace(/^System notice: /, '') : '';
   const pct = floor.hp / floor.maxHp, lay = Math.ceil(pct * LAYERS - 1e-9), inLayer = pct * LAYERS - (lay - 1);
   H('layers').innerHTML = Array.from({ length: LAYERS }, (_, i) => `<i class="${i < lay ? 'on' : ''}"></i>`).join('');
@@ -550,10 +554,10 @@ function renderGmSlot() {
       ${h.cls === GM_CLASS ? `<button id="gmLeave">Return to ${esc(h.prevCls || 'Vanguard')}</button>` : '<button id="gmBecome" class="cta">Take the Architect\'s form</button>'}
       ${featureOn(FEATURES, 'sandbox', true) ? '<button id="gmSandbox">Sandbox</button>' : ''}${localStorage.getItem('logout.v1.gm') ? '<button id="gmLock">Lock staff access</button>' : ''}${online && !be.isGm() ? '<p class="sub">Local staff unlock: your damage stays on this device (never sent to the shared floor or ranked) until the server role is granted.</p>' : ''}</div>`
     : `<div class="staffbox"><input id="gmPass" type="password" autocomplete="off" placeholder="access phrase"><button id="gmTry">Verify</button></div>`;
-  if ($('gmTry')) $('gmTry').onclick = async () => { const p = $('gmPass').value; if (staffActive({ localUnlock: await checkPass(p, GM_PASS_HASH) })) { localStorage.setItem('logout.v1.gm', p); gmValid = true; if (be.name === 'supabase' && !be.isGm()) be.holdUploads = true; save.heroes[0].hp = null; save.ctx.gm = true; notice('Staff access verified'); renderGmSlot(); render(); } else notice('Access denied'); };
+  if ($('gmTry')) $('gmTry').onclick = async () => { const p = $('gmPass').value; if (staffActive({ localUnlock: await checkPass(p, GM_PASS_HASH) })) { localStorage.setItem('logout.v1.gm', p); gmValid = true; setBossV2(bossV2On()); if (be.name === 'supabase' && !be.isGm()) be.holdUploads = true; save.heroes[0].hp = null; save.ctx.gm = true; notice('Staff access verified'); renderGmSlot(); render(); } else notice('Access denied'); };
   if ($('gmBecome')) $('gmBecome').onclick = async () => { becomeGm(save, legendaryWeaponDps(floor.floor), floor.floor, legendaryArmorPct(floor.floor)); lastFloorSeen = 0; gmFloorChecks(); await be.saveSave(save); render(); renderLb(); renderGmSlot(); };
   if ($('gmLeave')) $('gmLeave').onclick = async () => { leaveGm(save); save = migrateSave(save); await be.saveSave(save); render(); renderLb(); renderGmSlot(); };
-  if ($('gmLock')) $('gmLock').onclick = async () => { localStorage.removeItem('logout.v1.gm'); gmValid = false; sanitizeSave(save, false); save = migrateSave(save); save.ctx = {}; await be.saveSave(save); render(); renderGmSlot(); };
+  if ($('gmLock')) $('gmLock').onclick = async () => { localStorage.removeItem('logout.v1.gm'); gmValid = false; setBossV2(bossV2On()); sanitizeSave(save, false); save = migrateSave(save); save.ctx = {}; await be.saveSave(save); render(); renderGmSlot(); };
   if ($('gmSandbox')) $('gmSandbox').onclick = openSandboxUi;
 }
 let sbx = null;

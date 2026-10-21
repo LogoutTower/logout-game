@@ -1,5 +1,7 @@
 // 100-floor plan: hand-made bosses, reserved special slots, and a deterministic seeded generator. Pure (no DOM, no Math.random).
 import { RIVAL_NAME, RIVAL_TITLE } from './cutscenes.js';
+import { BOSSES_V2 } from './bosses-v2.js';
+import { prepV2 } from './bosses.js';
 import { BOSSES, ARC2, ARC2_KEYS, SHAPES, ELEMENTS, ADDONS, composeShape, shadeShape } from './bosses.js';
 export const PLAN_FLOORS = 100;
 /** Milestones (10, 20, ... 100) and every floor 91-100 are reserved for special (hand-designed) bosses and are never generated. */
@@ -62,7 +64,10 @@ function makeInfo(f) {
 export const bossName = f => bossInfo(f).name;
 export const bossIsBig = f => bossInfo(f).big;
 export function bossShape(f) { const i = bossInfo(f); return i.kind === 'generated' ? composeShape(i.base, i.element, i.addons) : composeShape(i.base); }
-export const bossGrid = (f, phase = 1) => shadeShape(phase === 2 && bossInfo(f).phases === 2 ? composeShape('umbraAwake') : bossShape(f));
+/** v2: boss art v2 flag (FEATURES.bossV2). A BOSSES_V2 entry for the boss's key replaces a hand-made boss (phase 1 only); everything else keeps the 32x32 path. */
+const v2Cache = new Map();
+export const bossV2Grid = f => { const i = bossInfo(f), e = i.kind !== 'generated' && BOSSES_V2[i.base]; if (!e || (e.floor ? e.floor !== f : i.kind !== 'handmade')) return null; if (!v2Cache.has(i.base)) v2Cache.set(i.base, prepV2(e)); return v2Cache.get(i.base); }; // an entry's `floor` pins it to that floor (reused placeholder shapes elsewhere stay classic)
+export const bossGrid = (f, phase = 1, v2 = false) => (v2 && phase === 1 && bossV2Grid(f)) || shadeShape(phase === 2 && bossInfo(f).phases === 2 ? composeShape('umbraAwake') : bossShape(f));
 // ---- Two-phase guardians (Floor 100). Phase is derived only from the shared boss HP, so every player sees the same phase; no server state.
 export const AWAKEN_AT = 0.5, AWAKEN_NAME = `${RIVAL_NAME} Awakened`, AWAKEN_TITLE = 'The Tower Rewrites Itself';
 export const bossPhase = (f, hp, maxHp) => bossInfo(f).phases === 2 && maxHp > 0 && hp > 0 && hp / maxHp <= AWAKEN_AT ? 2 : 1;

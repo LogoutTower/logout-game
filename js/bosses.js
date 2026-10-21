@@ -2,16 +2,17 @@
 // Pure (no DOM). Palette chars: k = deep shadow, E = glow (both unshaded).
 import { shade } from './pixel.js';
 export const BOSS_SIZE = 32;
-export function canvas() {
-  const g = Array.from({ length: BOSS_SIZE }, () => Array(BOSS_SIZE).fill('.'));
-  const px = (x, y, c) => { x = Math.round(x); y = Math.round(y); if (x >= 1 && x < BOSS_SIZE - 1 && y >= 1 && y < BOSS_SIZE - 1) g[y][x] = c; };
+// Size-agnostic grids: a shape may set `rows` (N strings of N chars, any square N, e.g. 32/48/96) instead of `draw`; N is auto-detected.
+export function canvas(N = BOSS_SIZE) {
+  const g = Array.from({ length: N }, () => Array(N).fill('.'));
+  const px = (x, y, c) => { x = Math.round(x); y = Math.round(y); if (x >= 1 && x < N - 1 && y >= 1 && y < N - 1) g[y][x] = c; };
   const rect = (x, y, w, h, c) => { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) px(i, j, c); };
   const ell = (cx, cy, rx, ry, c) => { for (let j = -ry; j <= ry; j++) for (let i = -rx; i <= rx; i++) if ((i * i) / (rx * rx + 0.5) + (j * j) / (ry * ry + 0.5) <= 1) px(cx + i, cy + j, c); };
   const line = (x0, y0, x1, y1, c, t = 1) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1); for (let s = 0; s <= n; s++) { const x = x0 + (x1 - x0) * s / n, y = y0 + (y1 - y0) * s / n; rect(Math.round(x - (t - 1) / 2), Math.round(y - (t - 1) / 2), t, t, c); } };
-  const tri = (a, b, d, c) => { const [minY, maxY] = [Math.min(a[1], b[1], d[1]), Math.max(a[1], b[1], d[1])]; for (let y = minY; y <= maxY; y++) for (let x = 0; x < BOSS_SIZE; x++) {
+  const tri = (a, b, d, c) => { const [minY, maxY] = [Math.min(a[1], b[1], d[1]), Math.max(a[1], b[1], d[1])]; for (let y = minY; y <= maxY; y++) for (let x = 0; x < N; x++) {
     const s = (p, q) => (q[0] - p[0]) * (y - p[1]) - (q[1] - p[1]) * (x - p[0]); const e = [s(a, b), s(b, d), s(d, a)]; if (e.every(v => v >= 0) || e.every(v => v <= 0)) px(x, y, c); } };
   const flare = (y0, y1, cx, w0, w1, c) => { for (let y = y0; y <= y1; y++) { const w = Math.round(w0 + (w1 - w0) * (y - y0) / Math.max(1, y1 - y0)); rect(cx - w, y, 2 * w + 1, 1, c); } };
-  return { g, px, rect, ell, line, tri, flare, rows: () => g.map(r => r.join('')) };
+  return { g, N, px, rect, ell, line, tri, flare, rows: () => g.map(r => r.join('')) };
 }
 const K = '#12062a';
 export const BOSSES = [
@@ -287,20 +288,31 @@ function bbox(g) {
 }
 /** Compose base shape + element + add-on layers into a 32x32 char grid with palette. */
 export function composeShape(key, element = null, addons = []) {
-  const base = SHAPES[key], c = canvas(); base.draw(c);
+  const base = SHAPES[key], N = base.rows ? base.rows.length : BOSS_SIZE, c = canvas(N);
+  if (base.rows) { if (!base.rows.every(r => r.length === N)) throw new Error(`boss ${key}: grid must be square`); base.rows.forEach((row, y) => [...row].forEach((ch, x) => { if (ch !== '.') c.g[y][x] = ch; })); } else base.draw(c);
+  const S = N / BOSS_SIZE; // add-on layers below are authored for 32; offsets scale with the grid
   const g = c.g, b = bbox(g), empty = (x, y) => g[y]?.[x] === '.';
-  const under = canvas(); // layers behind the body
-  if (addons.includes('wings')) { under.tri([b.cx - 3, b.cy - 2], [1, Math.max(1, b.y0 - 2)], [2, b.cy + 6], '5'); under.tri([b.cx + 3, b.cy - 2], [30, Math.max(1, b.y0 - 2)], [29, b.cy + 6], '5');
+  const under = canvas(N); // layers behind the body
+  if (addons.includes('wings')) { under.tri([b.cx - 3, b.cy - 2], [1, Math.max(1, b.y0 - 2)], [2, b.cy + 6], '5'); under.tri([b.cx + 3, b.cy - 2], [N - 2, Math.max(1, b.y0 - 2)], [N - 3, b.cy + 6], '5');
     for (const s of [-1, 1]) for (let i = 0; i < 3; i++) under.line(b.cx + 3 * s, b.cy - 2, b.cx + s * 14, b.y0 + i * 4, '4'); }
   under.g.forEach((r, y) => r.forEach((ch, x) => { if (ch !== '.' && empty(x, y)) g[y][x] = ch; }));
   if (addons.includes('plates')) for (let y = b.cy - 3; y <= b.cy + 3; y++) for (let x = b.x0; x <= b.x1; x++) if (!empty(x, y) && g[y][x] !== 'E' && (x + (y >> 1)) % 5 < 2) g[y][x] = '4';
   if (addons.includes('chains')) for (const [x0, y0, x1, y1] of [[b.x0, b.y0 + 4, b.x1, b.y1 - 4], [b.x1, b.y0 + 4, b.x0, b.y1 - 4]]) { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let s = 0; s <= n; s++) if (s % 3 !== 2) { const x = Math.round(x0 + (x1 - x0) * s / n), y = Math.round(y0 + (y1 - y0) * s / n); if (!empty(x, y)) g[y][x] = '3'; } }
   if (addons.includes('horns')) { const y = Math.max(4, b.y0 + 1); c.line(b.cx - 3, y, b.cx - 6, y - 4, '2'); c.line(b.cx + 3, y, b.cx + 6, y - 4, '2'); }
   if (addons.includes('crown')) { const y = Math.max(3, b.y0 - 1); c.rect(b.cx - 3, y, 7, 2, '1'); [-3, 0, 3].forEach(d => c.px(b.cx + d, y - 1, '1')); c.px(b.cx, y, 'E'); }
-  if (addons.includes('aura')) { const src = g.map(r => [...r]); for (let y = 1; y < 31; y++) for (let x = 1; x < 31; x++) if (src[y][x] === '.' && (x * 7 + y * 3) % 5 === 0) {
+  if (addons.includes('aura')) { const src = g.map(r => [...r]); for (let y = 1; y < N - 1; y++) for (let x = 1; x < N - 1; x++) if (src[y][x] === '.' && (x * 7 + y * 3) % 5 === 0) {
     let near = false; for (let dy = -2; dy <= 2 && !near; dy++) for (let dx = -2; dx <= 2; dx++) if (src[y + dy]?.[x + dx] && !'.6'.includes(src[y + dy][x + dx])) { near = true; break; } if (near) g[y][x] = '6'; } }
   const pal = { ...(element ? recolor(base.pal, element) : base.pal), ...LAYER_PAL };
   if (element) { pal[5] = lerp(ELEMENTS[element].ramp[1], ELEMENTS[element].ramp[0], 0.3); pal[6] = ELEMENTS[element].glow; } else { pal[5] = '#3a2a5a'; pal[6] = '#5ff6ff'; }
   return { rows: c.rows(), pal };
 }
+// ---- Boss art v2 (hand-finished, e.g. 96x96): pre-shaded (outline, ramps, rim, pedestal baked in), palette may use digit keys.
+// Drawn as-is: no shade(), no add-on layers, no element recolour. Registry: js/bosses-v2.js (BOSSES_V2), behind FEATURES.bossV2.
+// Entry: { key, size: N, preshaded: true, pal: { char: '#rrggbb' }, rows: N strings of N chars ('.' = transparent), pedestalY?: first pedestal row }.
+/** Validate a v2 entry and return the drawable grid { rows, pal }. stripPedestal blanks rows from pedestalY (default y>=82 at 96). */
+export function prepV2(e, { stripPedestal = false } = {}) {
+  const N = e?.rows?.length; if (!N || !e.preshaded || (e.size && e.size !== N) || !e.rows.every(r => r.length === N)) throw new Error(`v2 boss ${e?.key}: need a pre-shaded square grid`);
+  for (const ch of e.rows.join('')) if (ch !== '.' && !/^#[0-9a-f]{6}$/i.test(e.pal[ch] || '')) throw new Error(`v2 boss ${e.key}: no colour for '${ch}'`);
+  const cut = stripPedestal ? (e.pedestalY ?? Math.round(N * 82 / 96)) : N, blank = '.'.repeat(N);
+  return { rows: e.rows.map((r, y) => y < cut ? r : blank), pal: { ...e.pal } }; }
 export const shadeShape = s => shade(s.rows, s.pal, { scale: 1, drop: '', eyes: '', flat: 'kE', ghost: '6' });
