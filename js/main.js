@@ -32,6 +32,8 @@ import { bannerBadge, hallArt } from './banner.js';
 import { slotsOf, displayBanner, ZERO_BANNER, staffHall } from './guildsv2.js';
 import { itemIcon } from './icons.js';
 import { openDen } from './casinoui.js';
+import { openForgeUp, draw as drawForgeUp } from './forgeui.js';
+import { gainMats, matName } from './forge.js';
 import { shopHtml, haloHtml, petHtml, decorHtml, wallHtml, eclipseOn } from './prestigeui.js';
 import { SHOP, spiritStage } from './prestige.js';
 import { SANCTUM, sanctumAllowed, inSanctum, newConstruct, hitConstruct, dpsMeters, constructSprite, towerModelSprite } from './sanctum.js';
@@ -92,11 +94,11 @@ async function boot() {
   const sanc0 = inSanctum(save, sanctumOk()); // offline time accrues to the mode the staff hero was in
   if (!sanc0 && gmValid) p.damage = softenGm(p.damage, p.secs, (await be.getFloor()).floor, GM_SOFTEN_MULT); // raid softener
   save.gold += p.gold; const ups = applyXp(save.heroes, p.xp, levelCap((await be.getFloor()).floor, gmValid)); if (sanc0) construct().total += p.damage; else pending += p.damage;
-  const offFloor = (await be.getFloor()).floor, trickled = sanc0 ? [] : trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
+  const offFloor = (await be.getFloor()).floor, matsAway = sanc0 ? {} : gainMats(save, p.secs, offFloor), trickled = sanc0 ? [] : trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
   if (p.secs > 30) {
     const r = sanc0 ? { clears: [] } : await submitDmg(h0.name, pending, h0); if (!sanc0) pending = 0;
     lootLines = []; const got = handleClears(r.clears, true);
-    $('awaytxt').innerHTML = `Log out disabled. You fought on for ${fmtDur(p.secs)}${p.capped ? ` (capped at ${cap}h)` : ''}${p.vigilUsed ? ' · Scroll of Vigil burned' : ''}<br>HP: ${Math.round(heroHp(h0))} / ${heroMaxHp(h0)}${p.lowSecs > 0 ? ` · worn down for ${fmtDur(p.lowSecs)} (DPS halved). Rest at the inn.` : ''}<br>Damage: ${fmt(p.damage)}<br>Gold: +${fmt(p.gold)}<br>XP: +${fmt(p.xp)}${ups.length ? `<br>Level ups: ${ups.length}` : ''}${r.advanced ? `<br>Floors cleared: ${r.advanced}. Floor ${r.floor} is open.` : ''}${got.length ? `<br>Cosmetics unlocked: ${got.map(i => esc(i.label)).join(', ')}` : ''}${lootLines.length || trickled.length ? `<br>Loot: ${[...lootLines, ...trickled.map(it => `<span style="color:${rarityOf(it.rarity).color}">${esc(it.name)}</span>`)].join(', ')}` : ''}`;
+    $('awaytxt').innerHTML = `Log out disabled. You fought on for ${fmtDur(p.secs)}${p.capped ? ` (capped at ${cap}h)` : ''}${p.vigilUsed ? ' · Scroll of Vigil burned' : ''}<br>HP: ${Math.round(heroHp(h0))} / ${heroMaxHp(h0)}${p.lowSecs > 0 ? ` · worn down for ${fmtDur(p.lowSecs)} (DPS halved). Rest at the inn.` : ''}<br>Damage: ${fmt(p.damage)}<br>Gold: +${fmt(p.gold)}<br>XP: +${fmt(p.xp)}${ups.length ? `<br>Level ups: ${ups.length}` : ''}${r.advanced ? `<br>Floors cleared: ${r.advanced}. Floor ${r.floor} is open.` : ''}${Object.keys(matsAway).length ? `<br>Materials: ${Object.entries(matsAway).map(([k, n]) => `${esc(matName(k))} ×${n}`).join(', ')}` : ''}${got.length ? `<br>Cosmetics unlocked: ${got.map(i => esc(i.label)).join(', ')}` : ''}${lootLines.length || trickled.length ? `<br>Loot: ${[...lootLines, ...trickled.map(it => `<span style="color:${rarityOf(it.rarity).color}">${esc(it.name)}</span>`)].join(', ')}` : ''}`;
     $('away').showModal();
   }
   save.lastTick = Date.now(); await be.saveSave(save); startGame();
@@ -159,6 +161,7 @@ function tick() {
   codexTick(p);
   const sanc = inSanctum(save, sanctumOk()); if (!sanc && gmValid) p.damage = softenGm(p.damage, p.secs, floor.floor, GM_SOFTEN_MULT); // raid softener (shared boss only; server enforces too)
   save.gold += p.gold; recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp;
+  if (!sanc) gainMats(save, p.secs, floor.floor); // Tower Shards + Floor Essence from every fight (js/forge.js)
   if (sanc) { const b = hitConstruct(construct(), p.damage, Date.now()); if (b) log(`Sanctum: the training construct broke and re-formed (×${construct().broken}).`, '#d9a93f'); } else { pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage); } // Sanctum: never the shared boss
   if (applyXp(save.heroes, p.xp, levelCap(floor?.floor, gmValid)).length) { log(`System notice: level ${save.heroes[0].level} reached.`); notice(`Level ${save.heroes[0].level} reached · +1 talent point`); }
   for (const it of sanc ? [] : trickleDrops(save, p.secs, floor.floor, p.secs > 2 ? TRICKLE.offlineMax : Infinity)) { const R = rarityOf(it.rarity); log(`Loot · ${R.label} ${it.name}${it.salvaged ? ' (bag full: salvaged)' : ''}`, R.color); notice(`${R.label} find — ${it.name}`, R.color, it); }
@@ -306,7 +309,7 @@ function render() {
   H('stats').innerHTML = `${classOf(h.cls).icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${effectiveDps(save).toFixed(1)}</b> · HP <b>${Math.round(heroHp(h))}/${heroMaxHp(h)}</b> · Gold <b>${fmt(save.gold)}</b>${gmValid ? ` · Luck <b>+${GM_LUCK}%</b>` : ''}`;
   const capNow = levelCap(floor?.floor, gmValid), capped = atCap(h, capNow);
   H('lvlL').textContent = capped ? 'Lv cap' : `Train ${fmt(levelCost(h))}g`; if (capped) { $('lvl').title = `Level cap ${capNow}: clearing Floor ${floor.floor} raises it to ${capNow + 1}`; } $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`; $('lvl').disabled = capped || save.gold < levelCost(h); if (!capped) $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`;
-  H('equipped').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip?.[s]; return `<span class="eq" style="${it ? `color:${rarityOf(shownRarity(it)).color}` : ''}">${s[0].toUpperCase() + s.slice(1)}: ${it ? esc(it.name) : '—'}</span>`; }).join('');
+  H('equipped').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip?.[s]; return `<span class="eq" style="${it ? `color:${rarityOf(shownRarity(it)).color}` : ''}">${s[0].toUpperCase() + s.slice(1)}: ${it ? esc(it.name) + (it.up ? ` +${it.up}` : '') : '—'}</span>`; }).join('');
   { const fp = treeOf(h.cls).length ? freePoints(h) : 0, bs = bagSize(save), full = save.inv.length >= bs - 2; setHeroLabels({ bag: `Bag ${save.inv.length}/${bs}`, talents: isCodex(h) ? 'Codex' : fp > 0 ? `Talents · ${fp}` : 'Talents', talentsDot: fp > 0, bagDot: full });
     setDot('dotHero', fp > 0 || full, [fp > 0 ? `${fp} talent point${fp > 1 ? 's' : ''} to spend` : '', full ? (save.inv.length >= bs ? 'Bag full' : 'Bag nearly full') : ''].filter(Boolean).join(' · '));
     H('hdps').textContent = `DPS ${effectiveDps(save).toFixed(1)}`; H('goldTop').textContent = `⛁ ${fmt(save.gold)}`; H('floorTxt').innerHTML = `Floor ${floor.floor}/<span id="maxf">${MAX_FLOOR}</span>`;
@@ -351,6 +354,7 @@ function openTown() {
     else if (b.dataset.sell) { const i = +b.dataset.sell, it = save.inv[i]; if (it.rarity === 'unique' && !confirm(`Sell ${it.name}? A Unique is one of a kind and can never drop again.`)) return; const g = sellItem(save, i, { confirmUnique: true }); if (g) log(`Sold ${it.name} for ${fmt(g)} gold.`); }
     await be.saveSave(save); render(); openTown(); };
   renderGoods(f);
+  openForgeUp({ be, save: () => save, fmt, notice, log, ico, after: async () => { await be.saveSave(save); render(); $('townGold').textContent = `Gold ${fmt(save.gold)}`; } }); // weapon upgrades (js/forge.js)
   openDen({ be, save: () => save, floor: () => floor?.floor || 1, fmt, notice, after: async () => { await be.saveSave(save); render(); $('townGold').textContent = `Gold ${fmt(save.gold)}`; } }); // The Glitch Den (gold only)
   $('townGold').textContent = `Gold ${fmt(save.gold)}`;
   if (!$('town').open) $('town').showModal();

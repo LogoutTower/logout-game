@@ -490,3 +490,9 @@ body.tabhidden .halo .corona{animation-play-state:paused}
 
 .pcount{font-size:11px;letter-spacing:1px;color:#9fe0b0;margin-top:3px;opacity:.9}.pcount::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:#5fdc8a;box-shadow:0 0 6px #5fdc8a;margin-right:6px;vertical-align:1px}
 .fmeta .pp{color:#9fe0b0;margin-left:4px}
+/* Forge upgrades (js/forgeui.js) */
+.upbody{margin-top:10px;text-align:left}.upbody h3{display:flex;align-items:center;gap:8px}.upbody h4{margin:10px 0 4px;font-size:13px;opacity:.8}
+.qhelp{width:24px;height:24px;min-height:0;padding:0;border-radius:50%;font-weight:700;line-height:1}
+.upw{display:flex;gap:10px;align-items:center}.uplv{color:#ffd76a;font-weight:700}.evo{color:#c26bff}
+.upcost{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.upcost span,.matlist span{background:#0006;border:1px solid #fff2;border-radius:6px;padding:3px 6px;font-size:12px}.upcost .no{color:#ff7a7a;border-color:#ff7a7a66}
+.matlist{display:flex;flex-wrap:wrap;gap:6px}.mat{font-style:normal;font-weight:700;text-shadow:0 0 4px currentColor}
