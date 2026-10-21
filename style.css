@@ -534,3 +534,9 @@ body.tabhidden .halo .corona{animation-play-state:paused}
 @media (prefers-reduced-motion:reduce){.fweap{animation:none}}
 .gmreplay{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}.gmreplay button{min-height:0;padding:4px 10px;font-size:12px}
 #worigin{border:1px solid var(--cy);border-radius:6px;padding:6px 8px;margin-bottom:8px}#worigin[hidden]{display:none}#originLock{margin-top:4px}
+/* hero art v2 (64x64, FEATURES.heroV2): whole-number scales only. Battle 2x = 128px on desktop and phones; previews 128px (2x); ID card 64px (1x); town NPCs 128px (2x). */
+#hero.v2{--hero-scale:2;width:64px;height:64px}
+.hv2 .preview,.hv2 .preview.big{width:128px;height:128px}.hv2 .idspr{width:64px;height:64px;background-size:64px 64px}.npc.v2{width:128px;height:128px}
+/* staff Root Key (hero art v2): a gentle 1px bob by swapping two cached frames; frame 0 stays when motion is reduced */
+#hero.keybob{animation:atk 1s steps(2) infinite,keybob 1.6s steps(1) infinite}@keyframes keybob{0%{background-image:var(--kf0)}50%{background-image:var(--kf1)}}
+@media (prefers-reduced-motion:reduce){#hero.keybob{animation:none}}body.tabhidden #hero.keybob{animation-play-state:paused}

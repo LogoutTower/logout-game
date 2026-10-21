@@ -44,6 +44,7 @@ export function mountGalaxy(arena, hero) {
   function loop(time) { raf = 0; if (!st.on || document.hidden) return; if (time - last > 40) { last = time; draw(time); } if (!reduce.matches) raf = requestAnimationFrame(loop); }
   const kick = () => { if (!raf && st.on) raf = requestAnimationFrame(loop); };
   document.addEventListener('visibilitychange', kick); addEventListener('resize', () => { if (st.on) { size = place(); last = 0; kick(); } });
+  if (typeof ResizeObserver !== 'undefined') { const ro = new ResizeObserver(() => { if (st.on) { size = place(); last = 0; kick(); } }); ro.observe(arena); ro.observe(hero); } // the hero box/arena change size (art v2 hero 128px, v2 boss arena)
   return { update(next) { const k = JSON.stringify(next); if (k === key) return; key = k; const lv = st.level; st = { ...st, ...next }; cv.hidden = !st.on; if (!st.on) return;
     if (!stars.length || galaxyTier(lv).t !== galaxyTier(st.level).t) build(); size = place(); last = 0; kick(); } };
 }

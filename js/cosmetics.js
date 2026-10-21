@@ -4,21 +4,21 @@ export const SAVE_VERSION = 5;
 const I = (id, type, label, value, unlock = null, extra = {}) => ({ id, type, label, value, unlock, ...extra });
 export const CATALOG = [
   // skin tones
-  I('skin-1', 'skin', 'Pale', '#f1d1b5'), I('skin-2', 'skin', 'Sand', '#c9a27a'), I('skin-3', 'skin', 'Umber', '#8a5a3c'), I('skin-4', 'skin', 'Deep', '#5a3825'),
+  I('skin-1', 'skin', 'Pale', '#f1d1b5'), I('skin-2', 'skin', 'Sand', '#c9a27a'), I('skin-3', 'skin', 'Umber', '#8a5a3c'), I('skin-4', 'skin', 'Deep', '#5a3825'), I('skin-peach', 'skin', 'Peach', '#e8b896'),
   I('skin-ghost', 'skin', 'Ghost', '#b8f3ff', { floor: 7 }),
   // hair colour
-  I('hc-ink', 'hairColor', 'Ink', '#3b2c66'), I('hc-rust', 'hairColor', 'Rust', '#b4532a'), I('hc-straw', 'hairColor', 'Straw', '#e8c35a'), I('hc-plum', 'hairColor', 'Plum', '#7a3d9e'),
+  I('hc-ink', 'hairColor', 'Ink', '#3b2c66'), I('hc-rust', 'hairColor', 'Rust', '#b4532a'), I('hc-straw', 'hairColor', 'Straw', '#e8c35a'), I('hc-plum', 'hairColor', 'Plum', '#7a3d9e'), I('hc-chestnut', 'hairColor', 'Chestnut', '#4e3020'), I('hc-crimson', 'hairColor', 'Crimson', '#b0282e'),
   I('hc-silver', 'hairColor', 'Static Silver', '#d6e2ff', { floor: 2 }), I('hc-neon', 'hairColor', 'Neon Cyan', '#3ff7ff', { top3: 1 }),
   // hair style
   I('hs-short', 'hairStyle', 'Short', 'short'), I('hs-long', 'hairStyle', 'Long', 'long'), I('hs-spiky', 'hairStyle', 'Spiky', 'spiky'), I('hs-hood', 'hairStyle', 'Hood', 'hood'),
   I('hs-crown', 'hairStyle', 'Broken Crown', 'crown', { floor: 9 }),
   // outfit
-  I('oc-cyan', 'outfitColor', 'Cyan', '#2bb8c9'), I('oc-magenta', 'outfitColor', 'Magenta', '#c2369e'), I('oc-violet', 'outfitColor', 'Violet', '#6a4bd8'), I('oc-moss', 'outfitColor', 'Moss', '#4f8a4b'),
+  I('oc-cyan', 'outfitColor', 'Cyan', '#2bb8c9'), I('oc-magenta', 'outfitColor', 'Magenta', '#c2369e'), I('oc-violet', 'outfitColor', 'Violet', '#6a4bd8'), I('oc-saddle', 'outfitColor', 'Saddle Leather', '#8a5634'), I('oc-moss', 'outfitColor', 'Moss', '#4f8a4b'),
   I('oc-null', 'outfitColor', 'Null Black', '#26232e', { floor: 4 }),
   I('os-tunic', 'outfitStyle', 'Tunic', 'tunic'), I('os-robe', 'outfitStyle', 'Robe', 'robe'), I('os-plate', 'outfitStyle', 'Plate', 'plate'),
   I('os-wings', 'outfitStyle', 'Seraph Cloak', 'cloak', { floor: 8 }),
   // armor trim
-  I('tr-steel', 'trim', 'Steel', '#9aa3b5'), I('tr-bronze', 'trim', 'Bronze', '#b07a3c'),
+  I('tr-steel', 'trim', 'Steel', '#9aa3b5'), I('tr-brass', 'trim', 'Brass', '#c9a24a'), I('tr-bronze', 'trim', 'Bronze', '#b07a3c'),
   I('tr-gold', 'trim', 'Guardian Gold', '#ffd84f', { floor: 3 }), I('tr-blood', 'trim', 'Blood Trim', '#ff3355', { top3: 2 }),
   // weapons per class (shape) + weapon colour
   I('w-v-sword', 'weapon', 'Longsword', 'sword', null, { cls: 'Vanguard' }), I('w-v-axe', 'weapon', 'Axe', 'axe', null, { cls: 'Vanguard' }),
@@ -89,7 +89,7 @@ export function recordClear(save, floor, rank, share = 1) {
 }
 export function defaultLook(cls) {
   const w = (itemsFor('weapon', cls)[0] || itemsFor('weapon', 'Vanguard')[0]).id;
-  return { skin: 'skin-2', hairColor: 'hc-ink', hairStyle: 'hs-short', outfitColor: 'oc-cyan', outfitStyle: 'os-tunic', trim: 'tr-steel', weapon: w, weaponColor: 'wc-steel', title: 't-trapped', nameColor: 'nc-white', aura: 'au-none', body: 'body-m', race: 'race-human' };
+  return { skin: 'skin-peach', hairColor: 'hc-chestnut', hairStyle: 'hs-short', outfitColor: 'oc-saddle', outfitStyle: 'os-tunic', trim: 'tr-brass', weapon: w, weaponColor: 'wc-steel', title: 't-trapped', nameColor: 'nc-white', aura: 'au-none', body: 'body-m', race: 'race-human' };
 }
 /** Choose an item if unlocked & valid for the class; returns true on success. */
 export function equip(save, id) {
@@ -133,7 +133,9 @@ export function fakeProfile(name) {
 
 import { shade } from './pixel.js';
 import { GM_ITEMS, GM_CLASS } from './gm.js';
-import { heroGrid24, gmGrid24 } from './herov2.js';
+import { composeHero64 } from './hero64.js';
+import { composeGM, GM_TIERS as GM_FORMS } from './gm64.js';
+import { gmTier } from './gm.js';
 // ---------- layered sprite: 16x16 layer grid, shaded/outlined to 32x32 ----------
 export const HERO_SIZE = 32;
 const BASE = [ // chibi proportions: big head (rows 2-8), small body (rows 9-15)
@@ -155,15 +157,20 @@ const GM_GRID = [ // hooded long coat, face in full shadow with two faint cyan g
   '................', '.....kkkkkk.....', '....kOOOOOOk....', '...kOOOOOOOOk...', '..kOOTTTTTTOOk..', '..kOTvvvvvvTOk..', '..kOTvcvvcvTOk..', '..kOTvvvvvvTOk..', '...kOTvvvvTOk...', '...kTOOOOOOTk...', '..kOOTOOOOTOOk..', '..kbOTOOOOTObk..', '..kOOTOOOOTOOk..', '.kOOOTOOOOTOOOk.', 'kOOOOTOOOOTOOOOk', 'kTTTTTkbbkTTTTTk'];
 const GM_KATANA = [[14,0,'K'],[14,1,'K'],[15,1,'y'],[14,2,'K'],[14,3,'K'],[15,3,'y'],[14,4,'K'],[14,5,'K'],[15,5,'y'],[14,6,'K'],[14,7,'K'],[13,8,'y'],[14,8,'y'],[15,8,'y'],[14,9,'b'],[14,10,'b']]; // single void katana, gold spine + guard
 /** Returns {rows: 32 strings of 32 chars, pal: char->colour} for a look + class. */
-export const heroGrid = (look, cls, v2 = false) => { const g = v2 ? heroGridV2(look, cls) : heroGrid16(look, cls); return shade(g.rows, g.pal, { flat: cls === GM_CLASS ? 'fmvcy' : v2 ? 'fmgzG' : 'fm' }); };
-/** v2 24x24 layer grid (shaded to 48x48). The staff hero ignores body/race and keeps its hooded coat. */
-export const heroGridV2 = (look, cls) => cls === GM_CLASS ? gmGrid24() : heroGrid24({ ...defaultLook(cls), ...look }, cls, byId, SKINS);
+export const heroGrid = (look, cls, v2 = false, level = 1, gmOpt = {}) => v2 ? heroGridV2(look, cls, level, gmOpt) : shade(heroGrid16(look, cls).rows, heroGrid16(look, cls).pal, { flat: cls === GM_CLASS ? 'fmvcy' : 'fm' });
+/** Hero art v2 (64x64, pre-shaded by the artist: drawn as-is, no shade()). js/hero64.js + js/gm64.js are synced copies (scripts/sync-art.sh).
+ * The staff hero ignores body/race: its sword form follows the level tier (GM_TIERS), or the Unsheathed codex skin. */
+export const gmForm = (look, level = 1) => look?.weaponColor === 'gm-unsheathed' ? 'unsheathed' : GM_FORMS[gmTier(level).n];
+export function heroGridV2(look, cls, level = 1, { key = false, keyDy = 0 } = {}) { // key: the Root Key at the neck (only when it is equipped)
+  if (cls === GM_CLASS) return composeGM(gmForm(look, level), { key, keyDy });
+  const l = { ...defaultLook(cls), ...look }, v = id => byId(id)?.value;
+  return composeHero64({ body: v(l.body) === 'f' ? 'f' : 'm', hair: v(l.hairStyle) || 'short', race: v(l.race) || 'human', mount: 'hand', weapon: v(l.weapon) || 'sword',
+    outfit: v(l.outfitStyle), cls, skinSet: l.skinSet, S: v(l.skin), H: v(l.hairColor), O: v(l.outfitColor), T: v(l.trim), W: v(l.weaponColor) });
+}
 // Shop hero skins (owned server-side, see js/prestige.js): a palette plus a few arc-themed details over any look.
 export const SKINS = {
-  'sk-stonekeep': { pal: { O: '#8d8798', T: '#d9c48a', H: '#6d6878', W: '#cfd3dc', g: '#4b4656' }, draw: (set, fill) => { fill(3, 12, 2, 3, 'H'); fill(4, 11, 1, 1, 'H'); [5, 7, 8, 10].forEach(x => set(x, 4, 'H')); set(7, 3, 'T'); set(8, 3, 'T'); [5, 10].forEach(x => set(x, 11, 'g')); set(7, 12, 'g'); set(8, 13, 'g'); },
-    draw24: (set, fill, B) => { fill(6, 17, 1, 3, 'H'); fill(5, 18, 4, 4, 'H'); fill(8, 15, 0, 0, 'H'); fill(11, 12, 0, 2, 'T'); [7, 10, 13, 16].forEach(x => set(x, 5, 'H')); set(B.torso[0] + 2, 14, 'g'); set(B.torso[0] + 3, 15, 'g'); set(B.torso[1] - 2, 17, 'g'); } }, // stone helm with gold crest, cracked plate
-  'sk-clockfrost': { pal: { O: '#7fd6ff', T: '#c9a25a', H: '#e8fbff', W: '#bff3ff', g: '#5d4a2b' }, draw: (set, fill) => { [[7, 11], [8, 11], [7, 12], [8, 12]].forEach(([x, y]) => set(x, y, 'T')); set(6, 11, 'g'); set(9, 12, 'g'); [4, 6, 9, 11].forEach(x => set(x, 1, 'H')); set(3, 10, 'T'); set(12, 10, 'T'); },
-    draw24: (set, fill, B) => { const c = (B.torso[0] + B.torso[1]) >> 1; fill(c - 1, c + 2, 14, 15, 'T'); set(c, 14, 'g'); set(c + 1, 15, 'g'); [6, 9, 14, 17].forEach(x => set(x, 0, 'H')); set(B.sh[0], 12, 'T'); set(B.sh[1], 12, 'T'); } }, // frost suit, brass gear on the chest, ice spikes
+  'sk-stonekeep': { pal: { O: '#8d8798', T: '#d9c48a', H: '#6d6878', W: '#cfd3dc', g: '#4b4656' }, draw: (set, fill) => { fill(3, 12, 2, 3, 'H'); fill(4, 11, 1, 1, 'H'); [5, 7, 8, 10].forEach(x => set(x, 4, 'H')); set(7, 3, 'T'); set(8, 3, 'T'); [5, 10].forEach(x => set(x, 11, 'g')); set(7, 12, 'g'); set(8, 13, 'g'); } },
+  'sk-clockfrost': { pal: { O: '#7fd6ff', T: '#c9a25a', H: '#e8fbff', W: '#bff3ff', g: '#5d4a2b' }, draw: (set, fill) => { [[7, 11], [8, 11], [7, 12], [8, 12]].forEach(([x, y]) => set(x, y, 'T')); set(6, 11, 'g'); set(9, 12, 'g'); [4, 6, 9, 11].forEach(x => set(x, 1, 'H')); set(3, 10, 'T'); set(12, 10, 'T'); } },
 };
 export function heroGrid16(look, cls) {
   if (cls === GM_CLASS) { const g = GM_GRID.map(r => [...r]); for (const [x, y, c] of GM_KATANA) g[y][x] = c;

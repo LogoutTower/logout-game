@@ -40,7 +40,7 @@ export function cardHtml(card, { team = false, fmt = String, esc = String, guild
   const h = heroOf(card), st = !!card.st, c = CLASSES[h.cls], g = gearBonus(h);
   let title = ''; try { title = st ? GM_TITLE : titleOf(h) || ''; } catch { title = ''; }
   let color = '#f4f1ff'; try { color = nameColorOf(h) || color; } catch {}
-  let spr = ''; try { spr = (sprite ? String(sprite(h.look, h.cls)) : '').replace(/"/g, '&quot;'); } catch {}
+  let spr = ''; try { spr = (sprite ? String(sprite(h.look, h.cls, undefined, h.level)) : '').replace(/"/g, '&quot;'); } catch {}
   const skin = SHOP.find(i => i.id === h.look.skinSet && i.kind === 'skin');
   const tal = Object.entries(h.talents).filter(([, r]) => r > 0).map(([id, r]) => ({ n: nodeById(id), r })).filter(x => x.n).sort((a, b) => b.r - a.r).slice(0, 8);
   const ab = [c ? `${c.icon || ''} ${esc(h.cls)} class` : st ? '◈ GameMaster' : '', ...SLOTS.flatMap(k => h.equip[k]?.ability ? [`<b style="color:${rc('unique')}">${esc(h.equip[k].ability.text || h.equip[k].ability.id)}</b> <small class="sub">· ${esc(h.equip[k].drawback?.text || '')}</small>`] : []),
