@@ -27,6 +27,15 @@ async function run(viewport, tag) {
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/forge-pane-${tag}.png` });
   await page.click('#upBody [data-up]'); await page.waitForTimeout(300); if (SHOTS) await page.screenshot({ path: `${SHOTS}/forge-strike-${tag}.png` });
   await page.waitForFunction(() => JSON.parse(localStorage.getItem('logout.v1.save')).heroes[0].equip.weapon.up === 5, null, { timeout: 8000 });
+  // evolution: +10 → evolve with the sigil; capture the animation beats
+  await page.evaluate(() => { for (const d of document.querySelectorAll('dialog[open]')) d.close(); const s = JSON.parse(localStorage.getItem('logout.v1.save')); s.heroes[0].equip.weapon.up = 10; localStorage.setItem('logout.v1.save', JSON.stringify(s)); });
+  await page.reload(); await page.waitForTimeout(1500); await page.evaluate(() => { for (const d of document.querySelectorAll('dialog[open]')) d.close(); document.getElementById('tour')?.classList.add('hidden'); });
+  await page.click('#tabbar [data-tab="town"]'); await page.click('#townTabs [data-pane="forge"]'); await page.waitForSelector('#upBody [data-up="evo"]');
+  await page.click('#upBody [data-up="evo"]');
+  let el0 = 0; for (const [ms, n] of [[900, 'strikes'], [1950, 'crack'], [2400, 'shatter'], [3900, 'card']]) { await page.waitForTimeout(ms - el0); el0 = ms; if (SHOTS) await page.screenshot({ path: `${SHOTS}/forge-evo-${n}-${tag}.png` }); }
+  await page.waitForFunction(() => !!JSON.parse(localStorage.getItem('logout.v1.save')).heroes[0].equip.weapon.evo, null, { timeout: 8000 });
+  assert.match(await page.evaluate(() => JSON.parse(localStorage.getItem('logout.v1.save')).heroes[0].equip.weapon.name), /^Cinderborn /);
+  await page.waitForSelector('.fanim', { state: 'detached', timeout: 8000 }); if (SHOTS) await page.screenshot({ path: `${SHOTS}/forge-evolved-${tag}.png` });
   await bctx.close(); assert.deepEqual(supa, [], 'no request reached the live backend');
 }
 await run({ width: 1280, height: 800 }, 'desktop'); await run({ width: 390, height: 844 }, 'mobile');

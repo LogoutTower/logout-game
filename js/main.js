@@ -33,6 +33,7 @@ import { slotsOf, displayBanner, ZERO_BANNER, staffHall } from './guildsv2.js';
 import { itemIcon } from './icons.js';
 import { openDen } from './casinoui.js';
 import { openForgeUp } from './forgeui.js';
+import { playForge } from './forgeanim.js';
 import { showHelp } from './helpui.js';
 import { gainMats, matName, farmFloor, setOf, lootKeyHtml } from './forge.js';
 import { shopHtml, haloHtml, petHtml, decorHtml, wallHtml, eclipseOn } from './prestigeui.js';
@@ -40,7 +41,7 @@ import { SHOP, spiritStage } from './prestige.js';
 import { SANCTUM, sanctumAllowed, inSanctum, newConstruct, hitConstruct, dpsMeters, constructSprite, towerModelSprite } from './sanctum.js';
 import { sellPrice, sellable, toggleLock, sellItem, bulkPreview, sellBulk } from './town.js';
 const shownRarity = it => it?.gm ? 'unique' : it?.rarity; // staff items display as Unique (see gm.js)
-const ico = (it, cls = 'ico') => `<i class="${cls}${shownRarity(it) === 'unique' ? ' ushim' : ''}${it?.gm && it.tier >= 2 ? ` gmt${it.tier}` : ''}" style='background-image:${itemIcon(it).replace(/'/g, '%27')}' aria-hidden="true"></i>`;
+const ico = (it, cls = 'ico') => `<i class="${cls}${shownRarity(it) === 'unique' ? ' ushim' : ''}${it?.gm && it.tier >= 2 ? ` gmt${it.tier}` : ''}${it?.evo && !it.gm ? ' evolved' : ''}" style='background-image:${itemIcon(it).replace(/'/g, '%27')}${it?.evo && !it.gm ? `;--evh:${+it.evo.hue || 0}deg` : ''}' aria-hidden="true"></i>`; // evolved weapons: new look (hue shift + glow)
 import { ELEMENT_WORD } from './loot.js'; const ELEMENTS = Object.keys(ELEMENT_WORD);
 import { classOf } from './game.js';
 import { holderStatus } from './supabase.js';
@@ -358,7 +359,7 @@ function openTown() {
     else if (b.dataset.sell) { const i = +b.dataset.sell, it = save.inv[i]; if (it.rarity === 'unique' && !confirm(`Sell ${it.name}? A Unique is one of a kind and can never drop again.`)) return; const g = sellItem(save, i, { confirmUnique: true }); if (g) log(`Sold ${it.name} for ${fmt(g)} gold.`); }
     await be.saveSave(save); render(); openTown(); };
   renderGoods(f);
-  openForgeUp({ be, save: () => save, fmt, notice, log, ico, after: async () => { await be.saveSave(save); render(); $('townGold').textContent = `Gold ${fmt(save.gold)}`; } }); // weapon upgrades (js/forge.js)
+  openForgeUp({ be, save: () => save, fmt, notice, log, ico, play: (k, a, b, ok) => playForge(k, a, b, ok, it => ico(it, 'ico fbig')), after: async () => { await be.saveSave(save); render(); $('townGold').textContent = `Gold ${fmt(save.gold)}`; } }); // weapon upgrades (js/forge.js)
   openDen({ be, save: () => save, floor: () => floor?.floor || 1, fmt, notice, after: async () => { await be.saveSave(save); render(); $('townGold').textContent = `Gold ${fmt(save.gold)}`; } }); // The Glitch Den (gold only)
   $('townGold').textContent = `Gold ${fmt(save.gold)}`;
   if (!$('town').open) $('town').showModal();
