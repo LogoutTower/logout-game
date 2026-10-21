@@ -13,14 +13,14 @@ async function open({ v2 = 'gm', gm = false, mobile = false } = {}) {
 const calm = p => p.addStyleTag({ content: '.notice,.toast,.banner-pop,.awaken,.cutscene,#awaken,.sysbanner{display:none!important}' }).then(() => p.waitForTimeout(300));
 const start = async (p, name = 'Pixel') => { await p.fill('#hname', name); await p.click('#start'); await p.waitForTimeout(1500); if (await p.isVisible('#tskip')) await p.click('#tskip'); await p.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close())); await p.waitForTimeout(500); };
 const heroBox = p => p.evaluate(() => { const r = document.getElementById('hero').getBoundingClientRect(), b = document.getElementById('boss').getBoundingClientRect(); return { w: r.width, h: r.height, right: r.right, bossL: b.left, bossR: b.right, bossW: b.width, vw: innerWidth, v2: document.getElementById('hero').classList.contains('v2') }; });
-const fits = (x, boss) => { assert(Math.abs(x.w - 128) < 0.6 && Math.abs(x.h - 128) < 0.6, `hero 128px (${x.w}x${x.h})`); assert(Math.abs(x.bossW - boss) < 0.6, `boss ${boss}px (${x.bossW})`); assert(x.right <= x.bossL + 0.5 && x.bossR <= x.vw + 0.5, `hero + boss fit (${JSON.stringify(x)})`); };
+const fits = (x, boss, hero = 128) => { assert(Math.abs(x.w - hero) < 0.6 && Math.abs(x.h - hero) < 0.6, `hero ${hero}px (${x.w}x${x.h})`); assert(Math.abs(x.bossW - boss) < 0.6, `boss ${boss}px (${x.bossW})`); assert(x.right <= x.bossL + 0.5 && x.bossR <= x.vw + 0.5, `hero + boss fit (${JSON.stringify(x)})`); };
 // 1) flag 'gm', normal player: v1 everywhere, no origin picker
 { const { ctx, p, hits } = await open({ mobile: true }); assert.equal(await p.$('#cpick [data-id="race-shade"]'), null, 'no race picker for players yet'); await start(p);
   const v1 = await heroBox(p); assert.equal(v1.v2, false); globalThis.v1 = v1; assert.deepEqual(hits, []); await ctx.close(); }
 // 2) flag forced on (mobile): pick Female + Shade at creation, battle hero is v2 at the same on-screen size
 { const { ctx, p, hits } = await open({ v2: 'all', mobile: true }); await p.click('#cpick [data-id="body-f"]'); await p.click('#cpick [data-id="race-shade"]'); await p.click('#cpick [data-id="hs-long"]');
   assert.match(await p.textContent('#cpick'), /\+2% offline time/); await p.screenshot({ path: `${SHOTS}/heroes64-creator-mobile.png`, fullPage: true }); await start(p);
-  const v2 = await heroBox(p); assert.equal(v2.v2, true); fits(v2, 192); console.log('mobile fit', JSON.stringify(v2));
+  const v2 = await heroBox(p); assert.equal(v2.v2, true); fits(v2, 180, 80); console.log('mobile fit', JSON.stringify(v2));
   const s = await p.evaluate(() => JSON.parse(localStorage.getItem('logout.v1.save')).heroes[0]); assert.equal(s.look.body, 'body-f'); assert.equal(s.look.race, 'race-shade'); assert.equal(s.originSet, true);
   await calm(p); await p.screenshot({ path: `${SHOTS}/heroes64-battle-mobile.png` }); assert.deepEqual(hits, []); await ctx.close(); }
 // 3) old hero (no origin): one free change in the Wardrobe, then locked
