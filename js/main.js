@@ -5,7 +5,7 @@ import { BUILD } from './build.js';
 import { priceFor, innCost, rest, shopStock, buy as shopBuy, soldOut, npcGrid } from './town.js';
 import { sprite } from './sprites.js';
 import { isSpecialSlot, bossInfo, mechText } from './floors.js';
-import { arcOf, arcIndex, sceneOf, sceneVars } from './arcs.js';
+import { arcOf, arcIndex, sceneOf, sceneVars, arenaBgOf } from './arcs.js';
 import { treeOf, nodeById, canLearn, learn, freePoints, totalPoints, spentIn, respec, respecCost } from './talents.js';
 import { TRICKLE, trickleDrops, grantDrops, equipItem, salvageItem, salvageValue, rarityOf, statLabel, INV_SIZE, bagSize, GEAR_SLOTS } from './loot.js';
 import { GM_PASS_HASH, OFFLINE_CAP_HOURS, MAX_FLOOR, FEATURES, SOLANA_RPC, TOKEN_MINT, HOLDER_THRESHOLD, GM_SOFTEN_MULT } from '../config.js';
@@ -225,10 +225,13 @@ async function openCard(name, author = null) {
 }
 document.addEventListener('click', e => { const t = e.target.closest?.('[data-card]'); if (!t || !save) return; e.preventDefault(); e.stopPropagation(); openCard(t.dataset.card, t.dataset.author || null); }, true);
 // ---- Arc scenes (js/arcs.js): one scene per 10 floors, per-floor tint toward the guardian's element.
-let sceneFor = 0;
+let sceneFor = '';
+const arenaBgOn = () => featureOn(FEATURES, 'arenaBg', gmValid); // arena background art (assets/bg/arc-N.png): 'gm' = staff preview, 'all' = everyone
 function applyScene(f) {
-  if (sceneFor === f) return; sceneFor = f; const ar = $('arena'), bi = bossInfo(f), s = sceneOf(f, ELEMENT_GLOW[bi.lootElement]);
+  const bg = arenaBgOn() ? arenaBgOf(f) : null, key = `${f}|${bg}`;
+  if (sceneFor === key) return; sceneFor = key; const ar = $('arena'), bi = bossInfo(f), s = sceneOf(f, ELEMENT_GLOW[bi.lootElement]);
   for (const [k, v] of sceneVars(s)) ar.style.setProperty(k, v);
+  if (bg) ar.style.setProperty('--a-bg', `url(${bg})`); else ar.style.removeProperty('--a-bg'); ar.classList.toggle('abg', !!bg);
   Object.assign(ar.dataset, { arc: s.arc, props: s.props, particles: s.particles }); ar.classList.toggle('finale', !!bi.finale); ar.classList.toggle('special', isSpecialSlot(f));
   for (const c of ['gear l', 'gear r', 'icicles']) if (!ar.querySelector('.' + c.replace(' ', '.'))) { const d = document.createElement('div'); d.className = c; d.setAttribute('aria-hidden', 'true'); ar.prepend(d); }
   if (!$('amb')) { const d = document.createElement('div'); d.id = 'amb'; d.setAttribute('aria-hidden', 'true'); ar.prepend(d); }

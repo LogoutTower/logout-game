@@ -306,17 +306,18 @@ export function composeShape(key, element = null, addons = []) {
   if (element) { pal[5] = lerp(ELEMENTS[element].ramp[1], ELEMENTS[element].ramp[0], 0.3); pal[6] = ELEMENTS[element].glow; } else { pal[5] = '#3a2a5a'; pal[6] = '#5ff6ff'; }
   return { rows: c.rows(), pal };
 }
-// ---- Boss art v2 (hand-finished, e.g. 96x96): pre-shaded (outline, ramps, rim, pedestal baked in), palette may use digit keys.
+// ---- Boss art v2 (hand-finished, e.g. 96x96): pre-shaded (outline, ramps, rim; older sources had a pedestal baked in, entries with pedestal: false do not), palette may use digit keys.
 // Drawn as-is: no shade(), no add-on layers, no element recolour. Registry: js/bosses-v2.js (BOSSES_V2), behind FEATURES.bossV2.
 // Entry: { key, size: N, preshaded: true, pal: { char: '#rrggbb' }, rows: N strings of N chars ('.' = transparent), pedestalY?: first pedestal row }.
 /** Validate a v2 entry and return the drawable grid { rows, pal }.
  * stripPedestal: removes the baked-in glowing pedestal. From 8 rows above pedestalY (default y>=82 at 96) down, pedestal-only colours
  * (keys marked 'pedestal' that sit mostly in those rows) are cleared, then anything there not connected to the body above is cleared,
  * so feet/tails/robes that overlap the pedestal survive. The art is then shifted down so its lowest pixel sits on the floor line. */
-export function prepV2(e, { stripPedestal = false } = {}) {
+export function prepV2(e, { stripPedestal = false, ground = false } = {}) {
   const N = e?.rows?.length; if (!N || !e.preshaded || (e.size && e.size !== N) || !e.rows.every(r => r.length === N)) throw new Error(`v2 boss ${e?.key}: need a pre-shaded square grid`);
   for (const ch of e.rows.join('')) if (ch !== '.' && !/^#[0-9a-f]{6}$/i.test(e.pal[ch] || '')) throw new Error(`v2 boss ${e.key}: no colour for '${ch}'`);
-  if (!stripPedestal) return { rows: [...e.rows], pal: { ...e.pal } };
+  if (!stripPedestal && !ground) return { rows: [...e.rows], pal: { ...e.pal } };
+  if (!stripPedestal) return groundV2(e.rows.map(r => [...r]), N, e.pal); // pedestal-free source: only make sure it stands on the floor line
   const g = e.rows.map(r => [...r]), Y = e.pedestalY ?? Math.round(N * 82 / 96), top = Math.max(1, Y - 8), cnt = {}, low = {};
   g.forEach((r, y) => r.forEach(ch => { if (ch !== '.') { cnt[ch] = (cnt[ch] || 0) + 1; if (y >= top) low[ch] = (low[ch] || 0) + 1; } }));
   const ped = new Set(Object.entries(e.keys || {}).filter(([c, d]) => /pedestal/i.test(d) && (low[c] || 0) >= 0.7 * cnt[c]).map(([c]) => c));
@@ -327,7 +328,9 @@ export function prepV2(e, { stripPedestal = false } = {}) {
   const seen = new Set(), st = []; for (let x = 0; x < N; x++) if (g[top - 1][x] !== '.') st.push([x, top - 1]);
   while (st.length) { const [x, y] = st.pop(), k = y * N + x; if (x < 0 || y < 0 || x >= N || y >= N || seen.has(k) || g[y][x] === '.') continue; seen.add(k); if (y >= top - 1) st.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]); }
   for (let y = top; y < N; y++) for (let x = 0; x < N; x++) if (!seen.has(y * N + x)) g[y][x] = '.';
+  return groundV2(g, N, e.pal); }
+function groundV2(g, N, pal) {
   let last = N - 1; while (last > 0 && g[last].every(c => c === '.')) last--;
   const blank = '.'.repeat(N), rows = g.map(r => r.join('')), d = N - 1 - last; // ground it
-  return { rows: [...Array(d).fill(blank), ...rows.slice(0, N - d)], pal: { ...e.pal }, dropped: d }; }
+  return { rows: [...Array(d).fill(blank), ...rows.slice(0, N - d)], pal: { ...pal }, dropped: d }; }
 export const shadeShape = s => shade(s.rows, s.pal, { scale: 1, drop: '', eyes: '', flat: 'kE', ghost: '6' });

@@ -66,7 +66,7 @@ export const bossIsBig = f => bossInfo(f).big;
 export function bossShape(f) { const i = bossInfo(f); return i.kind === 'generated' ? composeShape(i.base, i.element, i.addons) : composeShape(i.base); }
 /** v2: boss art v2 flag (FEATURES.bossV2). A BOSSES_V2 entry for the boss's key replaces a hand-made boss (phase 1 only); everything else keeps the 32x32 path. */
 const v2Cache = new Map();
-export const bossV2Grid = f => { const i = bossInfo(f), e = i.kind !== 'generated' && BOSSES_V2[i.base]; if (!e || (e.floor ? e.floor !== f : i.kind !== 'handmade')) return null; if (!v2Cache.has(i.base)) v2Cache.set(i.base, prepV2(e, { stripPedestal: true })); return v2Cache.get(i.base); }; // an entry's `floor` pins it to that floor (reused placeholder shapes elsewhere stay classic)
+export const bossV2Grid = f => { const i = bossInfo(f), e = i.kind !== 'generated' && BOSSES_V2[i.base]; if (!e || (e.floor ? e.floor !== f : i.kind !== 'handmade')) return null; if (!v2Cache.has(i.base)) v2Cache.set(i.base, prepV2(e, e.pedestal === false ? { ground: true } : { stripPedestal: true })); return v2Cache.get(i.base); }; // an entry's `floor` pins it to that floor (reused placeholder shapes elsewhere stay classic)
 export const bossGrid = (f, phase = 1, v2 = false) => (v2 && phase === 1 && bossV2Grid(f)) || shadeShape(phase === 2 && bossInfo(f).phases === 2 ? composeShape('umbraAwake') : bossShape(f));
 // ---- Two-phase guardians (Floor 100). Phase is derived only from the shared boss HP, so every player sees the same phase; no server state.
 export const AWAKEN_AT = 0.5, AWAKEN_NAME = `${RIVAL_NAME} Awakened`, AWAKEN_TITLE = 'The Tower Rewrites Itself';

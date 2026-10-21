@@ -35,3 +35,9 @@ const sigs = L.signatureList(); assert(sigs.length >= 10 && sigs.every(s => s.fl
   assert(got); assert.equal(got.name, 'Hourstroke Pendulum'); assert.deepEqual(got.stats, it.stats, 'no power creep'); }
 assert.equal(L.signature(F.rng(1), 5, { slot: 'weapon', rarity: 'legendary', name: 'x' }).name, 'x', 'arc 1 has no signatures');
 console.log('arcs + floors 11-20 tests passed');
+{ const { arenaBgOf, ARENA_BG } = await import('../js/arcs.js'); const assert = (await import('node:assert/strict')).default; const fs = await import('node:fs');
+  for (const f of [1, 5, 10]) assert.equal(arenaBgOf(f), 'assets/bg/arc-1.png'); for (const f of [11, 15, 20]) assert.equal(arenaBgOf(f), 'assets/bg/arc-2.png');
+  for (const f of [21, 30, 55, 100]) assert.equal(arenaBgOf(f), null, `floor ${f}: no arena art yet (classic scene)`);
+  for (const u of Object.values(ARENA_BG)) { const b = fs.readFileSync(new URL('../' + u, import.meta.url)); assert.equal(b.readUInt32BE(16), 480); assert.equal(b.readUInt32BE(20), 96); }
+  const { FEATURES } = await import('../config.js'); assert.equal(FEATURES.arenaBg, 'gm', 'arena art is a GM preview');
+  console.log('arena bg tests passed'); }
