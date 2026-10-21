@@ -1,5 +1,5 @@
-// Offline e2e for arena background art (FEATURES.arenaBg = 'gm'): local mode only (Supabase blocked), fresh browser contexts.
-// Checks: non-staff keeps the classic scene; staff gets arc art (arc 1 for Floors 1-10, arc 2 for 11-20) at a whole-number scale (3x desktop, 2x phones),
+// Offline e2e for arena background art (FEATURES.arenaBg = 'all'): local mode only (Supabase blocked), fresh browser contexts.
+// Checks: non-staff players get arc art too (live for everyone); staff gets arc art (arc 1 for Floors 1-10, arc 2 for 11-20) at a whole-number scale (3x desktop, 2x phones),
 // pixelated, old floor strip/props off. Writes screenshots to ABG_SHOTS (default /tmp/abg).
 import assert from 'node:assert/strict'; import { createHash } from 'node:crypto'; import { chromium, devices } from 'playwright-core'; import { offline } from './e2e-offline.mjs';
 const { TEAM_PASS_HASH } = await import('../config.js');
@@ -19,7 +19,7 @@ async function page(dev, gm, floor) {
 const info = p => p.evaluate(() => { const a = document.getElementById('arena'), cs = getComputedStyle(a), af = getComputedStyle(a, '::after'), t = a.querySelector('.torch');
   return { abg: a.classList.contains('abg'), bgVar: a.style.getPropertyValue('--a-bg'), img: cs.backgroundImage, size: cs.backgroundSize, ir: cs.imageRendering, strip: af.display, torch: t ? getComputedStyle(t).display : 'none', vw: innerWidth }; });
 const RUNS = [['desktop', { viewport: { width: 1280, height: 900 } }], ['phone', devices['iPhone 13']]];
-{ const { ctx, p, errs } = await page(RUNS[0][1], false, 1); const i = await info(p); assert.equal(i.abg, false, 'non-staff: classic scene'); assert.doesNotMatch(i.img, /arc-1/); assert.deepEqual(errs, []); await ctx.close(); console.log('non-staff ok'); }
+{ const { ctx, p, errs } = await page(RUNS[0][1], false, 1); const i = await info(p); assert.equal(i.abg, true, 'non-staff: arena art live for everyone'); assert.match(i.img, /arc-1\.png/); assert.deepEqual(errs, []); await ctx.close(); console.log('non-staff ok'); }
 for (const [name, dev] of RUNS) for (const f of FLOORS) {
   const { ctx, p, errs } = await page(dev, true, f); const onFloor = () => p.evaluate(n => new RegExp(`· Floor ${n} / `).test(document.getElementById('floor')?.textContent || ''), f);
   const reseed = async k => { await p.evaluate(n => localStorage.setItem('logout.v1.world', JSON.stringify({ floor: n, hp: 9e15, dmg: {}, marks: {}, t: Date.now() })), f); await p.reload(); await p.waitForTimeout(1200 + 300 * k); await p.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close())); };
