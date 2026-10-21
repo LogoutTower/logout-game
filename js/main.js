@@ -32,8 +32,9 @@ import { bannerBadge, hallArt } from './banner.js';
 import { slotsOf, displayBanner, ZERO_BANNER, staffHall } from './guildsv2.js';
 import { itemIcon } from './icons.js';
 import { openDen } from './casinoui.js';
-import { openForgeUp, draw as drawForgeUp } from './forgeui.js';
-import { gainMats, matName } from './forge.js';
+import { openForgeUp } from './forgeui.js';
+import { showHelp } from './helpui.js';
+import { gainMats, matName, farmFloor, setOf, lootKeyHtml } from './forge.js';
 import { shopHtml, haloHtml, petHtml, decorHtml, wallHtml, eclipseOn } from './prestigeui.js';
 import { SHOP, spiritStage } from './prestige.js';
 import { SANCTUM, sanctumAllowed, inSanctum, newConstruct, hitConstruct, dpsMeters, constructSprite, towerModelSprite } from './sanctum.js';
@@ -93,8 +94,8 @@ async function boot() {
   const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
   const sanc0 = inSanctum(save, sanctumOk()); // offline time accrues to the mode the staff hero was in
   if (!sanc0 && gmValid) p.damage = softenGm(p.damage, p.secs, (await be.getFloor()).floor, GM_SOFTEN_MULT); // raid softener
-  save.gold += p.gold; const ups = applyXp(save.heroes, p.xp, levelCap((await be.getFloor()).floor, gmValid)); if (sanc0) construct().total += p.damage; else pending += p.damage;
-  const offFloor = (await be.getFloor()).floor, matsAway = sanc0 ? {} : gainMats(save, p.secs, offFloor), trickled = sanc0 ? [] : trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
+  save.gold += p.gold; const ups = applyXp(save.heroes, p.xp, levelCap((await be.getFloor()).floor, gmValid)); if (sanc0) construct().total += p.damage; else if (!farmFloor(save, (await be.getFloor()).floor)) pending += p.damage; else p.damage = 0;
+  const offFloor = (await be.getFloor()).floor, farm0 = sanc0 ? 0 : farmFloor(save, offFloor), matsAway = sanc0 ? {} : gainMats(save, p.secs, farm0 || offFloor, !!farm0), trickled = sanc0 ? [] : trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
   if (p.secs > 30) {
     const r = sanc0 ? { clears: [] } : await submitDmg(h0.name, pending, h0); if (!sanc0) pending = 0;
     lootLines = []; const got = handleClears(r.clears, true);
@@ -161,7 +162,8 @@ function tick() {
   codexTick(p);
   const sanc = inSanctum(save, sanctumOk()); if (!sanc && gmValid) p.damage = softenGm(p.damage, p.secs, floor.floor, GM_SOFTEN_MULT); // raid softener (shared boss only; server enforces too)
   save.gold += p.gold; recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp;
-  if (!sanc) gainMats(save, p.secs, floor.floor); // Tower Shards + Floor Essence from every fight (js/forge.js)
+  const farm = sanc ? 0 : farmFloor(save, floor.floor); if (farm) p.damage = 0; // Farm mode: a boss echo, never the live guardian
+  if (!sanc) gainMats(save, p.secs, farm || floor.floor, !!farm); // materials from every fight (js/forge.js)
   if (sanc) { const b = hitConstruct(construct(), p.damage, Date.now()); if (b) log(`Sanctum: the training construct broke and re-formed (×${construct().broken}).`, '#d9a93f'); } else { pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage); } // Sanctum: never the shared boss
   if (applyXp(save.heroes, p.xp, levelCap(floor?.floor, gmValid)).length) { log(`System notice: level ${save.heroes[0].level} reached.`); notice(`Level ${save.heroes[0].level} reached · +1 talent point`); }
   for (const it of sanc ? [] : trickleDrops(save, p.secs, floor.floor, p.secs > 2 ? TRICKLE.offlineMax : Infinity)) { const R = rarityOf(it.rarity); log(`Loot · ${R.label} ${it.name}${it.salvaged ? ' (bag full: salvaged)' : ''}`, R.color); notice(`${R.label} find — ${it.name}`, R.color, it); }
@@ -294,6 +296,8 @@ function render() {
   if (!won && phase === 2 && !inSanctum(save, sanctumOk())) { H('bname').textContent = AWAKEN_NAME; H('floor').textContent = `${AWAKEN_TITLE} · Floor ${floor.floor} / ${MAX_FLOOR} · ${arc.name}`; }
   awakenCheck(floor.floor, inSanctum(save, sanctumOk()) ? 1 : phase, won);
   if (inSanctum(save, sanctumOk())) { $('boss').style.backgroundImage = constructSprite(); $('boss').classList.remove('big'); H('bname').textContent = `Training Construct · Lv ${construct().level}`; H('floor').textContent = `${SANCTUM.name} · ${SANCTUM.sub}`; }
+  { const fm = inSanctum(save, sanctumOk()) ? 0 : farmFloor(save, floor.floor); $('boss').classList.toggle('echo', !!fm); $('arena').classList.toggle('farming', !!fm);
+    if (fm) { $('boss').style.backgroundImage = bossSprite(fm); $('boss').classList.toggle('big', bossIsBig(fm)); H('bname').textContent = `Echo of ${bossName(fm)}`; H('floor').textContent = `Farming Floor ${fm} echo · no live-boss damage`; } }
   $('floor').title = bi.lore ? bi.lore.replace(/^System notice: /, '') : '';
   const pct = floor.hp / floor.maxHp, lay = Math.ceil(pct * LAYERS - 1e-9), inLayer = pct * LAYERS - (lay - 1);
   H('layers').innerHTML = Array.from({ length: LAYERS }, (_, i) => `<i class="${i < lay ? 'on' : ''}"></i>`).join('');
@@ -698,6 +702,7 @@ function wireCodexExtra(h, n) {
 }
 
 // ---- Tower Map + progress (shared floor_state + floor_clears history online, local history offline)
+async function setFarm(f) { await sync(); save.farm = f || null; log(f ? `${save.heroes[0].name} turned back to Floor ${f}: farming its echo. The live guardian is left to the others.` : `${save.heroes[0].name} returned to the live guardian on Floor ${floor.floor}.`); notice(f ? `Farming Floor ${f} echo` : 'Back on the live guardian'); await be.saveSave(save); render(); openMap(); }
 async function openMap() {
   const [hist, heroes] = await Promise.all([be.floorHistory?.().catch(() => []) ?? [], be.floorHeroes?.(floor.floor).catch(() => null) ?? null]);
   const pp = clearPlayers(counts?.last), rows = towerRows({ current: floor.floor, maxFloor: MAX_FLOOR, history: hist, players: pp }), pr = towerProgress({ current: floor.floor, hp: floor.hp, maxHp: floor.maxHp, maxFloor: MAX_FLOOR });
@@ -709,7 +714,9 @@ async function openMap() {
     <span class="fn">${r.f}</span>${r.rival ? '<i class="shade" aria-hidden="true"></i>' : ''}<span class="fname">${esc(r.name)}${r.milestone && r.state !== 'undiscovered' ? ' <em>★</em>' : r.special && r.state !== 'undiscovered' ? ' <em>✦</em>' : ''}</span>
     <span class="fmeta">${r.state === 'cleared' ? (r.at ? `fell ${esc(when(r.at))}` : 'cleared') + (r.players ? `<span class="pp"> · ${r.players.toLocaleString('en-US')} present</span>` : '') : r.state === 'current' ? `<b class="you">◆ You</b> ${Math.round(pr.bossPct * 100)}% HP` : ''}</span></button>`).join('');
   $('mapTower').onclick = e => { const rp = e.target.closest('button.replay'); if (rp) { $('map').close(); playCutscene(rp.dataset.cs).then(() => openMap()); return; } const b = e.target.closest('button.fl.cleared'); if (!b) return; const r = rows.find(x => x.f === +b.dataset.f), d = $('mapDetail');
-    d.hidden = false; d.innerHTML = `<i class="mthumb" style='background-image:${bossSprite(r.f).replace(/'/g, '%27')}'></i><div><b>Floor ${r.f} · ${esc(r.name)}</b><br>${r.at ? `Fell ${esc(when(r.at))}` : 'Cleared (time not recorded)'}<br>${r.top ? `Top damage: ${esc(r.top)}` : 'Top damage: not recorded'}${r.players ? `<br>${r.players.toLocaleString('en-US')} players trapped when it fell` : ''}</div><div class="mwslot"></div>`; be.memorialWall?.(r.f).then(n => { const w = d.querySelector('.mwslot'); if (w) w.innerHTML = wallHtml(n || [], esc); }).catch(() => {}); };
+    d.hidden = false; d.innerHTML = `<i class="mthumb" style='background-image:${bossSprite(r.f).replace(/'/g, '%27')}'></i><div><b>Floor ${r.f} · ${esc(r.name)}</b><br>${r.at ? `Fell ${esc(when(r.at))}` : 'Cleared (time not recorded)'}<br>${r.top ? `Top damage: ${esc(r.top)}` : 'Top damage: not recorded'}${r.players ? `<br>${r.players.toLocaleString('en-US')} players trapped when it fell` : ''}</div><div class="farmbox">${farmFloor(save, floor.floor) === r.f ? `<button class="cta" data-farm="0">Stop farming · return to Floor ${floor.floor}</button>` : `<button class="cta" data-farm="${r.f}">Farm this echo</button>`} <button class="qhelp" data-farmhelp aria-label="Farm help">?</button><p class="sub">Farming fights this floor's echo for its materials. A farming hero deals no damage to the live guardian.</p>${lootKeyHtml(setOf(r.f), floor.floor - 1)}</div><div class="mwslot"></div>`; be.memorialWall?.(r.f).then(n => { const w = d.querySelector('.mwslot'); if (w) w.innerHTML = wallHtml(n || [], esc); }).catch(() => {}); };
+  { const fm = farmFloor(save, floor.floor); if (fm) $('mapProg').insertAdjacentHTML('beforeend', `<div class="farmbox on">Farming the Floor ${fm} echo: materials only, no live-guardian damage. <button data-farm="0">Stop farming</button> <button class="qhelp" data-farmhelp aria-label="Farm help">?</button></div>`); }
+  $('map').onclick = e => { const fb = e.target.closest('[data-farm]'); if (fb) { setFarm(+fb.dataset.farm); return; } if (e.target.closest('[data-farmhelp]')) showHelp('farm', { set: setOf(Math.max(1, farmFloor(save, floor.floor) || floor.floor - 1)), upTo: floor.floor - 1 }); };
   $('mapDetail').hidden = true; if (!$('map').open) $('map').showModal();
   requestAnimationFrame(() => { const t = $('mapTower'), c = t.querySelector('.fl.current'); if (c) t.scrollTop = c.offsetTop - t.offsetTop - t.clientHeight / 2; $('map').scrollTop = 0; }); // scroll the tower only, keep the progress panel in view
 }

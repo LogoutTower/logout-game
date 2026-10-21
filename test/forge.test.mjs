@@ -19,3 +19,9 @@ const g = newHero('G', 'Blade'); g.equip = { weapon: { slot: 'weapon', gm: true,
 const m = { }; gainMats(m, 3600, 5); assert.deepEqual(m.mats, { shard: 6, ess1: 1 }); gainMats(m, 3600, 5); assert.equal(m.mats.ess1, 3);
 assert(!Object.keys(dropTable(5, false)).some(k => /core|sigil/.test(k))); assert('sigil10' in dropTable(10, true)); assert(!('sigil10' in dropTable(9, true)));
 console.log('forge ok');
+// ---- farm
+import { farmFloor, lootKey } from '../js/forge.js';
+assert.equal(farmFloor({ farm: 3 }, 5), 3); assert.equal(farmFloor({ farm: 5 }, 5), 0, 'current floor is not farmable'); assert.equal(farmFloor({ farm: 9 }, 5), 0); assert.equal(farmFloor({}, 5), 0);
+const fm = {}; gainMats(fm, 10 * 3600, 10, true); assert.equal(fm.mats.core10, 6); assert.equal(fm.mats.ess1, 25); assert.equal(fm.mats.shard, 80); assert.equal(fm.mats.sigil10 || 0, 0); gainMats(fm, 10 * 3600, 10, true); assert.equal(fm.mats.sigil10, 1);
+assert.deepEqual(lootKey(2, 13).map(r => r.key), ['shard', 'ess2', 'core11', 'core12', 'core13']); assert(lootKey(1).some(r => r.key === 'sigil10'));
+console.log('farm ok');

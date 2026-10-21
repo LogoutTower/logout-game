@@ -1,4 +1,5 @@
 // Forge upgrades pane (Town → Forge). DOM glue only; rules in js/forge.js. Online the server rolls (forge_upgrade RPC).
+import { showHelp } from './helpui.js';
 import { nextCost, lacking, canForge, matName, matIcon, kindOf, MAX_UP, forgeLocal, applyAttempt } from './forge.js';
 const $ = id => document.getElementById(id);
 let ctx = null, busy = false, soon = false;
@@ -26,7 +27,7 @@ export function draw() {
         <p class="sub">${c.t > MAX_UP ? 'Evolve: a new form, a new look and one bonus effect. Never fails.' : c.rate < 100 ? `Success ${c.rate}%. A fail burns the materials only; your gold, weapon and level are kept.` : 'Never fails.'}</p>
         <button class="cta" data-up="${c.t > MAX_UP ? 'evo' : 'up'}" ${miss.length || soon ? 'disabled' : ''}>${c.t > MAX_UP ? 'Evolve' : `Upgrade to +${c.t}`}</button>` : '<p class="sub">Fully evolved. This weapon has reached its final form.</p>'); }
   el.innerHTML = `<h3>Weapon Upgrades <button class="qhelp" data-help="forge" aria-label="Forge help">?</button></h3>${body}<h4>Materials</h4>${matsHtml(s.mats)}`;
-  el.onclick = async e => { const b = e.target.closest('button[data-up]'); if (b && !busy) attempt(b.dataset.up === 'evo'); else if (e.target.closest('[data-help]')) ctx.help?.(e.target.closest('[data-help]').dataset.help); };
+  el.onclick = async e => { const b = e.target.closest('button[data-up]'); if (b && !busy) attempt(b.dataset.up === 'evo'); else if (e.target.closest('[data-help]')) showHelp(e.target.closest('[data-help]').dataset.help); };
 }
 async function attempt(evolve) {
   const s = ctx.save(), w0 = { ...s.heroes[0].equip.weapon }; busy = true;

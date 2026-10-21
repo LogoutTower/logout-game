@@ -64,3 +64,21 @@ export function gainMats(save, secs, f, farm = false) {
   for (const [k, perH] of Object.entries(dropTable(f, farm))) { const x = (c[k] || 0) + perH * secs / 3600, n = Math.floor(x); c[k] = x - n; if (n) { save.mats[k] = (save.mats[k] || 0) + n; got[k] = n; } }
   return got;
 }
+// ---- Farm mode: the hero fights a cleared floor's boss echo (weaker, repeatable). Earns that floor's materials (incl. its Boss Core,
+// and the Evolution Sigil on milestone floors) but deals NO damage to the live shared boss. Offline time counts like live time.
+/** The floor being farmed, or 0. Only a cleared floor (below the shared floor) can be farmed. */
+export const farmFloor = (save, current) => { const f = Math.floor(+save?.farm || 0); return f >= 1 && f < current ? f : 0; };
+/** Loot key for a 10-floor set: [{ key, kind, rarity, color, icon, name, where, fight, farm }] (rates per hour). Floors above `upTo` stay hidden. */
+export function lootKey(set, upTo = set * 10) {
+  const from = (set - 1) * 10 + 1, to = set * 10, rows = [], row = (key, where, fight, farm) => { const m = MAT_KINDS[kindOf(key)]; rows.push({ key, kind: kindOf(key), rarity: m.rarity, color: m.color, icon: m.icon, name: matName(key), where, fight, farm }); };
+  row('shard', 'any fight, any floor', RATES.fight.shard, RATES.farm.shard);
+  row('ess' + set, `fights on Floors ${from}–${to}`, RATES.fight.ess, RATES.farm.ess);
+  for (let f = from; f <= Math.min(to, upTo); f++) row('core' + f, `Floor ${f} echo (Farm)`, 0, RATES.farm.core);
+  if (upTo >= to) row('sigil' + to, `Floor ${to} echo (Farm, milestone)`, 0, RATES.farm.sigil);
+  return rows;
+}
+const perH = n => n ? n >= 0.5 ? `${n}/h` : `1 per ${Math.round(1 / n)}h` : "—";
+export function lootKeyHtml(set, upTo) {
+  return `<table class="lootkey"><caption>Loot key · Floors ${(set - 1) * 10 + 1}–${set * 10}</caption><tr><th></th><th>Material</th><th>Fighting</th><th>Farming</th></tr>${lootKey(set, upTo).map(r =>
+    `<tr><td><i class="mat" style="color:${r.color}" title="${r.rarity}">${r.icon}</i></td><td><b style="color:${r.color}">${r.name}</b><br><small>${r.rarity} · ${r.where}</small></td><td>${perH(r.fight)}</td><td>${perH(r.farm)}</td></tr>`).join('')}</table>`;
+}

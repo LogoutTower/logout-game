@@ -496,3 +496,9 @@ body.tabhidden .halo .corona{animation-play-state:paused}
 .upw{display:flex;gap:10px;align-items:center}.uplv{color:#ffd76a;font-weight:700}.evo{color:#c26bff}
 .upcost{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.upcost span,.matlist span{background:#0006;border:1px solid #fff2;border-radius:6px;padding:3px 6px;font-size:12px}.upcost .no{color:#ff7a7a;border-color:#ff7a7a66}
 .matlist{display:flex;flex-wrap:wrap;gap:6px}.mat{font-style:normal;font-weight:700;text-shadow:0 0 4px currentColor}
+/* Farm mode + loot key + help guides */
+#boss.echo{opacity:.72;filter:grayscale(.5) hue-rotate(160deg) drop-shadow(0 0 6px #7ff6ff)}
+.farmbox{margin-top:8px}.farmbox.on{border:1px solid #7ff6ff66;border-radius:8px;padding:6px 8px;font-size:12px}
+.lootkey{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}.lootkey caption{text-align:left;font-weight:700;padding-bottom:4px}.lootkey td,.lootkey th{padding:3px 4px;border-bottom:1px solid #fff1;text-align:left;vertical-align:top}.lootkey small{opacity:.75}
+.help .hsteps{list-style:none;padding:0;margin:0;display:grid;gap:8px}.help .hsteps li{display:flex;gap:10px;align-items:flex-start}.hico{font-size:20px;min-width:30px;text-align:center}.hrar{line-height:1.7;font-size:13px}
+.mapdetail{flex-wrap:wrap}.mapdetail .farmbox{order:3;flex:1 1 100%}

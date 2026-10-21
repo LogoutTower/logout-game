@@ -11,6 +11,17 @@ async function run(viewport, tag) {
   await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('logout.v1.save')); s.gold = 5e7; s.tutorialSeen = true; s.introDue = false;
     s.mats = { shard: 60, ess1: 30, core3: 20, sigil10: 1 }; s.heroes[0].equip.weapon = { id: 'w-e2e', slot: 'weapon', rarity: 'epic', floor: 3, element: 'fire', name: 'Runed Warblade', stats: { dps: 12 }, affixes: [], up: 4 };
     localStorage.setItem('logout.v1.save', JSON.stringify(s)); });
+  if (tag === 'desktop') { // Farm: floor 4 open, farm the Floor 3 echo; the live guardian takes no damage from this hero
+    await page.evaluate(() => { const w = JSON.parse(localStorage.getItem('logout.v1.world')); w.floor = 4; w.dmg = {}; localStorage.setItem('logout.v1.world', JSON.stringify(w)); const s = JSON.parse(localStorage.getItem('logout.v1.save')); s.farm = 3; localStorage.setItem('logout.v1.save', JSON.stringify(s)); });
+    await page.reload(); await page.waitForTimeout(4000); await page.evaluate(() => { for (const d of document.querySelectorAll('dialog[open]')) d.close(); document.getElementById('tour')?.classList.add('hidden'); });
+    const st = await page.evaluate(() => ({ name: document.getElementById('bname').textContent, dmg: JSON.parse(localStorage.getItem('logout.v1.world')).dmg.Tester || 0, c: JSON.parse(localStorage.getItem('logout.v1.save')).matc?.core3 || 0 }));
+    assert.match(st.name, /^Echo of/); assert.equal(st.dmg, 0, 'farming deals no live damage'); assert(st.c > 0, 'core accrues while farming');
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/farm-arena-${tag}.png` });
+    await page.click('#floorBtn'); await page.waitForSelector('#mapProg [data-farm="0"]'); await page.click('#mapTower button.fl.cleared[data-f="3"]'); await page.waitForSelector('#mapDetail .lootkey');
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/farm-lootkey-${tag}.png` });
+    await page.click('#mapProg [data-farmhelp]'); await page.waitForSelector('#helpSheet[open] .hsteps'); if (SHOTS) await page.screenshot({ path: `${SHOTS}/farm-help-${tag}.png` }); await page.click('#helpSheet [data-close]');
+    await page.click('#mapProg [data-farm="0"]'); await page.waitForTimeout(500); assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('logout.v1.save')).farm), null);
+    await page.evaluate(() => { for (const d of document.querySelectorAll('dialog[open]')) d.close(); }); }
   await page.reload(); await page.waitForTimeout(1500); await page.evaluate(() => { for (const d of document.querySelectorAll('dialog[open]')) d.close(); document.getElementById('tour')?.classList.add('hidden'); });
   await page.click('#tabbar [data-tab="town"]'); await page.click('#townTabs [data-pane="forge"]'); await page.waitForSelector('#upBody [data-up]');
   if (SHOTS) await page.screenshot({ path: `${SHOTS}/forge-pane-${tag}.png` });
