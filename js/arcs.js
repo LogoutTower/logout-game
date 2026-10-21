@@ -22,5 +22,9 @@ export function sceneOf(f, tintColor = null, tint = 0.14) {
   if (tintColor && /^#[0-9a-f]{6}$/i.test(tintColor)) { p.sky = mix(p.sky, tintColor, tint); p.sky2 = mix(p.sky2, tintColor, tint * 0.6); }
   return { arc: a.n, name: a.name, props: a.props, particles: a.particles, pal: p };
 }
+/** Arena background art (FEATURES.arenaBg): one 480x96 pixel-art scene per arc in assets/bg/. Only wired arcs get art;
+ * any other arc keeps the classic gradient scene (no fallback to the last arc: a wrong scene reads worse than none). Arc 3 (Tidewire Depths) ships with the Floors 21-30 update. */
+export const ARENA_BG = { 1: 'assets/bg/arc-1.png', 2: 'assets/bg/arc-2.png' };
+export const arenaBgOf = f => ARENA_BG[arcIndex(f)] || null;
 /** CSS custom properties for #arena (read by style.css). */
 export const sceneVars = s => Object.entries({ '--a-sky': s.pal.sky, '--a-sky2': s.pal.sky2, '--a-deep': s.pal.deep, '--a-mortar': s.pal.mortar, '--a-joint': s.pal.joint, '--a-strip1': s.pal.strip1, '--a-strip2': s.pal.strip2, '--a-glow': s.pal.glow });

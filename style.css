@@ -540,3 +540,14 @@ body.tabhidden .halo .corona{animation-play-state:paused}
 /* staff Root Key (hero art v2): a gentle 1px bob by swapping two cached frames; frame 0 stays when motion is reduced */
 #hero.keybob{animation:atk 1s steps(2) infinite,keybob 1.6s steps(1) infinite}@keyframes keybob{0%{background-image:var(--kf0)}50%{background-image:var(--kf1)}}
 @media (prefers-reduced-motion:reduce){#hero.keybob{animation:none}}body.tabhidden #hero.keybob{animation-play-state:paused}
+
+/* ---- Arena background art (FEATURES.arenaBg, js/arcs.js ARENA_BG): 480x96 pixel art per arc, whole-number scale anchored at the bottom
+   (3x desktop = 1440x288, 2x phones = 960x192), repeat-x (edge pillars hide the seam). --a-sky still tints the top (per-floor element tint) and fills
+   above the art in taller arenas. The old brick mortar/joint gradients, floor strip and torch/gear/icicle props are baked into the art, so they are off;
+   #amb particles stay on top. Fighters stand on the art's ground line (native y=84, 12px floor band). */
+#arena.abg{--a-bg-scale:3;image-rendering:pixelated;padding-bottom:calc(10px * var(--a-bg-scale));
+ background:linear-gradient(transparent 70%,#0006),linear-gradient(color-mix(in srgb,var(--a-sky,#2c1f4a) 22%,transparent),transparent 60%),
+  var(--a-bg) center bottom/calc(480px * var(--a-bg-scale)) calc(96px * var(--a-bg-scale)) repeat-x,
+  linear-gradient(var(--a-sky,#2c1f4a),var(--a-sky2,#1a1030) 80%,var(--a-deep,#120a22))}
+#arena.abg::after{display:none}#arena.abg .torch,#arena.abg .gear,#arena.abg .icicles{display:none!important}
+@media(max-width:640px){#arena.abg{--a-bg-scale:2}}
