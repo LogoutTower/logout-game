@@ -15,6 +15,7 @@ export function sprite(rows, pal = PAL) {
 }
 const cache = new Map(); let BV2 = false; // boss art v2 (FEATURES.bossV2); main.js sets it once the staff check is known
 export const setBossV2 = on => { BV2 = !!on; }; export const bossV2 = () => BV2;
+let V2 = false; // hero art v2 (FEATURES.heroV2)
 const memo = (k, f) => { if (!cache.has(k)) cache.set(k, f()); return cache.get(k); };
 import { bossGrid } from './floors.js';
 export { bossGrid, bossShape, bossIsBig, bossInfo, bossPhase, AWAKEN_NAME, AWAKEN_TITLE } from './floors.js';
@@ -25,4 +26,6 @@ import { bossV2Grid } from './floors.js';
 export const bossIsV2 = (f, phase = 1) => BV2 && phase === 1 && !!bossV2Grid(f);
 export const BOSS_SPRITE = bossSprite(1);
 import { heroGrid } from './cosmetics.js';
-export const heroSprite = (look, cls) => memo(cls + JSON.stringify(look), () => { const g = heroGrid(look, cls); return sprite(g.rows, g.pal); });
+// Hero v2 (24x24 → 48x48) is behind FEATURES.heroV2; main.js sets it once the staff check is known. v1 grids stay the fallback.
+export const setHeroV2 = on => { V2 = !!on; }; export const heroV2 = () => V2;
+export const heroSprite = (look, cls, v2 = V2) => memo((v2 ? 'v2' : '') + cls + JSON.stringify(look), () => { const g = heroGrid(look, cls, v2); return sprite(g.rows, g.pal); });

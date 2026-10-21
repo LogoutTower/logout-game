@@ -48,7 +48,10 @@ import { classOf } from './game.js';
 import { holderStatus } from './supabase.js';
 import { loadTeam, isTeam, teamTag } from './teamstaff.js';
 import { setBossV2, bossIsV2 } from './sprites.js';
+import { setHeroV2, heroV2 } from './sprites.js';
 import { bossSprite, bossIsBig, heroSprite, bossPhase, AWAKEN_NAME, AWAKEN_TITLE } from './sprites.js';
+import { ORIGIN_SLOTS } from './cosmetics.js';
+import { RACE_PERKS } from '../config.js';
 import { SLOTS, CREATION_SLOTS, itemsFor, isUnlocked, unlockText, defaultLook, migrateSave, recordClear, equip, titleOf, nameColorOf, fakeProfile, byId, SAVE_VERSION } from './cosmetics.js';
 const $ = id => document.getElementById(id);
 // Write only when changed: avoids rebuilding nodes (and layout shifts that eat clicks) on every 1s tick.
@@ -72,17 +75,18 @@ function hitFx(dmg, mine = true) {
   fx.append(d, s); setTimeout(() => { d.remove(); s.remove(); }, 1000);
   if (gmHit && cx(save.heroes[0], 'cx-orbit')) { const u = document.createElement('span'); u.className = 'dmg dust'; u.textContent = '✦'; u.style.left = (x - 40 + Math.random() * 80) + 'px'; u.style.top = (y - 10 + Math.random() * 30) + 'px'; fx.append(u); setTimeout(() => u.remove(), 1000); } // Orbit stardust
 }
-const SLOT_LABEL = { skin: 'Skin', hairColor: 'Hair colour', hairStyle: 'Hair style', outfitColor: 'Outfit colour', outfitStyle: 'Outfit style', trim: 'Armor trim', weapon: 'Weapon', weaponColor: 'Weapon finish', aura: 'Aura', title: 'Title', nameColor: 'Name colour' };
+const SLOT_LABEL = { skin: 'Skin', hairColor: 'Hair colour', hairStyle: 'Hair style', outfitColor: 'Outfit colour', outfitStyle: 'Outfit style', trim: 'Armor trim', weapon: 'Weapon', weaponColor: 'Weapon finish', aura: 'Aura', title: 'Title', nameColor: 'Name colour', body: 'Body', race: 'Race' };
 const bossV2On = () => featureOn(FEATURES, 'bossV2', gmValid); // boss art v2 (js/bosses-v2.js): 'gm' = staff preview, 'all' = everyone
 /** Art v2 boss: 96px box at a whole-number CSS scale, taller arena (style.css --boss-v2-scale / --boss-v2-big). */
 function bossV2Look(f, phase) { const v = bossIsV2(f, phase), big = v && bossIsBig(f), b = $('boss'), a = $('arena'); if (b.classList.contains('v2') !== v) b.classList.toggle('v2', v); if (a.classList.contains('bv2') !== v) a.classList.toggle('bv2', v); if (a.classList.contains('bv2big') !== big) a.classList.toggle('bv2big', big); }
+const heroV2On = () => featureOn(FEATURES, 'heroV2', gmValid); // hero sprites v2 + origin (body/race) + race perks
 const COLOR_SLOTS = ['skin', 'hairColor', 'outfitColor', 'trim', 'weaponColor', 'nameColor', 'aura'];
 const toast = m => notice(m.replace(/^System notice: /, ''));
 
 function picker(el, slots, look, heroCls, progress, onPick) {
   el.innerHTML = slots.map(slot => `<div class="slot"><b>${SLOT_LABEL[slot]}</b>${itemsFor(slot, heroCls).map(it => {
     const ok = isUnlocked(it, progress), sel = look[slot] === it.id;
-    return `<button class="opt ${sel ? 'sel' : ''} ${ok ? '' : 'locked'}" data-id="${it.id}" ${ok ? '' : `title="Locked: ${unlockText(it.unlock)}"`}>${COLOR_SLOTS.includes(slot) ? `<i style="background:${it.value}"></i>` : ''}${it.label}${ok ? '' : ` 🔒 ${unlockText(it.unlock)}`}</button>`;
+    return `<button class="opt ${sel ? 'sel' : ''} ${ok ? '' : 'locked'}" data-id="${it.id}" ${ok ? '' : `title="Locked: ${unlockText(it.unlock)}"`}>${COLOR_SLOTS.includes(slot) ? `<i style="background:${it.value}"></i>` : ''}${it.label}${slot === 'race' && RACE_PERKS[it.id] ? ` <small>${RACE_PERKS[it.id].label}</small>` : ''}${ok ? '' : ` 🔒 ${unlockText(it.unlock)}`}</button>`;
   }).join('')}</div>`).join('');
   el.onclick = e => { const b = e.target.closest('button.opt'); if (b && !b.classList.contains('locked')) onPick(b.dataset.id); };
 }
@@ -90,13 +94,13 @@ function picker(el, slots, look, heroCls, progress, onPick) {
 async function boot() {
   $('maxf').textContent = MAX_FLOOR;
   be = await makeBackend(); const localUnlock = await checkPass(localStorage.getItem('logout.v1.gm'), GM_PASS_HASH);
-  gmValid = staffActive({ serverRole: !!be.isGm?.(), localUnlock }); setBossV2(bossV2On()); // policy lives in gm.js
+  gmValid = staffActive({ serverRole: !!be.isGm?.(), localUnlock }); setBossV2(bossV2On()); setHeroV2(heroV2On()); // policy lives in gm.js
   if (be.name === 'supabase') be.holdUploads = gmValid && !be.isGm(); // local-only staff: no save, name or damage ever leaves this device
   save = migrateSave(await be.loadSave()); if (save) { delete save.ctx; enforceOneUnique(save); } // live-only context, never trusted from storage
   if (save && sanitizeSave(save, gmValid)) { save = migrateSave(save); await be.saveSave(save); } // pasted staff ids are stripped
   if (!save) return showCreate();
   if (gmValid) save.heroes[0].hp = null; if (gmValid && save.heroes[0].cls === GM_CLASS) { const f = (await be.getFloor()).floor; gmGear(save, f, legendaryWeaponDps(f), legendaryArmorPct(f)); } // migrate older GM saves: Vesperveil lands in the armor slot // staff perk: always full HP
-  { const fl0 = await be.getFloor(), f0 = fl0.floor, bi = bossInfo(f0); myGuild = featureOn(FEATURES, 'guilds', gmValid) && !localStaffOnly() ? await be.myGuild?.().catch(() => null) : null; if (myGuild && gv2On()) gv2Info = await be.guildInfo().catch(() => null); save.ctx = { element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid, guild: !!myGuild && !myGuild.is_staff, bossPct: fl0.maxHp ? fl0.hp / fl0.maxHp : 1, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (fl0.gmUntil || 0) > Date.now() }; } // offline maths sees the same floor context
+  { const fl0 = await be.getFloor(), f0 = fl0.floor, bi = bossInfo(f0); myGuild = featureOn(FEATURES, 'guilds', gmValid) && !localStaffOnly() ? await be.myGuild?.().catch(() => null) : null; if (myGuild && gv2On()) gv2Info = await be.guildInfo().catch(() => null); save.ctx = { heroV2: heroV2On(), element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid, guild: !!myGuild && !myGuild.is_staff, bossPct: fl0.maxHp ? fl0.hp / fl0.maxHp : 1, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (fl0.gmUntil || 0) > Date.now() }; } // offline maths sees the same floor context
   const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
   const sanc0 = inSanctum(save, sanctumOk()); // offline time accrues to the mode the staff hero was in
   if (!sanc0 && gmValid) p.damage = softenGm(p.damage, p.secs, (await be.getFloor()).floor, GM_SOFTEN_MULT); // raid softener
@@ -115,9 +119,9 @@ function showCreate() {
   $('classes').innerHTML = Object.entries(CLASSES).map(([k, c]) => `<button data-c="${k}" class="${k === cls ? 'sel' : ''}">${c.icon} ${k}<br><small>ATK ${c.atk} SPD ${c.spd}</small></button>`).join('');
   $('classes').onclick = e => { const b = e.target.closest('button'); if (b) { cls = b.dataset.c; draftLook.weapon = defaultLook(cls).weapon; showCreate(); } };
   $('cpreview').style.backgroundImage = heroSprite(draftLook, cls);
-  picker($('cpick'), CREATION_SLOTS, draftLook, cls, { cleared: [], top3: [], rank1: 0 }, id => { draftLook[byId(id).type] = id; showCreate(); });
+  picker($('cpick'), heroV2On() ? [...ORIGIN_SLOTS, ...CREATION_SLOTS] : CREATION_SLOTS, draftLook, cls, { cleared: [], top3: [], rank1: 0 }, id => { draftLook[byId(id).type] = id; showCreate(); });
   $('start').onclick = async () => {
-    const h = newHero($('hname').value.trim(), cls); h.look = { ...draftLook };
+    const h = newHero($('hname').value.trim(), cls); h.look = { ...draftLook }; if (heroV2On()) h.originSet = true; // chosen at creation
     save = migrateSave({ version: 2, heroes: [h], gold: 0, lastTick: Date.now(), progress: { cleared: [], top3: [], rank1: 0 }, introDue: true, csV: 2, createdAt: Date.now() }); // fills v3 fields
     await be.saveSave(save); $('create').classList.add('hidden'); startGame(true);
   };
@@ -139,6 +143,11 @@ function openWardrobe() {
   $('wpreview').style.backgroundImage = heroSprite(h.look, h.cls); $('wpreview').innerHTML = gmValid && save.spirit ? haloHtml(spiritStage(h.level).n) : ''; // Solumbra halo on the portrait (staff only)
   $('wname').innerHTML = `<span style="color:${nameColorOf(h)}">${esc(h.name)}</span><br><span class="ttl">«${esc(titleOf(h))}»</span>` + (h.cls === GM_CLASS && h.look.outfitStyle === 'gm-coat' ? `<p class="sub" id="vesper"><b class="uniq" style="color:${rarityOf('unique').color}">${esc(VESPERVEIL.label)}</b> <small style="color:${rarityOf('unique').color}">Unique · coat · ${esc(STAFF_STAMP)}</small><br>${esc(VESPERVEIL.lore)}<br><span style="color:#cfd8ff">✦ ${esc(VESPERVEIL.ability)}</span></p>` : '');
   picker($('wpick'), SLOTS, h.look, h.cls, save.progress, async id => { if (equip(save, id)) { await be.saveSave(save); render(); openWardrobe(); } });
+  let wo = $('worigin'); if (!wo) { wo = document.createElement('div'); wo.id = 'worigin'; $('wpick').before(wo); }
+  const freeOrigin = heroV2On() && !h.originSet && h.cls !== GM_CLASS; wo.hidden = !freeOrigin; wo.innerHTML = '';
+  if (freeOrigin) { const pk = document.createElement('div'); wo.innerHTML = '<p class="sub"><b>New: Hero Origins.</b> Pick your body and race once, free. Lock it in when you are happy.</p>'; wo.append(pk);
+    picker(pk, ORIGIN_SLOTS, h.look, h.cls, save.progress, async id => { if (equip(save, id)) { await be.saveSave(save); render(); openWardrobe(); } });
+    const lk = document.createElement('button'); lk.id = 'originLock'; lk.textContent = 'Lock in origin'; lk.onclick = async () => { h.originSet = true; await be.saveSave(save); render(); openWardrobe(); }; wo.append(lk); }
   if (!$('wardrobe').open) $('wardrobe').showModal();
 }
 async function startGame(fresh = false) {
@@ -159,7 +168,7 @@ async function startGame(fresh = false) {
   if (!save.tutorialSeen) startTour(); // right after creation, and once for older saves
 }
 function tick() {
-  save.ctx = { gm: gmValid, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (floor.gmUntil || 0) > Date.now(), guild: !!myGuild && !myGuild.is_staff, guildPct: myGuild?.is_staff || gv2Info?.guild?.is_staff ? 0 : gv2Info?.guild?.bonus_pct ?? null, decreePct: decreePctNow(), decree: gmValid || (floor.gmUntil || 0) > Date.now() || echoUntil > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, mech: bossInfo(floor.floor).mech, sessionSecs: (Date.now() - sessionStart) / 1000 };
+  save.ctx = { heroV2: heroV2On(), gm: gmValid, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (floor.gmUntil || 0) > Date.now(), guild: !!myGuild && !myGuild.is_staff, guildPct: myGuild?.is_staff || gv2Info?.guild?.is_staff ? 0 : gv2Info?.guild?.bonus_pct ?? null, decreePct: decreePctNow(), decree: gmValid || (floor.gmUntil || 0) > Date.now() || echoUntil > Date.now(), bossPct: floor.maxHp ? floor.hp / floor.maxHp : 1, special: isSpecialSlot(floor.floor), element: bossInfo(floor.floor).lootElement, mech: bossInfo(floor.floor).mech, sessionSecs: (Date.now() - sessionStart) / 1000 };
   save.ctx.eclipse = gmValid && !!save.spirit && eclipseOn(); { const ec = save.ctx.eclipse, ar0 = $('arena'); if (ar0.classList.contains('eclipse') !== ec) ar0.classList.toggle('eclipse', ec); }
   { const uh = unwrittenHour(save.ctx), ar = $('arena'); if (ar.classList.contains('unwritten') !== uh) { ar.classList.toggle('unwritten', uh); ar.title = uh ? 'The Unwritten Hour: +5% damage until the guardian falls' : ''; } }
   const p = accrue(save, Date.now(), OFFLINE_CAP_HOURS), fx = effectsOf(save.heroes[0]);
@@ -294,7 +303,7 @@ function render() {
   { const ph = petHtml(save, gmValid); if (ph !== lastPet) { $('pet').innerHTML = ph; lastPet = ph; } }
   if (gmValid && h.cls === GM_CLASS && floor?.floor) { const t = gmTier(h.level); gmGear(save, floor.floor, legendaryWeaponDps(floor.floor), legendaryArmorPct(floor.floor)); if ((save.gmTierSeen || 1) < t.n) { save.gmTierSeen = t.n; gearAwaken(t); } } // staff gear follows the level tier; banner once per tier
   if (gmValid && save.spirit) { const ss = spiritStage(save.heroes[0].level); if ((save.spiritSeen || 0) < ss.n) { save.spiritSeen = ss.n; spiritEvolve(ss); } } // staff only: first time each stage is reached
-  $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; const phase = bossPhase(floor.floor, floor.hp, floor.maxHp); $('boss').style.backgroundImage = bossSprite(floor.floor, phase); $('boss').classList.toggle('big', bossIsBig(floor.floor)); bossV2Look(floor.floor, phase);
+  $('hero').style.backgroundImage = heroSprite(h.look, h.cls); $('hero').classList.toggle('v2', heroV2()); $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; const phase = bossPhase(floor.floor, floor.hp, floor.maxHp); $('boss').style.backgroundImage = bossSprite(floor.floor, phase); $('boss').classList.toggle('big', bossIsBig(floor.floor)); bossV2Look(floor.floor, phase);
   const won = floor.floor >= MAX_FLOOR && floor.hp <= 0, waiting = !won && floor.hp <= 0, bi = bossInfo(floor.floor), arc = arcOf(floor.floor); applyScene(floor.floor);
   // end of content after the last open floor; 'waiting' = the server has not opened the next floor yet (e.g. its floor cap is still lower)
   H('bname').textContent = won ? 'The spire falls silent' : bossName(floor.floor);
@@ -554,10 +563,10 @@ function renderGmSlot() {
       ${h.cls === GM_CLASS ? `<button id="gmLeave">Return to ${esc(h.prevCls || 'Vanguard')}</button>` : '<button id="gmBecome" class="cta">Take the Architect\'s form</button>'}
       ${featureOn(FEATURES, 'sandbox', true) ? '<button id="gmSandbox">Sandbox</button>' : ''}${localStorage.getItem('logout.v1.gm') ? '<button id="gmLock">Lock staff access</button>' : ''}${online && !be.isGm() ? '<p class="sub">Local staff unlock: your damage stays on this device (never sent to the shared floor or ranked) until the server role is granted.</p>' : ''}</div>`
     : `<div class="staffbox"><input id="gmPass" type="password" autocomplete="off" placeholder="access phrase"><button id="gmTry">Verify</button></div>`;
-  if ($('gmTry')) $('gmTry').onclick = async () => { const p = $('gmPass').value; if (staffActive({ localUnlock: await checkPass(p, GM_PASS_HASH) })) { localStorage.setItem('logout.v1.gm', p); gmValid = true; setBossV2(bossV2On()); if (be.name === 'supabase' && !be.isGm()) be.holdUploads = true; save.heroes[0].hp = null; save.ctx.gm = true; notice('Staff access verified'); renderGmSlot(); render(); } else notice('Access denied'); };
+  if ($('gmTry')) $('gmTry').onclick = async () => { const p = $('gmPass').value; if (staffActive({ localUnlock: await checkPass(p, GM_PASS_HASH) })) { localStorage.setItem('logout.v1.gm', p); gmValid = true; setBossV2(bossV2On()); setHeroV2(heroV2On()); if (be.name === 'supabase' && !be.isGm()) be.holdUploads = true; save.heroes[0].hp = null; save.ctx.gm = true; notice('Staff access verified'); renderGmSlot(); render(); } else notice('Access denied'); };
   if ($('gmBecome')) $('gmBecome').onclick = async () => { becomeGm(save, legendaryWeaponDps(floor.floor), floor.floor, legendaryArmorPct(floor.floor)); lastFloorSeen = 0; gmFloorChecks(); await be.saveSave(save); render(); renderLb(); renderGmSlot(); };
   if ($('gmLeave')) $('gmLeave').onclick = async () => { leaveGm(save); save = migrateSave(save); await be.saveSave(save); render(); renderLb(); renderGmSlot(); };
-  if ($('gmLock')) $('gmLock').onclick = async () => { localStorage.removeItem('logout.v1.gm'); gmValid = false; setBossV2(bossV2On()); sanitizeSave(save, false); save = migrateSave(save); save.ctx = {}; await be.saveSave(save); render(); renderGmSlot(); };
+  if ($('gmLock')) $('gmLock').onclick = async () => { localStorage.removeItem('logout.v1.gm'); gmValid = false; setBossV2(bossV2On()); setHeroV2(heroV2On()); sanitizeSave(save, false); save = migrateSave(save); save.ctx = {}; await be.saveSave(save); render(); renderGmSlot(); };
   if ($('gmSandbox')) $('gmSandbox').onclick = openSandboxUi;
 }
 let sbx = null;

@@ -8,7 +8,7 @@ export const TOKEN_MINT = '';         // $LOGOUT mint address; empty disables th
 export const HOLDER_THRESHOLD = 0;    // minimum token balance (UI units) for the holder perk
 // ---- Feature flags: 'off' | 'gm' (staff early access) | 'all'
 // online stays 'off' until supabase/schema.sql has been run on the project (see supabase/SETUP.md).
-export const FEATURES = { online: 'all', bindIdentity: 'all', sandbox: 'gm', guilds: 'all', chat: 'all', guildsV2: 'all', bossV2: 'all', prelaunchLock: true }; // v2 addendum ran 2026-10-19; // addendum ran 2026-10-19; chat posting still needs a bound identity (bindIdentity)
+export const FEATURES = { online: 'all', bindIdentity: 'all', sandbox: 'gm', guilds: 'all', chat: 'all', guildsV2: 'all', bossV2: 'all', heroV2: 'gm', prelaunchLock: true }; // v2 addendum ran 2026-10-19; // addendum ran 2026-10-19; chat posting still needs a bound identity (bindIdentity)
 // ---- Local-only staff unlock (used only while Supabase is off). SHA-256 hex of a passphrase; empty disables it.
 export const GM_PASS_HASH = '374da5e28297c53b43468e29236c132652675fbf158573f24daaf9cfcbbed19b';
 // ---- Pre-launch gate (index.html at the site root): only a passcode screen until LAUNCH_AT, or until FEATURES.prelaunchLock is false.
@@ -18,3 +18,7 @@ export const TEAM_PASS_HASH = '05882b977150fcf7838197d682204bea98807c7b3a4919c79
 // expected DPS for the floor (refPlayerDps in js/loot.js). Mirrors tower_config.gm_soft_mult (schema-addendum-gm-softener-prelaunch.sql).
 export const GM_SOFTEN_MULT = 1.5;
 export const LAUNCH_AT = '2026-10-26T15:30:00Z'; // Mon Oct 26, 10:30 AM CT
+// ---- Hero v2 race perks (tiny flavour bonuses, only while FEATURES.heroV2 is on for the player; the staff hero never gets one).
+// goldPct/xpPct: gold/XP gains · critPct: crit chance at 2x damage (applied as its expected value) · offlinePct: longer offline cap.
+// Server damage clamp (submit_damage max_dps) is unchanged; these sit far inside its headroom.
+export const RACE_PERKS = { 'race-human': { goldPct: 2, label: '+2% gold' }, 'race-sylvan': { xpPct: 2, label: '+2% XP' }, 'race-beastkin': { critPct: 2, label: '+2% crit' }, 'race-shade': { offlinePct: 2, label: '+2% offline time' } };

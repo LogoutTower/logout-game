@@ -533,3 +533,4 @@ body.tabhidden .halo .corona{animation-play-state:paused}
 @keyframes fcard{from{transform:translateY(10px);opacity:0}}.fskip{position:absolute;bottom:18px;opacity:.5}
 @media (prefers-reduced-motion:reduce){.fweap{animation:none}}
 .gmreplay{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}.gmreplay button{min-height:0;padding:4px 10px;font-size:12px}
+#worigin{border:1px solid var(--cy);border-radius:6px;padding:6px 8px;margin-bottom:8px}#worigin[hidden]{display:none}#originLock{margin-top:4px}

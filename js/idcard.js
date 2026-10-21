@@ -10,7 +10,7 @@ import { GM_CLASS, GM_TITLE, sanitizeSave, ROOT_KEY, GM_LUCK, GM_GEAR_NAMES, gmT
 import { nodeById } from './talents.js';
 import { SHOP, PETS, PERK_LABEL, DIVINE, SPIRIT, spiritStage } from './prestige.js';
 export const CARD_TTL = 300000; // 5 min client cache: re-opening a card costs nothing
-const SLOTS = ['weapon', 'armor', 'trinket'], LOOK_KEYS = ['title', 'ptitle', 'nameColor', 'aura', 'skin', 'skinSet', 'outfitStyle', 'outfitColor', 'hairStyle', 'hairColor', 'weapon', 'weaponColor', 'trim'];
+const SLOTS = ['weapon', 'armor', 'trinket'], LOOK_KEYS = ['title', 'ptitle', 'nameColor', 'aura', 'skin', 'skinSet', 'outfitStyle', 'outfitColor', 'hairStyle', 'hairColor', 'weapon', 'weaponColor', 'trim', 'body', 'race'];
 /** The public card for a save (own hero, local mode) in the same shape the server returns. */
 export function cardFromSave(save, { guild = null, staff = false } = {}) {
   const h = save.heroes[0], eq = {}, look = {};
@@ -67,3 +67,4 @@ export class CardCache {
   constructor(ttl = CARD_TTL, now = () => Date.now()) { this.ttl = ttl; this.now = now; this.m = new Map(); }
   async get(key, fetcher) { const c = this.m.get(key); if (c && this.now() - c.at < this.ttl) return c.v; const v = await fetcher(); this.m.set(key, { v, at: this.now() }); if (this.m.size > 60) this.m.delete(this.m.keys().next().value); return v; }
 }
+export const LOOK_KEYS_FOR_TEST = LOOK_KEYS;

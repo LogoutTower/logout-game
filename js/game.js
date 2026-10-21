@@ -1,4 +1,5 @@
 import { GUILD_BUFF } from './guilds.js';
+import { RACE_PERKS } from '../config.js';
 // Pure, deterministic game logic (no DOM) — importable in node for tests.
 export const CLASSES = {
   Vanguard: { icon: '🛡️', atk: 6, spd: 0.8, hp: 140 },
@@ -42,6 +43,10 @@ const goldMul = heroes => 1 + (gearBonus(heroes[0]).goldPct + talentBonus(heroes
 const decreeMul = save => Math.max(save.ctx?.decree ? 1 + (save.ctx.decreePct || 5) / 100 : 1, save.ctx?.gm && save.spirit ? 1.05 : 1); // Solumbra, Architect's Grace: the Decree aura, never stacked past it
 const eclipseMul = save => save.ctx?.gm && save.spirit && save.ctx?.eclipse ? ECLIPSE.xpMul : 1; // Solumbra, Umbra's Veil: staff hero only
 const petM = (save, k) => 1 + (petBonus(save)[k] || 0) / 100; // Final Decree / Collapse of Stars: 6%
+/** Hero v2 race perk (save.ctx.heroV2 is set live from FEATURES.heroV2; offline it's set before offlineProgress). Staff hero: none. */
+export const racePerk = (save, k) => { const h = save?.heroes?.[0]; return save?.ctx?.heroV2 && h && h.cls in CLASSES ? (RACE_PERKS[h.look?.race]?.[k] || 0) : 0; };
+const raceM = (save, k) => 1 + racePerk(save, k) / 100;
+const critM = save => 1 + racePerk(save, 'critPct') / 100; // crit 2x at p% → expected +p% damage
 export const guildMul = save => save.ctx?.guild && !save.ctx?.gm ? 1 + (save.ctx.guildPct != null ? Math.min(5, save.ctx.guildPct) / 100 : GUILD_BUFF) : 1; // guild members: XP and gold only (staff gets none)
 export const offlineCap = (heroes, base = 12) => base + gearBonus(heroes[0]).capH + talentBonus(heroes[0]).capH;
 export const xpToNext = lvl => Math.round(50 * Math.pow(1.4, lvl - 1));
@@ -84,16 +89,16 @@ export const layerMul = save => { const e = effectsOf(save.heroes[0]), c = save.
   if (t.elementPct && w && c.element && w.element === c.element) m *= 1 + t.elementPct / 100;
   m *= mechDps(c, w?.element); // floor signature mechanic (arc 2+), live context only
   return m; };
-export const effectiveDps = save => totalDps(save.heroes) * petM(save, 'dpsPct') * (!save.ctx?.gm && isWorn(save.heroes[0]) ? lowMulOf(save.heroes[0]) : 1) * (buffsOf(save).elixir > 0 ? ELIXIR.mul : 1) * layerMul(save) * ((save.ctx?.bossPct ?? 1) < 0.5 ? 1 + talentBonus(save.heroes[0]).lowBossPct / 100 : 1);
+export const effectiveDps = save => totalDps(save.heroes) * petM(save, 'dpsPct') * critM(save) * (!save.ctx?.gm && isWorn(save.heroes[0]) ? lowMulOf(save.heroes[0]) : 1) * (buffsOf(save).elixir > 0 ? ELIXIR.mul : 1) * layerMul(save) * ((save.ctx?.bossPct ?? 1) < 0.5 ? 1 + talentBonus(save.heroes[0]).lowBossPct / 100 : 1);
 /** Simulate `secs` of fighting (live or offline: same rules). Splits time at HP-threshold and buff-expiry breakpoints.
  *  Mutates hero HP and buff timers; returns float { dmg, gold, xp, lowSecs }. */
 export function simulate(save, secs) {
   if (save.ctx?.gm) save.heroes[0].hp = heroMaxHp(save.heroes[0]); // staff: no drain, never worn down (also restores HP drained before the unlock)
   const h = save.heroes[0], max = heroMaxHp(h), b = buffsOf(save), e = effectsOf(h), tb = talentBonus(h), raw = max / DRAIN_SECS * (e.has('lifesteal') ? FX.lifesteal : 1) * (e.has('drain') ? FX.drain : 1) * (e.has('aegis') ? FX.aegis : 1) * (e.has('stillness') ? FX.stillness : 1) * (e.has('dodge') ? FX.dodgeDrain : 1);
   const drain = save.ctx?.gm ? 0 : Math.max(raw * 0.1, raw * mechDrain(save.ctx) * (1 - tb.drainPct / 100) * (2 - petM(save, 'drainPct')) * (b.hearth > 0 ? 1 - 0.20 * Math.min(1, b.hearth / Math.max(1, secs)) : 1) - tb.regenPct / 100 * max / 60); // talents: slower drain + regen
-  const base = totalDps(save.heroes) * petM(save, 'dpsPct') * layerMul(save), lowMul = lowMulOf(h), hearth = e.has('hearth');
+  const base = totalDps(save.heroes) * petM(save, 'dpsPct') * critM(save) * layerMul(save), lowMul = lowMulOf(h), hearth = e.has('hearth');
   const tm = tonicMuls(save, Math.max(0, secs));
-  const gM = goldMul(save.heroes) * decreeMul(save) * guildMul(save) * tm.gold * petM(save, 'goldPct'), xM = tm.xp * xpMul(save.heroes) * decreeMul(save) * guildMul(save) * petM(save, 'xpPct') * eclipseMul(save) * (save.ctx?.gm ? GM_XP_MUL : 1); // staff: 2x XP
+  const gM = goldMul(save.heroes) * decreeMul(save) * guildMul(save) * tm.gold * petM(save, 'goldPct') * raceM(save, 'goldPct'), xM = tm.xp * raceM(save, 'xpPct') * xpMul(save.heroes) * decreeMul(save) * guildMul(save) * petM(save, 'xpPct') * eclipseMul(save) * (save.ctx?.gm ? GM_XP_MUL : 1); // staff: 2x XP
   let hp = heroHp(h), t = Math.max(0, secs), dmg = 0, gold = 0, xp = 0, lowSecs = 0;
   for (let guard = 0; t > 1e-9 && guard < 16; guard++) {
     const low = hp <= LOW_HP * max + 1e-9; let seg = t; const rs = e.has('restful') && b.rested > 0, dr = rs ? 0 : drain; // restful armor: no drain + regen while Well Rested
@@ -126,7 +131,7 @@ export function accrue(save, now, capHours = 12, offline = false) {
 }
 /** Offline return: same rules as live play. A Scroll of Vigil adds 4h to the cap once (consumed only if the extra time was needed). */
 export function offlineProgress(save, now, baseCapHours = 12) {
-  const b = buffsOf(save), cap = offlineCap(save.heroes, save.ctx?.gm ? 24 : baseCapHours) + (b.vigil || 0) + (petBonus(save).capH || 0), raw = Math.max(0, (now - save.lastTick) / 1000);
+  const b = buffsOf(save), cap = +((offlineCap(save.heroes, save.ctx?.gm ? 24 : baseCapHours) + (b.vigil || 0) + (petBonus(save).capH || 0)) * raceM(save, 'offlinePct')).toFixed(2), raw = Math.max(0, (now - save.lastTick) / 1000);
   const vigilUsed = b.vigil > 0 && raw > (cap - b.vigil) * 3600; if (vigilUsed) b.vigil = 0;
   const r = accrue(save, now, cap, true); return { ...r, cap, vigilUsed };
 }
