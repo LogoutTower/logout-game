@@ -9,7 +9,7 @@ Two SQL files, run by hand in the Supabase SQL editor. Nothing here runs automat
 2. Optional: `select public.prelaunch_suggest(40);` prints the staff hero's level and forge tier, the hours needed at factor 1, and a
    suggested factor for a 40 h run. Apply it with `update public.tower_config set prelaunch_hp_factor = <x> where id = 1;`. The new
    factor applies from the next floor. Re-running the addendum also rescales the floor in progress (it only lowers HP).
-3. **The staff run**: floors 11-20, online, before Mon Oct 26 10:30 AM CT (2026-10-26 15:30 UTC).
+3. **The staff run**: floors 11-20, online, before Mon Oct 26 8:30 PM CT (2026-10-27 01:30 UTC).
 3b. **Team staff accounts** (optional, any time before the reset): run `supabase/schema-addendum-team-staff.sql` once, then
    `supabase/admin-mark-staff.sql` with each account's Tower ID (More > System > Tower ID). Their saves survive the reset too.
 4. **`supabase/admin-reset-tower.sql`**: run after the run and before release. It's idempotent.
@@ -19,7 +19,7 @@ Two SQL files, run by hand in the Supabase SQL editor. Nothing here runs automat
 - **`public.tower_config`** is a single settings row with no client access:
   - `gm_soft_mult` (default 1.5)
   - `prelaunch_hp_factor` (default 0.04)
-  - `prelaunch_until` (2026-10-26 15:30 UTC)
+  - `prelaunch_until` (2026-10-27 01:30 UTC; run supabase/update-launch-time-2026-10-27.sql)
   - `prelaunch_enabled` (default true)
 - **GM raid softener, always on, before and after launch.** For `role = 'gm'`, `submit_damage` accepts at most
   `gm_soft_mult × ref_dps(floor) × elapsed` against the shared boss.

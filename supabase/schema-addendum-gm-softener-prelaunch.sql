@@ -3,7 +3,7 @@
 --    gm_soft_mult (default 1.5) × ref_dps(floor) × elapsed seconds against the SHARED boss. ref_dps = a strong normal player on that floor
 --    (class-average base, level cap floor+10, forge cap floor+8, Legendary weapon + armor of the floor). Mirrors refPlayerDps() in js/loot.js
 --    and GM_SOFTEN_MULT in config.js. Players are unaffected. The Sanctum guard (schema-addendum-sanctum.sql) still drops Sanctum ticks.
--- 2) Pre-launch HP factor: while enabled AND now() < prelaunch_until (2026-10-26 15:30 UTC), tower floors 11-20 start with
+-- 2) Pre-launch HP factor: while enabled AND now() < prelaunch_until (2026-10-27 01:30 UTC = Mon Oct 26 8:30 PM CT; see update-launch-time-2026-10-27.sql), tower floors 11-20 start with
 --    floor_hp × turnout × prelaunch_hp_factor (default 0.04). At or after that instant, or once disabled, the factor is 1 (inert).
 --    The current floor (if 11-20) is scaled down once, keeping its remaining fraction. The two are compatible: the factor was chosen
 --    for the softened GM damage (see docs/PRE-RELEASE-RESET.md). public.prelaunch_suggest() prints a factor for a target run length.
@@ -13,7 +13,7 @@ create table if not exists public.tower_config (
   id int primary key default 1 check (id = 1),
   gm_soft_mult numeric not null default 1.5 check (gm_soft_mult > 0),
   prelaunch_hp_factor numeric not null default 0.04 check (prelaunch_hp_factor > 0 and prelaunch_hp_factor <= 1),
-  prelaunch_until timestamptz not null default '2026-10-26 15:30:00+00',
+  prelaunch_until timestamptz not null default '2026-10-27 01:30:00+00',
   prelaunch_enabled boolean not null default true);
 insert into public.tower_config (id) values (1) on conflict (id) do nothing;
 alter table public.tower_config enable row level security; -- no policies: definer functions and the SQL editor only

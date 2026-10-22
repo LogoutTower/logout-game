@@ -21,7 +21,7 @@ export const TEAM_PASS_HASH = '05882b977150fcf7838197d682204bea98807c7b3a4919c79
 // ---- GM raid softener: the staff GM's damage to the SHARED tower boss is capped at this multiple of a strong normal player's
 // expected DPS for the floor (refPlayerDps in js/loot.js). Mirrors tower_config.gm_soft_mult (schema-addendum-gm-softener-prelaunch.sql).
 export const GM_SOFTEN_MULT = 1.5;
-export const LAUNCH_AT = '2026-10-26T15:30:00Z'; // Mon Oct 26, 10:30 AM CT
+export const LAUNCH_AT = '2026-10-27T01:30:00Z'; // Mon Oct 26, 8:30 PM CT (CDT, UTC-5)
 // ---- Hero v2 race perks (tiny flavour bonuses, only while FEATURES.heroV2 is on for the player; the staff hero never gets one).
 // goldPct/xpPct: gold/XP gains · critPct: crit chance at 2x damage (applied as its expected value) · offlinePct: longer offline cap.
 // Server damage clamp (submit_damage max_dps) is unchanged; these sit far inside its headroom.
