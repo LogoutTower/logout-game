@@ -1,4 +1,8 @@
 export const MAX_FLOOR = 20; // arcs 1-2 open (floors 1-20); the server cap is floor_state.max_floor (schema-addendum-floors-11-20.sql)
+// Arc 3 (Floors 21-30, Tidewire Depths) is shipped LOCKED: regular players see it only once the SHARED server floor (floor_state.floor) is past
+// ARC3_UNLOCK_AFTER, i.e. that floor's guardian fell; then the client cap becomes ARC3_CAP. Staff (FEATURES.arc3 'gm' or 'all') sees it at any floor.
+// Server side the climb past 20 needs floor_state.max_floor = 30 (supabase/schema-addendum-floors-21-30.sql).
+export const ARC3_UNLOCK_AFTER = 20, ARC3_CAP = 30;
 export const OFFLINE_CAP_HOURS = 12;
 // ---- Online services. Used only when FEATURES.online is 'all' AND both values are set; otherwise offline/local mode (the game works exactly as before).
 export const SUPABASE_URL = 'https://wouftzosktizxjfvflsz.supabase.co';
@@ -8,7 +12,7 @@ export const TOKEN_MINT = '';         // $LOGOUT mint address; empty disables th
 export const HOLDER_THRESHOLD = 0;    // minimum token balance (UI units) for the holder perk
 // ---- Feature flags: 'off' | 'gm' (staff early access) | 'all'
 // online stays 'off' until supabase/schema.sql has been run on the project (see supabase/SETUP.md).
-export const FEATURES = { online: 'all', bindIdentity: 'all', sandbox: 'gm', guilds: 'all', chat: 'all', guildsV2: 'all', bossV2: 'all', heroV2: 'all', arenaBg: 'all', arc3: 'gm', prelaunchLock: true }; // v2 addendum ran 2026-10-19; // addendum ran 2026-10-19; chat posting still needs a bound identity (bindIdentity)
+export const FEATURES = { online: 'all', bindIdentity: 'all', sandbox: 'gm', guilds: 'all', chat: 'all', guildsV2: 'all', bossV2: 'all', heroV2: 'all', arenaBg: 'all', arc3: 'all', prelaunchLock: true }; // v2 addendum ran 2026-10-19; // addendum ran 2026-10-19; chat posting still needs a bound identity (bindIdentity)
 // ---- Local-only staff unlock (used only while Supabase is off). SHA-256 hex of a passphrase; empty disables it.
 export const GM_PASS_HASH = '374da5e28297c53b43468e29236c132652675fbf158573f24daaf9cfcbbed19b';
 // ---- Pre-launch gate (index.html at the site root): only a passcode screen until LAUNCH_AT, or until FEATURES.prelaunchLock is false.

@@ -13,6 +13,8 @@ export const MID_SPECIALS = [15];
 // Off (default, regular players): the plan is exactly as before (generated 21-29, placeholder 30). The floor cap (MAX_FLOOR) is unchanged either way.
 let ARC3_ON = false; export const ARC3_FROM = 21, ARC3_TO = 30, ARC3_MID = 25;
 export const arc3Preview = () => ARC3_ON;
+/** Arc 3 gate (pure): flag on for this player AND (staff OR the shared server floor is past unlockAfter). A tower reset to Floor 1 locks it again. */
+export const arc3Unlocked = (serverFloor, isGm, flagOn, unlockAfter = 20) => !!flagOn && (!!isGm || (+serverFloor || 0) > unlockAfter);
 export const setArc3Preview = on => { on = !!on; if (on === ARC3_ON) return; ARC3_ON = on; plan.length = 0; v2Cache.clear(); setArcPreview(3, on); };
 const ARC3_TEXT = [
   ['Light That Baits the Deep', 'System notice: a login light was stolen down here. The Angler wears it as bait.'],

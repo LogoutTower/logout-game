@@ -4,10 +4,17 @@ import * as F from '../js/floors.js';
 import { arcOf, arenaBgOf, sceneOf } from '../js/arcs.js';
 import { BOSSES_21_30 } from '../js/bosses-21-30.js';
 import { featureOn } from '../js/features.js';
-import { FEATURES, MAX_FLOOR } from '../config.js';
-const { bossInfo, bossGrid, bossShape, bossV2Grid, setArc3Preview, isSpecialSlot, mechDps, mechDrain, mechText, floorBossHp } = F;
+import { FEATURES, MAX_FLOOR, ARC3_UNLOCK_AFTER, ARC3_CAP } from '../config.js';
+const { arc3Unlocked, bossInfo, bossGrid, bossShape, bossV2Grid, setArc3Preview, isSpecialSlot, mechDps, mechDrain, mechText, floorBossHp } = F;
 // flag: staff preview only; floor cap unchanged
-assert.equal(FEATURES.arc3, 'gm'); assert.equal(featureOn(FEATURES, 'arc3', false), false); assert.equal(featureOn(FEATURES, 'arc3', true), true); assert.equal(MAX_FLOOR, 20);
+// shipped locked: flag on for everyone, but the gate opens only past the unlock floor (server floor), staff always; caps 20 -> 30
+assert.equal(FEATURES.arc3, 'all'); assert.equal(MAX_FLOOR, 20); assert.equal(ARC3_UNLOCK_AFTER, 20); assert.equal(ARC3_CAP, 30);
+const on = featureOn(FEATURES, 'arc3', false);
+for (const f of [0, 1, 10, 19, 20]) assert.equal(arc3Unlocked(f, false, on, ARC3_UNLOCK_AFTER), false, `locked at server floor ${f}`);
+for (const f of [21, 25, 30]) assert.equal(arc3Unlocked(f, false, on, ARC3_UNLOCK_AFTER), true, `open at server floor ${f}`);
+assert.equal(arc3Unlocked(1, true, featureOn(FEATURES, 'arc3', true), 20), true, 'staff: open at any floor');
+assert.equal(arc3Unlocked(25, false, false, 20), false, 'flag off: never'); assert.equal(arc3Unlocked(25, false, featureOn({ arc3: 'gm' }, 'arc3', false), 20), false, "'gm': players never");
+assert.equal(arc3Unlocked(1, false, on, 20), false, 'after a tower reset (Floor 1) it locks again');
 // off: identical plan to a fresh module; no arc 3 scene/art/name
 const fresh = await import('../js/floors.js?off=1');
 const snap = () => Array.from({ length: 100 }, (_, i) => bossInfo(i + 1));

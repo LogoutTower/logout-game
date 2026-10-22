@@ -4,11 +4,11 @@ import { makeBackend, onlineConfigured } from './storage.js';
 import { BUILD } from './build.js';
 import { priceFor, innCost, rest, shopStock, buy as shopBuy, soldOut, npcGrid } from './town.js';
 import { sprite } from './sprites.js';
-import { isSpecialSlot, bossInfo, mechText, setArc3Preview } from './floors.js'; // arc 3 preview: FEATURES.arc3
+import { isSpecialSlot, bossInfo, mechText, setArc3Preview, arc3Unlocked } from './floors.js'; // arc 3 preview: FEATURES.arc3
 import { arcOf, arcIndex, sceneOf, sceneVars, arenaBgOf } from './arcs.js';
 import { treeOf, nodeById, canLearn, learn, freePoints, totalPoints, spentIn, respec, respecCost } from './talents.js';
 import { TRICKLE, trickleDrops, grantDrops, equipItem, salvageItem, salvageValue, rarityOf, statLabel, INV_SIZE, bagSize, GEAR_SLOTS } from './loot.js';
-import { GM_PASS_HASH, OFFLINE_CAP_HOURS, MAX_FLOOR, FEATURES, SOLANA_RPC, TOKEN_MINT, HOLDER_THRESHOLD, GM_SOFTEN_MULT } from '../config.js';
+import { GM_PASS_HASH, OFFLINE_CAP_HOURS, MAX_FLOOR, FEATURES, SOLANA_RPC, TOKEN_MINT, HOLDER_THRESHOLD, GM_SOFTEN_MULT, ARC3_UNLOCK_AFTER, ARC3_CAP } from '../config.js';
 import { featureOn } from './features.js';
 import { checkGuild, GUILD_CAP, GUILD_BUFF, STAFF_GUILD, STAFF_MARK, guildError } from './guilds.js';
 import { cleanChat, CHAT_MAX } from './chatfilter.js';
@@ -59,6 +59,7 @@ const H = id => { const e = $(id); return { set innerHTML(v) { if (e._v !== v) {
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 let lootLines = [];
 let counts = null, be, save, floor, pending = 0, recent = { dmg: 0, gold: 0, xp: 0 }, quietSync = true, cls = 'Vanguard', draftLook = defaultLook('Vanguard'), toastT;
+let arc3Open = false; const capNow = () => arc3Open ? ARC3_CAP : MAX_FLOOR;
 const log = (m, color) => { const d = document.createElement('div'); d.textContent = m; if (m.startsWith('System notice')) d.className = 'rune'; if (color) { d.style.color = color; d.className = 'loot'; } if (color === '#7ff6ff') d.className = 'loot uniq'; $('log').prepend(d); };
 function notice(m, color, item = null) { const n = document.createElement('div'); n.className = 'notice' + (color === '#7ff6ff' ? ' uniq' : ''); if (color) n.style.borderColor = color; if (color && cx(save?.heroes?.[0], 'cx-reader')) { n.classList.add('glow-rare'); n.style.setProperty('--glow', color); } /* Thread-Reader */ n.innerHTML = `<small>◈ System notice</small>${item ? ico(item) : ''}<span${color ? ` style="color:${color}"` : ''}>${esc(m)}</span>`; $('notices').append(n); setTimeout(() => n.remove(), color === '#7ff6ff' ? 6000 : 4000); }
 const sessionStart = Date.now(); let hits = 0, lastWhisper = Date.now();
@@ -92,9 +93,9 @@ function picker(el, slots, look, heroCls, progress, onPick) {
 }
 
 async function boot() {
-  $('maxf').textContent = MAX_FLOOR;
+  $('maxf').textContent = capNow();
   be = await makeBackend(); const localUnlock = await checkPass(localStorage.getItem('logout.v1.gm'), GM_PASS_HASH);
-  gmValid = staffActive({ serverRole: !!be.isGm?.(), localUnlock }); setArc3Preview(featureOn(FEATURES, 'arc3', gmValid)); setBossV2(bossV2On()); setHeroV2(heroV2On()); document.body.classList.toggle("hv2", heroV2On()); // policy lives in gm.js
+  gmValid = staffActive({ serverRole: !!be.isGm?.(), localUnlock }); syncArc3(); setBossV2(bossV2On()); setHeroV2(heroV2On()); document.body.classList.toggle("hv2", heroV2On()); // policy lives in gm.js
   if (be.name === 'supabase') be.holdUploads = gmValid && !be.isGm(); // local-only staff: no save, name or damage ever leaves this device
   save = migrateSave(await be.loadSave()); if (save) { delete save.ctx; enforceOneUnique(save); } // live-only context, never trusted from storage
   if (save && sanitizeSave(save, gmValid)) { save = migrateSave(save); await be.saveSave(save); } // pasted staff ids are stripped
@@ -253,7 +254,7 @@ let csBusy = false;
 // csV 2: before this fix arc cutscenes were marked seen before playing and were unwatchable on phones, so arc 1 is re-queued once for everyone.
 async function csCheck(fresh = false) { if (csBusy || !save || (navigator.webdriver && !localStorage.getItem('logout.v1.csTest'))) return; save.cutscenes = save.cutscenes || []; // automated runs opt in via logout.v1.csTest
   if ((save.csV || 0) < 2) { save.cutscenes = save.cutscenes.filter(k => k !== '1'); save.csV = 2; }
-  const k = pendingCutscene(floor, MAX_FLOOR, save.cutscenes, { fresh: fresh || !!save.introDue }); if (!k) return;
+  const k = pendingCutscene(floor, capNow(), save.cutscenes, { fresh: fresh || !!save.introDue }); if (!k) return;
   csBusy = true; const ok = await playCutscene(k).catch(() => false); csBusy = false;
   if (ok) { if (!save.cutscenes.includes(k)) save.cutscenes.push(k); if (k === 'intro') delete save.introDue; await be.saveSave(save).catch(() => {}); csCheck(); } }
 function arcCheck() { const a = arcIndex(floor.floor), k = 'logout.v1.arcSeen', seen = +localStorage.getItem(k) || 0;
@@ -301,18 +302,24 @@ function playAwaken() {
   const hide = () => { b.hidden = true; b.classList.remove('show'); }; b.onclick = hide; clearTimeout(playAwaken.t); playAwaken.t = setTimeout(hide, 4200);
   log(`${AWAKEN_NAME}: the Queen rewrites her own code. Phase 2 begins.`, '#ff2a6a');
 }
-function render() {
+// ---- Arc 3 gate: server-authoritative (the shared floor from floor_state), re-checked on every render. Unlocks for everyone once the shared tower
+// is past ARC3_UNLOCK_AFTER, with a one-time notice per device; a tower reset (back to Floor 1) locks it again and re-arms the notice. Staff: always open.
+function syncArc3() { const f = floor?.floor || 0, on = arc3Unlocked(f, gmValid, featureOn(FEATURES, 'arc3', gmValid), ARC3_UNLOCK_AFTER), k = 'logout.v1.arc3Ann';
+  if (on !== arc3Open) { arc3Open = on; setArc3Preview(on); sceneFor = ''; }
+  if (!floor) return; if (f > ARC3_UNLOCK_AFTER && featureOn(FEATURES, 'arc3', gmValid)) { if (!localStorage.getItem(k)) { localStorage.setItem(k, '1'); const m = `Floors ${ARC3_UNLOCK_AFTER + 1}–${ARC3_CAP} unlocked: Tidewire Depths`; log(`System notice: ${m}.`, '#5fe8ff'); notice(m, '#5fe8ff'); } }
+  else if (f <= ARC3_UNLOCK_AFTER) localStorage.removeItem(k); }
+function render() { syncArc3();
   const h = save.heroes[0]; renderSanctum();
   { const ph = petHtml(save, gmValid); if (ph !== lastPet) { $('pet').innerHTML = ph; lastPet = ph; } }
   if (gmValid && h.cls === GM_CLASS && floor?.floor) { const t = gmTier(h.level); gmGear(save, floor.floor, legendaryWeaponDps(floor.floor), legendaryArmorPct(floor.floor)); if ((save.gmTierSeen || 1) < t.n) { save.gmTierSeen = t.n; gearAwaken(t); } } // staff gear follows the level tier; banner once per tier
   if (gmValid && save.spirit) { const ss = spiritStage(save.heroes[0].level); if ((save.spiritSeen || 0) < ss.n) { save.spiritSeen = ss.n; spiritEvolve(ss); } } // staff only: first time each stage is reached
   { const kb = heroV2() && wearsRootKey(h), hb = $('hero'); hb.style.backgroundImage = heroSprite(h.look, h.cls, undefined, h.level, { key: kb }); hb.classList.toggle('v2', heroV2()); hb.classList.toggle('keybob', kb); // Root Key bob: two cached frames (keyDy 0 / -1)
     if (kb) { hb.style.setProperty('--kf0', hb.style.backgroundImage); hb.style.setProperty('--kf1', heroSprite(h.look, h.cls, undefined, h.level, { key: true, keyDy: -1 })); } } $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; const phase = bossPhase(floor.floor, floor.hp, floor.maxHp); $('boss').style.backgroundImage = bossSprite(floor.floor, phase); $('boss').classList.toggle('big', bossIsBig(floor.floor)); bossV2Look(floor.floor, phase);
-  const won = floor.floor >= MAX_FLOOR && floor.hp <= 0, waiting = !won && floor.hp <= 0, bi = bossInfo(floor.floor), arc = arcOf(floor.floor); applyScene(floor.floor);
+  const won = floor.floor >= capNow() && floor.hp <= 0, waiting = !won && floor.hp <= 0, bi = bossInfo(floor.floor), arc = arcOf(floor.floor); applyScene(floor.floor);
   // end of content after the last open floor; 'waiting' = the server has not opened the next floor yet (e.g. its floor cap is still lower)
   H('bname').textContent = won ? 'The spire falls silent' : bossName(floor.floor);
-  H('floor').textContent = won ? `System notice · Floor ${MAX_FLOOR + 1} is sealed. The next arc has not opened.` : waiting ? `System notice · the stair to Floor ${floor.floor + 1} is opening soon · ${arc.name}` : `${bi.title} · Floor ${floor.floor} / ${MAX_FLOOR} · ${arc.name}`;
-  if (!won && phase === 2 && !inSanctum(save, sanctumOk())) { H('bname').textContent = AWAKEN_NAME; H('floor').textContent = `${AWAKEN_TITLE} · Floor ${floor.floor} / ${MAX_FLOOR} · ${arc.name}`; }
+  H('floor').textContent = won ? `System notice · Floor ${capNow() + 1} is sealed. The next arc has not opened.` : waiting ? `System notice · the stair to Floor ${floor.floor + 1} is opening soon · ${arc.name}` : `${bi.title} · Floor ${floor.floor} / ${capNow()} · ${arc.name}`;
+  if (!won && phase === 2 && !inSanctum(save, sanctumOk())) { H('bname').textContent = AWAKEN_NAME; H('floor').textContent = `${AWAKEN_TITLE} · Floor ${floor.floor} / ${capNow()} · ${arc.name}`; }
   awakenCheck(floor.floor, inSanctum(save, sanctumOk()) ? 1 : phase, won);
   if (inSanctum(save, sanctumOk())) { $('boss').style.backgroundImage = constructSprite(); $('boss').classList.remove('big'); H('bname').textContent = `Training Construct · Lv ${construct().level}`; H('floor').textContent = `${SANCTUM.name} · ${SANCTUM.sub}`; }
   { const fm = inSanctum(save, sanctumOk()) ? 0 : farmFloor(save, floor.floor); $('boss').classList.toggle('echo', !!fm); $('arena').classList.toggle('farming', !!fm);
@@ -321,7 +328,7 @@ function render() {
   const pct = floor.hp / floor.maxHp, lay = Math.ceil(pct * LAYERS - 1e-9), inLayer = pct * LAYERS - (lay - 1);
   H('layers').innerHTML = Array.from({ length: LAYERS }, (_, i) => `<i class="${i < lay ? 'on' : ''}"></i>`).join('');
   const c = hpColor(pct); $('hpfill').style.width = (lay ? inLayer * 100 : 0) + '%'; $('hpfill').style.background = `linear-gradient(90deg, ${c}aa, ${c})`; $('hpfill').style.color = c;
-  H('hptext').textContent = `${fmt(floor.hp)} / ${fmt(floor.maxHp)} HP · ${lay}× layers` + (cx(h, 'cx-eye') ? ` · layer ${lay}: ${fmt(Math.max(0, inLayer) * floor.maxHp / LAYERS)} / ${fmt(floor.maxHp / LAYERS)} · next: ${bossName(Math.min(floor.floor + 1, MAX_FLOOR))}` : ''); // Draftsman's Eye
+  H('hptext').textContent = `${fmt(floor.hp)} / ${fmt(floor.maxHp)} HP · ${lay}× layers` + (cx(h, 'cx-eye') ? ` · layer ${lay}: ${fmt(Math.max(0, inLayer) * floor.maxHp / LAYERS)} / ${fmt(floor.maxHp / LAYERS)} · next: ${bossName(Math.min(floor.floor + 1, capNow()))}` : ''); // Draftsman's Eye
   H('hname2').innerHTML = `<div ${h.cls === GM_CLASS ? `class="gmname${cx(h, 'cx-shape') ? ' shape' : ''}"` : `style="color:${nameColorOf(h)}"`}>${h.cls === GM_CLASS ? GM_SIGIL + ' ' : ''}${esc(h.name)}</div><div class="ttl">${esc(titleOf(h))}</div>`; { const c = levelCap(floor?.floor, gmValid), at = atCap(h, c); H('hlv').textContent = at ? `LV ${h.level} (cap)` : `LV ${h.level}`; if (at && capNoted !== c) { capNoted = c; notice(`Level cap ${c} reached · the next floor raises it`); } $('hlv').title = at ? `Level cap: clearing Floor ${floor.floor} raises it to ${c + 1}${h.xp >= xpToNext(h.level) ? ' (XP banked: you level up at once)' : ''}` : ''; }
   const hp = heroHp(h) / heroMaxHp(h), worn = isWorn(h); $('hhp').className = 'seg' + (worn ? ' worn' : hp < 0.6 ? ' mid' : ''); H('hhp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < hp ? '' : 'off'}"></i>`).join('');
   $('hhp').title = `HP ${Math.round(heroHp(h))} / ${heroMaxHp(h)}`;
@@ -330,16 +337,16 @@ function render() {
     b.elixir > 0 ? `<span class="buff" title="+25% DPS">Fury ${mmss(b.elixir)}</span>` : '', b.vigil > 0 ? `<span class="buff" title="Offline cap raised once">Vigil +${b.vigil}h</span>` : '', (m => m ? `<span class="buff mech" title="${esc(m)}">${esc(m.split(':')[0])}</span>` : '')(mechText(bossInfo(floor.floor).mech)), unwrittenHour(save.ctx) ? '<span class="buff gold" title="Vesperveil: +5% damage for heroes on this floor until the guardian falls">The Unwritten Hour · +5%</span>' : '', h.cls === GM_CLASS && h.look.aura === 'gm-aura' ? (g => `<span class="buff gold" id="galaxyTier" title="${esc(g.desc)}">Galaxy · Tier ${g.tier} · ${esc(g.name)}</span>`)(galaxyTier(h.level)) : ''].join('');
   const xp = h.xp / xpToNext(h.level); H('hxp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < xp ? '' : 'off'}"></i>`).join('');
   H('stats').innerHTML = `${classOf(h.cls).icon} <b>${h.cls}</b> · XP ${h.xp}/${xpToNext(h.level)}<br>Gear <b>+${h.gear}</b> · DPS <b>${effectiveDps(save).toFixed(1)}</b> · HP <b>${Math.round(heroHp(h))}/${heroMaxHp(h)}</b> · Gold <b>${fmt(save.gold)}</b>${gmValid ? ` · Luck <b>+${GM_LUCK}%</b>` : ''}`;
-  const capNow = levelCap(floor?.floor, gmValid), capped = atCap(h, capNow);
-  H('lvlL').textContent = capped ? 'Lv cap' : `Train ${fmt(levelCost(h))}g`; if (capped) { $('lvl').title = `Level cap ${capNow}: clearing Floor ${floor.floor} raises it to ${capNow + 1}`; } $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`; $('lvl').disabled = capped || save.gold < levelCost(h); if (!capped) $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`;
+  const lvCapNow = levelCap(floor?.floor, gmValid), capped = atCap(h, lvCapNow);
+  H('lvlL').textContent = capped ? 'Lv cap' : `Train ${fmt(levelCost(h))}g`; if (capped) { $('lvl').title = `Level cap ${lvCapNow}: clearing Floor ${floor.floor} raises it to ${lvCapNow + 1}`; } $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`; $('lvl').disabled = capped || save.gold < levelCost(h); if (!capped) $('lvl').title = `Train: +1 level for ${fmt(levelCost(h))} gold`;
   { const gr = $('gmReplay'), on = gmValid && h.cls === GM_CLASS, n = on ? gmTier(h.level).n : 1, html = on && n >= 2 ? `<small>Replay awakening:</small> ${GM_TIERS.filter(t => t.n >= 2 && t.n <= n).map(t => `<button data-gmt="${t.n}">${t.n === 4 ? 'Divine' : t.label}</button>`).join('')}` : '';
     if (gr.dataset.h !== html) { gr.dataset.h = html; gr.innerHTML = html; gr.hidden = !html; gr.onclick = e => { const b = e.target.closest('[data-gmt]'); if (!b) return; const t = +b.dataset.gmt, f = floor?.floor || 1, d = legendaryWeaponDps(f), a = eventide(f, d, t - 1), z = eventide(f, d, t), T = GM_TIERS[t - 1];
       playForge('evolve', a, z, true, it => ico(it, 'ico fbig'), { kicker: `Staff gear · ${t === 4 ? 'Divine Awakening' : T.label}`, title: z.name, text: `${T.label} · Vesperveil awakens with it · replay only` }); }; } } // cosmetic replay, changes nothing
   H('equipped').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip?.[s]; return `<span class="eq" style="${it ? `color:${rarityOf(shownRarity(it)).color}` : ''}">${s[0].toUpperCase() + s.slice(1)}: ${it ? esc(it.name) + (it.up ? ` +${it.up}` : '') : '—'}</span>`; }).join('');
   { const fp = treeOf(h.cls).length ? freePoints(h) : 0, bs = bagSize(save), full = save.inv.length >= bs - 2; setHeroLabels({ bag: `Bag ${save.inv.length}/${bs}`, talents: isCodex(h) ? 'Codex' : fp > 0 ? `Talents · ${fp}` : 'Talents', talentsDot: fp > 0, bagDot: full });
     setDot('dotHero', fp > 0 || full, [fp > 0 ? `${fp} talent point${fp > 1 ? 's' : ''} to spend` : '', full ? (save.inv.length >= bs ? 'Bag full' : 'Bag nearly full') : ''].filter(Boolean).join(' · '));
-    H('hdps').textContent = `DPS ${effectiveDps(save).toFixed(1)}`; H('goldTop').textContent = `⛁ ${fmt(save.gold)}`; H('floorTxt').innerHTML = `Floor ${floor.floor}/<span id="maxf">${MAX_FLOOR}</span>`;
-    $('ftick').style.width = `${Math.min(100, ((floor.floor - 1) + (1 - floor.hp / floor.maxHp)) / MAX_FLOOR * 100).toFixed(1)}%`; $('floorBtn').setAttribute('aria-label', `Floor ${floor.floor} of ${MAX_FLOOR}: open the tower map`);
+    H('hdps').textContent = `DPS ${effectiveDps(save).toFixed(1)}`; H('goldTop').textContent = `⛁ ${fmt(save.gold)}`; H('floorTxt').innerHTML = `Floor ${floor.floor}/<span id="maxf">${capNow()}</span>`;
+    $('ftick').style.width = `${Math.min(100, ((floor.floor - 1) + (1 - floor.hp / floor.maxHp)) / capNow() * 100).toFixed(1)}%`; $('floorBtn').setAttribute('aria-label', `Floor ${floor.floor} of ${capNow()}: open the tower map`);
     $('sbBtn').hidden = !(gmValid && featureOn(FEATURES, 'sandbox', true)); }
   $('gear').title = 'Forge: temper your weapon, +15% damage per tier';
   { const fc = forgeCap(floor?.floor, gmValid), fat = h.gear >= fc; H('gearL').textContent = fat ? `Forge cap +${fc}` : `Forge ${fmt(gearCost(h))}g`; $('gear').disabled = fat || save.gold < gearCost(h); $('gear').title = fat ? `Forge cap +${fc}: the next floor raises it` : ''; }
@@ -569,10 +576,10 @@ function renderGmSlot() {
       ${h.cls === GM_CLASS ? `<button id="gmLeave">Return to ${esc(h.prevCls || 'Vanguard')}</button>` : '<button id="gmBecome" class="cta">Take the Architect\'s form</button>'}
       ${featureOn(FEATURES, 'sandbox', true) ? '<button id="gmSandbox">Sandbox</button>' : ''}${localStorage.getItem('logout.v1.gm') ? '<button id="gmLock">Lock staff access</button>' : ''}${online && !be.isGm() ? '<p class="sub">Local staff unlock: your damage stays on this device (never sent to the shared floor or ranked) until the server role is granted.</p>' : ''}</div>`
     : `<div class="staffbox"><input id="gmPass" type="password" autocomplete="off" placeholder="access phrase"><button id="gmTry">Verify</button></div>`;
-  if ($('gmTry')) $('gmTry').onclick = async () => { const p = $('gmPass').value; if (staffActive({ localUnlock: await checkPass(p, GM_PASS_HASH) })) { localStorage.setItem('logout.v1.gm', p); gmValid = true; setArc3Preview(featureOn(FEATURES, 'arc3', gmValid)); setBossV2(bossV2On()); setHeroV2(heroV2On()); document.body.classList.toggle("hv2", heroV2On()); if (be.name === 'supabase' && !be.isGm()) be.holdUploads = true; save.heroes[0].hp = null; save.ctx.gm = true; notice('Staff access verified'); renderGmSlot(); render(); } else notice('Access denied'); };
+  if ($('gmTry')) $('gmTry').onclick = async () => { const p = $('gmPass').value; if (staffActive({ localUnlock: await checkPass(p, GM_PASS_HASH) })) { localStorage.setItem('logout.v1.gm', p); gmValid = true; syncArc3(); setBossV2(bossV2On()); setHeroV2(heroV2On()); document.body.classList.toggle("hv2", heroV2On()); if (be.name === 'supabase' && !be.isGm()) be.holdUploads = true; save.heroes[0].hp = null; save.ctx.gm = true; notice('Staff access verified'); renderGmSlot(); render(); } else notice('Access denied'); };
   if ($('gmBecome')) $('gmBecome').onclick = async () => { becomeGm(save, legendaryWeaponDps(floor.floor), floor.floor, legendaryArmorPct(floor.floor)); lastFloorSeen = 0; gmFloorChecks(); await be.saveSave(save); render(); renderLb(); renderGmSlot(); };
   if ($('gmLeave')) $('gmLeave').onclick = async () => { leaveGm(save); save = migrateSave(save); await be.saveSave(save); render(); renderLb(); renderGmSlot(); };
-  if ($('gmLock')) $('gmLock').onclick = async () => { localStorage.removeItem('logout.v1.gm'); gmValid = false; setArc3Preview(featureOn(FEATURES, 'arc3', gmValid)); setBossV2(bossV2On()); setHeroV2(heroV2On()); document.body.classList.toggle("hv2", heroV2On()); sanitizeSave(save, false); save = migrateSave(save); save.ctx = {}; await be.saveSave(save); render(); renderGmSlot(); };
+  if ($('gmLock')) $('gmLock').onclick = async () => { localStorage.removeItem('logout.v1.gm'); gmValid = false; syncArc3(); setBossV2(bossV2On()); setHeroV2(heroV2On()); document.body.classList.toggle("hv2", heroV2On()); sanitizeSave(save, false); save = migrateSave(save); save.ctx = {}; await be.saveSave(save); render(); renderGmSlot(); };
   if ($('gmSandbox')) $('gmSandbox').onclick = openSandboxUi;
 }
 let sbx = null;
@@ -709,7 +716,7 @@ function seenMarks() { // marks set by a server-role staff client; everyone on t
   if (gmValid && cx(h, 'cx-final')) be.gmMark?.('decree6', floor.floor, 'final').catch(() => {});
   if (gmValid && cx(h, 'cx-echo')) be.gmMark?.('echo', floor.floor).catch(() => {});
   if (gmValid && cx(h, 'cx-corner') && be.isGm?.()) be.gmMark?.('cornerstone', floor.floor).catch(() => {});
-  if (lastFloorFor !== floor.floor) { if (lastFloorFor !== null && gmValid && cx(h, 'cx-prophecy')) { const nx = Math.min(floor.floor + 1, MAX_FLOOR); log(`Prophecy: the guardian of Floor ${nx} will be ${bossInfo(nx).lootElement}.`, '#ffd76a'); } lastFloorFor = floor.floor; }
+  if (lastFloorFor !== floor.floor) { if (lastFloorFor !== null && gmValid && cx(h, 'cx-prophecy')) { const nx = Math.min(floor.floor + 1, capNow()); log(`Prophecy: the guardian of Floor ${nx} will be ${bossInfo(nx).lootElement}.`, '#ffd76a'); } lastFloorFor = floor.floor; }
 }
 function codexExtra(h, n) {
   if (!(h.talents?.[n.id] > 0)) return '';
@@ -729,7 +736,7 @@ function wireCodexExtra(h, n) {
 async function setFarm(f) { await sync(); save.farm = f || null; log(f ? `${save.heroes[0].name} turned back to Floor ${f}: farming its echo. The live guardian is left to the others.` : `${save.heroes[0].name} returned to the live guardian on Floor ${floor.floor}.`); notice(f ? `Farming Floor ${f} echo` : 'Back on the live guardian'); await be.saveSave(save); render(); openMap(); }
 async function openMap() {
   const [hist, heroes] = await Promise.all([be.floorHistory?.().catch(() => []) ?? [], be.floorHeroes?.(floor.floor).catch(() => null) ?? null]);
-  const pp = clearPlayers(counts?.last), rows = towerRows({ current: floor.floor, maxFloor: MAX_FLOOR, history: hist, players: pp }), pr = towerProgress({ current: floor.floor, hp: floor.hp, maxHp: floor.maxHp, maxFloor: MAX_FLOOR });
+  const pp = clearPlayers(counts?.last), rows = towerRows({ current: floor.floor, maxFloor: capNow(), history: hist, players: pp }), pr = towerProgress({ current: floor.floor, hp: floor.hp, maxHp: floor.maxHp, maxFloor: capNow() });
   const when = at => at ? new Date(at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
   $('mapProg').innerHTML = `<div class="mprog"><b>Floor ${pr.floor} / ${pr.top}</b><span>${pr.cleared} cleared${heroes != null ? ` · ${heroes} hero${heroes === 1 ? '' : 'es'} on this floor` : ''}</span>
     <div class="bar"><i style="width:${pr.pct.toFixed(1)}%"></i></div><small>Tower ${pr.pct.toFixed(0)}% · guardian HP ${fmt(floor.hp)} / ${fmt(floor.maxHp)}</small>

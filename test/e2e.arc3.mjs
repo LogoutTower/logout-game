@@ -19,8 +19,15 @@ async function page(dev, gm, floor) {
 }
 const info = p => p.evaluate(() => { const a = document.getElementById('arena'), cs = getComputedStyle(a);
   return { arc: a.dataset.arc, particles: a.dataset.particles, img: cs.backgroundImage, size: cs.backgroundSize, name: document.getElementById('bname')?.textContent || '', buffs: document.body.innerText, finale: a.classList.contains('finale'), vw: innerWidth }; });
-{ const { ctx, p, errs } = await page({ viewport: { width: 1280, height: 900 } }, false, 25); const i = await info(p);
-  assert.doesNotMatch(i.name, /Lumen Jelly/); assert.doesNotMatch(i.img, /arc-3\.png/); assert.notEqual(i.particles, 'bubbles'); assert.doesNotMatch(i.buffs, /Tidewire/); assert.deepEqual(errs, []); await ctx.close(); console.log('non-staff: no arc 3 ok', i.name); }
+// regular player: locked while the shared floor is <= 20 (server floor = the seeded world floor in local mode)
+{ const { ctx, p, errs } = await page({ viewport: { width: 1280, height: 900 } }, false, 20); const i = await info(p);
+  assert.doesNotMatch(i.img, /arc-3\.png/); assert.notEqual(i.particles, 'bubbles'); assert.doesNotMatch(i.buffs, /Tidewire|unlocked/); assert.match(await p.textContent('#floorTxt'), /\/20/); assert.deepEqual(errs, []); await ctx.close(); console.log('non-staff F20: locked ok'); }
+// regular player once the shared floor is past 20: unlocked for everyone + one-time notice; cap 30
+{ const { ctx, p, errs } = await page({ viewport: { width: 1280, height: 900 } }, false, 21); const i = await info(p);
+  assert.match(i.name, /Lantern Angler/); assert.match(i.img, /arc-3\.png/); assert.equal(i.particles, 'bubbles'); assert.match(await p.evaluate(() => document.body.textContent), /Floors 21–30 unlocked: Tidewire Depths/); assert.match(await p.textContent('#floorTxt'), /21\/30/);
+  assert.equal(await p.evaluate(() => localStorage.getItem('logout.v1.arc3Ann')), '1'); await p.screenshot({ path: `${OUT}/unlock-notice-desktop.png` });
+  await p.evaluate(() => localStorage.setItem('logout.v1.world', JSON.stringify({ floor: 1, hp: 86000, dmg: {}, marks: {}, t: Date.now() }))); await p.reload(); await p.waitForTimeout(2500); // tower reset -> locked again, notice re-armed
+  const j = await info(p); assert.doesNotMatch(j.img, /arc-3\.png/); assert.equal(await p.evaluate(() => localStorage.getItem('logout.v1.arc3Ann')), null); assert.deepEqual(errs, []); await ctx.close(); console.log('non-staff F21: unlocked + notice, reset relocks ok'); }
 const RUNS = [['desktop', { viewport: { width: 1280, height: 900 } }], ['phone', devices['iPhone 13']]];
 for (const [name, dev] of RUNS) for (const [f, boss, mech] of [[25, 'The Lumen Jelly Oracle', 'Tide'], [30, 'The Tidewire Leviathan', 'Undertow']]) {
   const { ctx, p, errs } = await page(dev, true, f); const onFloor = () => p.evaluate(n => new RegExp(`· Floor ${n} / `).test(document.getElementById('floor')?.textContent || ''), f);
