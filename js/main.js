@@ -52,7 +52,7 @@ import { setHeroV2, heroV2, npcSprite } from './sprites.js';
 import { bossSprite, bossIsBig, heroSprite, bossPhase, AWAKEN_NAME, AWAKEN_TITLE } from './sprites.js';
 import { ORIGIN_SLOTS } from './cosmetics.js';
 import { RACE_PERKS } from '../config.js';
-import { SLOTS, CREATION_SLOTS, itemsFor, isUnlocked, unlockText, defaultLook, migrateSave, recordClear, equip, titleOf, nameColorOf, fakeProfile, byId, SAVE_VERSION } from './cosmetics.js';
+import { SLOTS, CREATION_SLOTS, itemsFor, isUnlocked, unlockText, defaultLook, migrateSave, recordClear, equip, titleOf, nameColorOf, fakeProfile, byId, SAVE_VERSION, setHairV2 } from './cosmetics.js';
 const $ = id => document.getElementById(id);
 // Write only when changed: avoids rebuilding nodes (and layout shifts that eat clicks) on every 1s tick.
 const H = id => { const e = $(id); return { set innerHTML(v) { if (e._v !== v) { e._v = v; e.innerHTML = v; } }, set textContent(v) { if (e.textContent !== v) e.textContent = v; } }; };
@@ -95,7 +95,7 @@ function picker(el, slots, look, heroCls, progress, onPick) {
 async function boot() {
   $('maxf').textContent = capNow();
   be = await makeBackend(); const localUnlock = await checkPass(localStorage.getItem('logout.v1.gm'), GM_PASS_HASH);
-  gmValid = staffActive({ serverRole: !!be.isGm?.(), localUnlock }); syncArc3(); setBossV2(bossV2On()); setHeroV2(heroV2On()); document.body.classList.toggle("hv2", heroV2On()); // policy lives in gm.js
+  gmValid = staffActive({ serverRole: !!be.isGm?.(), localUnlock }); syncArc3(); setBossV2(bossV2On()); setHeroV2(heroV2On()); setHairV2(featureOn(FEATURES, 'hairV2', gmValid)); document.body.classList.toggle("hv2", heroV2On()); // policy lives in gm.js
   if (be.name === 'supabase') be.holdUploads = gmValid && !be.isGm(); // local-only staff: no save, name or damage ever leaves this device
   save = migrateSave(await be.loadSave()); if (save) { delete save.ctx; enforceOneUnique(save); } // live-only context, never trusted from storage
   if (save && sanitizeSave(save, gmValid)) { save = migrateSave(save); await be.saveSave(save); } // pasted staff ids are stripped
@@ -576,10 +576,10 @@ function renderGmSlot() {
       ${h.cls === GM_CLASS ? `<button id="gmLeave">Return to ${esc(h.prevCls || 'Vanguard')}</button>` : '<button id="gmBecome" class="cta">Take the Architect\'s form</button>'}
       ${featureOn(FEATURES, 'sandbox', true) ? '<button id="gmSandbox">Sandbox</button>' : ''}${localStorage.getItem('logout.v1.gm') ? '<button id="gmLock">Lock staff access</button>' : ''}${online && !be.isGm() ? '<p class="sub">Local staff unlock: your damage stays on this device (never sent to the shared floor or ranked) until the server role is granted.</p>' : ''}</div>`
     : `<div class="staffbox"><input id="gmPass" type="password" autocomplete="off" placeholder="access phrase"><button id="gmTry">Verify</button></div>`;
-  if ($('gmTry')) $('gmTry').onclick = async () => { const p = $('gmPass').value; if (staffActive({ localUnlock: await checkPass(p, GM_PASS_HASH) })) { localStorage.setItem('logout.v1.gm', p); gmValid = true; syncArc3(); setBossV2(bossV2On()); setHeroV2(heroV2On()); document.body.classList.toggle("hv2", heroV2On()); if (be.name === 'supabase' && !be.isGm()) be.holdUploads = true; save.heroes[0].hp = null; save.ctx.gm = true; notice('Staff access verified'); renderGmSlot(); render(); } else notice('Access denied'); };
+  if ($('gmTry')) $('gmTry').onclick = async () => { const p = $('gmPass').value; if (staffActive({ localUnlock: await checkPass(p, GM_PASS_HASH) })) { localStorage.setItem('logout.v1.gm', p); gmValid = true; syncArc3(); setBossV2(bossV2On()); setHeroV2(heroV2On()); setHairV2(featureOn(FEATURES, 'hairV2', gmValid)); document.body.classList.toggle("hv2", heroV2On()); if (be.name === 'supabase' && !be.isGm()) be.holdUploads = true; save.heroes[0].hp = null; save.ctx.gm = true; notice('Staff access verified'); renderGmSlot(); render(); } else notice('Access denied'); };
   if ($('gmBecome')) $('gmBecome').onclick = async () => { becomeGm(save, legendaryWeaponDps(floor.floor), floor.floor, legendaryArmorPct(floor.floor)); lastFloorSeen = 0; gmFloorChecks(); await be.saveSave(save); render(); renderLb(); renderGmSlot(); };
   if ($('gmLeave')) $('gmLeave').onclick = async () => { leaveGm(save); save = migrateSave(save); await be.saveSave(save); render(); renderLb(); renderGmSlot(); };
-  if ($('gmLock')) $('gmLock').onclick = async () => { localStorage.removeItem('logout.v1.gm'); gmValid = false; syncArc3(); setBossV2(bossV2On()); setHeroV2(heroV2On()); document.body.classList.toggle("hv2", heroV2On()); sanitizeSave(save, false); save = migrateSave(save); save.ctx = {}; await be.saveSave(save); render(); renderGmSlot(); };
+  if ($('gmLock')) $('gmLock').onclick = async () => { localStorage.removeItem('logout.v1.gm'); gmValid = false; syncArc3(); setBossV2(bossV2On()); setHeroV2(heroV2On()); setHairV2(featureOn(FEATURES, 'hairV2', gmValid)); document.body.classList.toggle("hv2", heroV2On()); sanitizeSave(save, false); save = migrateSave(save); save.ctx = {}; await be.saveSave(save); render(); renderGmSlot(); };
   if ($('gmSandbox')) $('gmSandbox').onclick = openSandboxUi;
 }
 let sbx = null;

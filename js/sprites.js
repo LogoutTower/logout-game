@@ -25,10 +25,10 @@ import { bossV2Grid } from './floors.js';
 /** True when this floor/phase is drawn from the art v2 registry right now (flag on + entry present). */
 export const bossIsV2 = (f, phase = 1) => BV2 && phase === 1 && !!bossV2Grid(f);
 export const BOSS_SPRITE = bossSprite(1);
-import { heroGrid, gmForm } from './cosmetics.js';
+import { heroGrid, gmForm , hairV2On } from './cosmetics.js';
 import { GM_CLASS } from './gm.js';
 // Hero v2 (64x64, pre-shaded, canvas PNG) is behind FEATURES.heroV2; main.js sets it once the staff check is known. v1 grids stay the fallback.
 export const setHeroV2 = on => { V2 = !!on; }; export const heroV2 = () => V2;
-export const heroSprite = (look, cls, v2 = V2, level = 1, gmOpt = {}) => memo((v2 ? 'v2' + (cls === GM_CLASS ? gmForm(look, level) + (gmOpt.key ? 'k' + (gmOpt.keyDy | 0) : '') : '') : '') + cls + JSON.stringify(look), () => { const g = heroGrid(look, cls, v2, level, gmOpt); return sprite(g.rows, g.pal); });
+export const heroSprite = (look, cls, v2 = V2, level = 1, gmOpt = {}) => memo((v2 ? 'v2' + (cls === GM_CLASS ? gmForm(look, level) + (gmOpt.key ? 'k' + (gmOpt.keyDy | 0) : '') : '') : '') + cls + (hairV2On() ? ':h2' : '') + JSON.stringify(look), () => { const g = heroGrid(look, cls, v2, level, gmOpt); return sprite(g.rows, g.pal); });
 import { npcGridV2 } from './npc64.js';
 export const npcSprite = (key, classic) => memo('npc' + key + (V2 ? ':v2' : ''), () => { const g = V2 ? npcGridV2(key) : classic(key); return sprite(g.rows, g.pal); });
