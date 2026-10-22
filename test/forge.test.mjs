@@ -27,3 +27,10 @@ assert.equal(farmFloor({ farm: 3 }, 5), 3); assert.equal(farmFloor({ farm: 5 }, 
 const fm = {}; gainMats(fm, 10 * 3600, 10, true); assert.equal(fm.mats.core10, 6); assert.equal(fm.mats.ess1, 25); assert.equal(fm.mats.shard, 80); assert.equal(fm.mats.sigil10 || 0, 0); gainMats(fm, 10 * 3600, 10, true); assert.equal(fm.mats.sigil10, 1);
 assert.deepEqual(lootKey(2, 13).map(r => r.key), ['shard', 'ess2', 'core11', 'core12', 'core13']); assert(lootKey(1).some(r => r.key === 'sigil10'));
 console.log('farm ok');
+
+// Farm echo: its own HP pool, drained by the hero's damage, re-forms on break, resets when the farmed floor changes
+{ const { echoMaxHp, hitEcho } = await import('../js/forge.js'); const assert = (await import('node:assert')).default;
+  const s = {}; assert.equal(hitEcho(s, 3, 0), 0); assert.equal(s.echo.hp, echoMaxHp(3)); assert(echoMaxHp(21) > echoMaxHp(3));
+  hitEcho(s, 3, 100); assert.equal(s.echo.hp, echoMaxHp(3) - 100);
+  assert.equal(hitEcho(s, 3, echoMaxHp(3) * 2), 2); assert.equal(s.echo.kills, 2); assert(s.echo.hp > 0 && s.echo.hp <= s.echo.maxHp);
+  hitEcho(s, 5, 0); assert.equal(s.echo.f, 5); assert.equal(s.echo.kills, 0); assert.equal(s.echo.hp, echoMaxHp(5)); }

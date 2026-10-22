@@ -6,6 +6,6 @@ assert.equal(GM_SOFTEN_MULT, 1.5); assert(Math.abs(L.REF_BASE - G.GM_STATS.atk) 
 assert(L.refPlayerDps(15) > L.refPlayerDps(11) && L.refPlayerDps(11) > 200);
 assert.equal(L.softenGm(1e12, 60, 11, 1.5), Math.floor(1.5 * L.refPlayerDps(11) * 60)); assert.equal(L.softenGm(100, 60, 11), 100, 'below the cap: unchanged'); assert.equal(L.softenGm(5, 0, 11), 0);
 const m = fs.readFileSync(new URL('../js/main.js', import.meta.url), 'utf8');
-assert(/if \(!sanc && gmValid\) p\.damage = softenGm/.test(m) && /if \(!sanc0 && gmValid\) p\.damage = softenGm/.test(m), 'live and offline paths softened, never in the Sanctum');
+assert(/if \(!sanc && !farm && gmValid\) p\.damage = softenGm/.test(m) && m.includes('if (!sanc0 && !farmFloor(save, (await be.getFloor()).floor) && gmValid) p.damage = softenGm'), 'live and offline paths softened, never in the Sanctum or on a private farm echo');
 const sql = fs.readFileSync(new URL('../supabase/schema-addendum-gm-softener-prelaunch.sql', import.meta.url), 'utf8'); assert(/gm_soft_mult numeric not null default 1\.5/.test(sql), 'server default matches config');
 console.log('softener tests passed');

@@ -7,7 +7,7 @@ export const GUIDES = {
     ${step('🗺️', 'Pick a cleared floor', 'Open the Tower Map, tap any floor that has already fallen and press <b>Farm this echo</b>.')}
     ${step('👻', 'Fight its echo', "Your hero fights a weaker, repeatable echo of that floor's boss, live and while you are away.")}
     ${step(mi('core'), 'Earn its materials', 'Farming earns Tower Shards, that set\'s Floor Essence, the floor\'s Boss Core, and on milestone floors (10, 20, 30…) a rare Evolution Sigil. Cores and Sigils feed the Forge prestige loop: every Evo tier needs more of them.')}
-    ${step('⚠️', 'No live-boss damage', 'A farming hero deals <b>no damage</b> to the live guardian. Gold and XP still come in. Press <b>Stop farming</b> to rejoin the climb.')}
+    ${step('⚠️', 'No live-boss damage', 'The echo has its own HP bar: your damage breaks it and it re-forms at once. A farming hero deals <b>no damage</b> to the live guardian. Gold, XP and drops still come in. Press <b>Stop farming</b> to rejoin the climb.')}
   </ol>${o?.set ? lootKeyHtml(o.set, o.upTo) : ''}` }),
   forge: () => ({ title: 'Forge guide', body: `<ol class="hsteps">
     ${step('⚔️', 'Equip a weapon', 'Upgrades belong to the weapon you have equipped and stay on it if you swap.')}

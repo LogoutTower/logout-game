@@ -39,7 +39,7 @@ import { openDen } from './casinoui.js';
 import { openForgeUp } from './forgeui.js';
 import { playForge } from './forgeanim.js';
 import { showHelp } from './helpui.js';
-import { gainMats, matName, farmFloor, setOf, lootKeyHtml } from './forge.js';
+import { gainMats, matName, farmFloor, hitEcho, setOf, lootKeyHtml } from './forge.js';
 import { shopHtml, haloHtml, petHtml, decorHtml, wallHtml, eclipseOn } from './prestigeui.js';
 import { SHOP, spiritStage } from './prestige.js';
 import { SANCTUM, sanctumAllowed, inSanctum, newConstruct, hitConstruct, dpsMeters, constructSprite, towerModelSprite } from './sanctum.js';
@@ -108,9 +108,9 @@ async function boot() {
   if (hubOn()) await syncHub(); // Guild Hub: active bank buff (staff preview while FEATURES.guildHub is 'gm')
   const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
   const sanc0 = inSanctum(save, sanctumOk()); // offline time accrues to the mode the staff hero was in
-  if (!sanc0 && gmValid) p.damage = softenGm(p.damage, p.secs, (await be.getFloor()).floor, GM_SOFTEN_MULT); // raid softener
-  save.gold += p.gold; const ups = applyXp(save.heroes, p.xp, levelCap((await be.getFloor()).floor, gmValid)); if (sanc0) construct().total += p.damage; else if (!farmFloor(save, (await be.getFloor()).floor)) pending += p.damage; else p.damage = 0;
-  const offFloor = (await be.getFloor()).floor, farm0 = sanc0 ? 0 : farmFloor(save, offFloor), matsAway = sanc0 ? {} : gainMats(save, p.secs, farm0 || offFloor, !!farm0), trickled = sanc0 ? [] : trickleDrops(save, p.secs, offFloor, TRICKLE.offlineMax);
+  if (!sanc0 && !farmFloor(save, (await be.getFloor()).floor) && gmValid) p.damage = softenGm(p.damage, p.secs, (await be.getFloor()).floor, GM_SOFTEN_MULT); // raid softener
+  save.gold += p.gold; const ups = applyXp(save.heroes, p.xp, levelCap((await be.getFloor()).floor, gmValid)); if (sanc0) construct().total += p.damage; else if (!farmFloor(save, (await be.getFloor()).floor)) pending += p.damage; else hitEcho(save, farmFloor(save, (await be.getFloor()).floor), p.damage);
+  const offFloor = (await be.getFloor()).floor, farm0 = sanc0 ? 0 : farmFloor(save, offFloor), matsAway = sanc0 ? {} : gainMats(save, p.secs, farm0 || offFloor, !!farm0), trickled = sanc0 ? [] : trickleDrops(save, p.secs, farm0 || offFloor, TRICKLE.offlineMax);
   if (p.secs > 30) {
     const r = sanc0 ? { clears: [] } : await submitDmg(h0.name, pending, h0); if (!sanc0) pending = 0;
     lootLines = []; const got = handleClears(r.clears, true);
@@ -180,13 +180,14 @@ function tick() {
   if (fx.has('whisper') && Date.now() - lastWhisper > 120000) { lastWhisper = Date.now(); log(WHISPERS[Math.floor(Math.random() * WHISPERS.length)], '#b9a8ff'); }
   if (p.damage > 0 && save.sheath && cx(save.heroes[0], 'cx-sheath')) { const extra = Math.round(p.damage * 0.5); p.damage += extra; save.sheath = false; log('Twilight Sheath: the first cut after rest lands +50%.', '#ffd76a'); } // Twilight Sheath
   codexTick(p);
-  const sanc = inSanctum(save, sanctumOk()); if (!sanc && gmValid) p.damage = softenGm(p.damage, p.secs, floor.floor, GM_SOFTEN_MULT); // raid softener (shared boss only; server enforces too)
-  save.gold += p.gold; recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp;
-  const farm = sanc ? 0 : farmFloor(save, floor.floor); if (farm) p.damage = 0; // Farm mode: a boss echo, never the live guardian
+  const sanc = inSanctum(save, sanctumOk()), farm = sanc ? 0 : farmFloor(save, floor.floor); if (!sanc && !farm && gmValid) p.damage = softenGm(p.damage, p.secs, floor.floor, GM_SOFTEN_MULT); // raid softener (shared boss only; server enforces too)
+  save.gold += p.gold; if (!farm) recent.dmg += p.damage; recent.gold += p.gold; recent.xp += p.xp;
   if (!sanc) gainMats(save, p.secs, farm || floor.floor, !!farm); // materials from every fight (js/forge.js)
-  if (sanc) { const b = hitConstruct(construct(), p.damage, Date.now()); if (b) log(`Sanctum: the training construct broke and re-formed (×${construct().broken}).`, '#d9a93f'); } else { pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage); } // Sanctum: never the shared boss
+  if (sanc) { const b = hitConstruct(construct(), p.damage, Date.now()); if (b) log(`Sanctum: the training construct broke and re-formed (×${construct().broken}).`, '#d9a93f'); }
+  else if (farm) { const k = hitEcho(save, farm, p.damage); if (k) log(`The Echo of ${bossName(farm)} broke and re-formed (×${save.echo.kills}).`, '#9fd7ff'); } // Farm mode: the hero's own echo, never the live guardian
+  else { pending += p.damage; floor.hp = Math.max(0, floor.hp - p.damage); } // Sanctum: never the shared boss
   if (applyXp(save.heroes, p.xp, levelCap(floor?.floor, gmValid)).length) { log(`System notice: level ${save.heroes[0].level} reached.`); notice(`Level ${save.heroes[0].level} reached · +1 talent point`); }
-  for (const it of sanc ? [] : trickleDrops(save, p.secs, floor.floor, p.secs > 2 ? TRICKLE.offlineMax : Infinity)) { const R = rarityOf(it.rarity); log(`Loot · ${R.label} ${it.name}${it.salvaged ? ' (bag full: salvaged)' : ''}`, R.color); notice(`${R.label} find — ${it.name}`, R.color, it); }
+  for (const it of sanc ? [] : trickleDrops(save, p.secs, farm || floor.floor, p.secs > 2 ? TRICKLE.offlineMax : Infinity)) { const R = rarityOf(it.rarity); log(`Loot · ${R.label} ${it.name}${it.salvaged ? ' (bag full: salvaged)' : ''}`, R.color); notice(`${R.label} find — ${it.name}`, R.color, it); }
   if (p.damage > 0) { hits++; if (fx.has('tenth') && hits % 10 === 0) { hitFx(p.damage); log('The Tenth Bell rings — double hit.', '#7ff6ff'); } hitFx(p.damage); } $('boss').classList.add('hit'); setTimeout(() => $('boss').classList.remove('hit'), 120); render();
 }
 // Background tabs throttle timers: every tick measures real elapsed time (accrue = offline maths), and we catch up as soon as the tab is visible or focused.
@@ -339,12 +340,13 @@ function render() { syncArc3();
   awakenCheck(floor.floor, inSanctum(save, sanctumOk()) ? 1 : phase, won);
   if (inSanctum(save, sanctumOk())) { $('boss').style.backgroundImage = constructSprite(); $('boss').classList.remove('big'); H('bname').textContent = `Training Construct · Lv ${construct().level}`; H('floor').textContent = `${SANCTUM.name} · ${SANCTUM.sub}`; }
   { const fm = inSanctum(save, sanctumOk()) ? 0 : farmFloor(save, floor.floor); $('boss').classList.toggle('echo', !!fm); $('arena').classList.toggle('farming', !!fm);
-    if (fm) { $('boss').style.backgroundImage = bossSprite(fm); $('boss').classList.toggle('big', bossIsBig(fm)); bossV2Look(fm, 1); H('bname').textContent = `Echo of ${bossName(fm)}`; H('floor').textContent = `Farming Floor ${fm} echo · no live-boss damage`; } }
+    if (fm) { $('boss').style.backgroundImage = bossSprite(fm); $('boss').classList.toggle('big', bossIsBig(fm)); bossV2Look(fm, 1); H('bname').textContent = `Echo of ${bossName(fm)}`; H('floor').textContent = `Farming Floor ${fm} echo · your own boss, the live guardian is untouched`; } }
   $('floor').title = bi.lore ? bi.lore.replace(/^System notice: /, '') : '';
-  const pct = floor.hp / floor.maxHp, lay = Math.ceil(pct * LAYERS - 1e-9), inLayer = pct * LAYERS - (lay - 1);
+  const fmE = inSanctum(save, sanctumOk()) ? 0 : farmFloor(save, floor.floor), echo = fmE ? (save.echo?.f === fmE ? save.echo : (hitEcho(save, fmE, 0), save.echo)) : null; // Farm: the bar is the hero's own echo
+  const pct = echo ? echo.hp / echo.maxHp : floor.hp / floor.maxHp, lay = Math.ceil(pct * LAYERS - 1e-9), inLayer = pct * LAYERS - (lay - 1);
   H('layers').innerHTML = Array.from({ length: LAYERS }, (_, i) => `<i class="${i < lay ? 'on' : ''}"></i>`).join('');
   const c = hpColor(pct); $('hpfill').style.width = (lay ? inLayer * 100 : 0) + '%'; $('hpfill').style.background = `linear-gradient(90deg, ${c}aa, ${c})`; $('hpfill').style.color = c;
-  H('hptext').textContent = `${fmt(floor.hp)} / ${fmt(floor.maxHp)} HP · ${lay}× layers` + (cx(h, 'cx-eye') ? ` · layer ${lay}: ${fmt(Math.max(0, inLayer) * floor.maxHp / LAYERS)} / ${fmt(floor.maxHp / LAYERS)} · next: ${bossName(Math.min(floor.floor + 1, capNow()))}` : ''); // Draftsman's Eye
+  H('hptext').textContent = echo ? `Echo ${fmt(echo.hp)} / ${fmt(echo.maxHp)} HP · broken ×${echo.kills}` : `${fmt(floor.hp)} / ${fmt(floor.maxHp)} HP · ${lay}× layers` + (cx(h, 'cx-eye') ? ` · layer ${lay}: ${fmt(Math.max(0, inLayer) * floor.maxHp / LAYERS)} / ${fmt(floor.maxHp / LAYERS)} · next: ${bossName(Math.min(floor.floor + 1, capNow()))}` : ''); // Draftsman's Eye
   H('hname2').innerHTML = `<div ${h.cls === GM_CLASS ? `class="gmname${cx(h, 'cx-shape') ? ' shape' : ''}"` : `style="color:${nameColorOf(h)}"`}>${h.cls === GM_CLASS ? GM_SIGIL + ' ' : ''}${esc(h.name)}</div><div class="ttl">${esc(titleOf(h))}</div>`; { const c = levelCap(floor?.floor, gmValid), at = atCap(h, c); H('hlv').textContent = at ? `LV ${h.level} (cap)` : `LV ${h.level}`; if (at && capNoted !== c) { capNoted = c; notice(`Level cap ${c} reached · the next floor raises it`); } $('hlv').title = at ? `Level cap: clearing Floor ${floor.floor} raises it to ${c + 1}${h.xp >= xpToNext(h.level) ? ' (XP banked: you level up at once)' : ''}` : ''; }
   const hp = heroHp(h) / heroMaxHp(h), worn = isWorn(h); $('hhp').className = 'seg' + (worn ? ' worn' : hp < 0.6 ? ' mid' : ''); H('hhp').innerHTML = Array.from({ length: 20 }, (_, i) => `<i class="${i / 20 < hp ? '' : 'off'}"></i>`).join('');
   $('hhp').title = `HP ${Math.round(heroHp(h))} / ${heroMaxHp(h)}`;
