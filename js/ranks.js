@@ -8,7 +8,7 @@ export function rankRows(rows, { truncated = false } = {}) { // truncated: rows 
 /** Staff rows first (rank 0 + wouldRank), then the top `n` players, plus `me` if outside it. */
 export function boardWithStaff(rows, me = null, n = 10, opts = {}) {
   const { players, staff } = rankRows(rows, opts), top = players.slice(0, n);
-  if (me && !staff.some(s => s.name === me) && !top.some(r => r.name === me)) top.push(players.find(r => r.name === me) || { name: me, damage: 0, rank: players.length + 1 });
+  if (me && !staff.some(s => s.name === me) && !top.some(r => r.name === me)) top.push(players.find(r => r.name === me) || (opts.meHidden ? { name: me, damage: null, rank: 0, hidden: true } : { name: me, damage: 0, rank: players.length + 1 })); // meHidden: a team account's rows are hidden from the public board, so never show a fake 0
   const out = [...staff, ...top]; out.players = players; return out; // .players: the full ranked list (for local staff rows)
 }
 /** Label for a staff row: "would rank #3" (or "#51+" when the server list was cut off above it). */

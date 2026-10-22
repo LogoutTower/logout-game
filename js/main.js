@@ -347,12 +347,14 @@ function render() {
 async function renderLb() {
   if (document.hidden && $('lb').innerHTML) return; // background tab: no board refetch (free-tier egress)
   const h = save.heroes[0];
-  let rows = await be.leaderboard(h.name); if (localStaffOnly()) rows = boardWithStaff([{ name: h.name, damage: localStaffDmg, staff: true }, ...(rows.players || rows).filter(r => r.name !== h.name && !r.staff)], null, 10); // local-only staff: shown, never sent
+  let rows = await be.leaderboard(h.name); if (isTeam(h.name) && !(rows.players || rows).some(r => r.name === h.name)) { const keep = rows.filter(r => r.name !== h.name); rows = Object.assign([...keep, { name: h.name, damage: null, rank: 0, hidden: true }], { players: rows.players }); } // team account: its rows are hidden by design, not 0
+  if (localStaffOnly()) rows = boardWithStaff([{ name: h.name, damage: localStaffDmg, staff: true }, ...(rows.players || rows).filter(r => r.name !== h.name && !r.staff)], null, 10); // local-only staff: shown, never sent
   await refreshTags(); const badge = n => gv2On() && gTags[n] ? bannerBadge(displayBanner(gTags[n].banner, gTags[n].staff), gTags[n].tag) + (gTags[n].staff ? `<span class="smark" title="Staff guild">${STAFF_MARK}</span>` : '') : '';
   const top = (rows.players || rows).filter(r => !r.staff).slice(0, 3), mine = (rows.players || rows).find(r => r.name === h.name && !r.staff);
   $('top3').innerHTML = `<span class="t3h">Top damage</span>${top.map((r, i) => `<span class="t3 ${r.name === h.name ? 'me' : ''}"><b>${i + 1}</b>${badge(r.name)}${esc(r.name)} <small>${fmt(r.damage)}</small></span>`).join('') || '<span class="sub">No hits yet</span>'}${mine && mine.rank > 3 ? `<span class="t3 me"><b>${mine.rank}</b>you</span>` : ''}`;
   $('lb').innerHTML = $('lbSide').innerHTML = rows.map(r => {
     const me = r.name === h.name, pr = me ? { title: titleOf(h), color: nameColorOf(h) } : fakeProfile(r.name);
+    if (r.hidden) return `<li class="me" value="0">${esc(r.name)} ${teamTag()}<br><span class="ttl">Unranked: team damage counts on the boss but is hidden from this board</span></li>`;
     if (r.staff) return `<li class="staff" value="0"><small>${esc(wouldRankLabel(r))}</small><span class="gmname cardlink" data-card="${esc(r.name)}" role="button" tabindex="0">${GM_SIGIL} ${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(me ? titleOf(h) : 'Tower Staff')}</span></li>`;
     return `<li class="${me ? 'me' : ''}" value="${r.rank}">${badge(r.name)}<span class="cardlink" data-card="${esc(r.name)}" role="button" tabindex="0" style="color:${pr.color}">${esc(r.name)}</span> — ${fmt(r.damage)}<br><span class="ttl">${esc(pr.title)}</span>${me && r.rank > 3 ? '<div class="climb">Climb: Train, Forge and equip loot to raise DPS. Top 3 on a kill earns rare rewards.</div>' : ''}</li>`;
   }).join('');
