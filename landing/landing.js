@@ -3,14 +3,6 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js';
 const form = document.getElementById('wl'), email = document.getElementById('em'), hp = document.getElementById('site'), btn = document.getElementById('go'), msg = document.getElementById('msg');
 const shownAt = Date.now(), MIN_MS = 3000, RE = /^[^\s@]+@[^\s@]+\.[a-z]{2,24}$/i;
 const say = (text, cls) => { msg.textContent = text; msg.className = 'msg ' + cls; };
-// Public count ("N registered."): one tiny RPC, hidden if it is missing, errors or is 0.
-const cnt = document.getElementById('cnt');
-async function showCount() {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
-  try { const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/waitlist_count`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }, body: '{}' });
-    const n = r.ok ? Number(await r.json()) : 0; if (Number.isFinite(n) && n > 0) { cnt.textContent = `${n.toLocaleString('en-US')} registered.`; cnt.hidden = false; } } catch {}
-}
-showCount();
 if (localStorage.getItem('logout.waitlist') === '1') say('Your address is on file. Wait for the call.', 'ok');
 form.addEventListener('submit', async (ev) => {
   ev.preventDefault();
@@ -21,7 +13,7 @@ form.addEventListener('submit', async (ev) => {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) { say('The doors aren’t ready. Check back later.', 'soon'); btn.textContent = 'Notify me'; btn.disabled = false; return; }
   try {
     const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/join_waitlist`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }, body: JSON.stringify({ p_email: e, p_hp: hp.value }) });
-    if (r.ok) { localStorage.setItem('logout.waitlist', '1'); showCount(); say('Address received. We’ll call you.', 'ok'); btn.textContent = 'Noted'; form.reset(); return; }
+    if (r.ok) { localStorage.setItem('logout.waitlist', '1'); say('Address received. We’ll call you.', 'ok'); btn.textContent = 'Noted'; form.reset(); return; }
     const body = await r.json().catch(() => ({})), m = `${body.message || ''} ${body.code || ''}`;
     if (r.status === 404 || /PGRST202|PGRST205|42883|42P01|function .* does not exist|schema cache/i.test(m)) say('The doors aren’t ready. Check back later.', 'soon');
     else if (/invalid_email/.test(m)) say('That email doesn’t look right. Try again?', 'err');
