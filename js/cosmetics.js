@@ -12,6 +12,10 @@ export const CATALOG = [
   // hair style
   I('hs-short', 'hairStyle', 'Short', 'short'), I('hs-long', 'hairStyle', 'Long', 'long'), I('hs-spiky', 'hairStyle', 'Spiky', 'spiky'), I('hs-hood', 'hairStyle', 'Hood', 'hood'),
   I('hs-crown', 'hairStyle', 'Broken Crown', 'crown', { floor: 9 }),
+  // Hair v2 (js/hair64.js, behind FEATURES.hairV2): listed, equippable and drawn only while setHairV2(true); otherwise hidden and drawn as a classic style.
+  ...[['hs-locs', 'Locs', 'locs'], ['hs-locs-short', 'Shoulder Locs', 'locs-short'], ['hs-loc-bun', 'Loc Bun', 'loc-bun'], ['hs-box-braids', 'Box Braids', 'box-braids'], ['hs-afro', 'Afro', 'afro'],
+    ['hs-cornrows', 'Cornrows', 'cornrows'], ['hs-twists', 'Two-Strand Twists', 'twists'], ['hs-high-top', 'High-Top Fade', 'high-top']].map(([id, n, v]) => I(id, 'hairStyle', n, v, null, { hairV2: true })),
+  I('hc-jet', 'hairColor', 'Jet', '#231c22', null, { hairV2: true }),
   // outfit
   I('oc-cyan', 'outfitColor', 'Cyan', '#2bb8c9'), I('oc-magenta', 'outfitColor', 'Magenta', '#c2369e'), I('oc-violet', 'outfitColor', 'Violet', '#6a4bd8'), I('oc-saddle', 'outfitColor', 'Saddle Leather', '#8a5634'), I('oc-moss', 'outfitColor', 'Moss', '#4f8a4b'),
   I('oc-null', 'outfitColor', 'Null Black', '#26232e', { floor: 4 }),
@@ -58,7 +62,10 @@ export const SLOTS = ['skin', 'hairColor', 'hairStyle', 'outfitColor', 'outfitSt
 export const CREATION_SLOTS = ['skin', 'hairColor', 'hairStyle', 'outfitColor'];
 export const ORIGIN_SLOTS = ['body', 'race']; // hero v2 only (FEATURES.heroV2)
 export const byId = id => CATALOG.find(i => i.id === id) || GM_ITEMS.find(i => i.id === id); // staff items resolve for rendering only; never listed
-export const itemsFor = (slot, cls) => CATALOG.filter(i => i.type === slot && (!i.cls || i.cls === cls));
+let HAIRV2 = false; export const setHairV2 = on => { HAIRV2 = !!on; }; export const hairV2On = () => HAIRV2; // FEATURES.hairV2; main.js sets it once the staff check is known
+export const itemsFor = (slot, cls) => CATALOG.filter(i => i.type === slot && (!i.cls || i.cls === cls) && (!i.hairV2 || HAIRV2));
+// Flag off: a v2 style (e.g. on a staff look seen on an ID card) is drawn as the nearest classic style, and Jet with the plain ramp.
+const HAIR_V1 = { locs: 'long', 'box-braids': 'long', twists: 'long' }; const hairOf = v => byId(v)?.hairV2 && !HAIRV2 ? HAIR_V1[byId(v).value] || 'short' : byId(v)?.value;
 export function unlockText(u) {
   if (!u) return 'Available';
   if (u.floor) return `Clear Floor ${u.floor}`;
@@ -94,7 +101,7 @@ export function defaultLook(cls) {
 /** Choose an item if unlocked & valid for the class; returns true on success. */
 export function equip(save, id) {
   const it = byId(id), h = save.heroes[0];
-  if (!it || !isUnlocked(it, save.progress) || (it.cls && it.cls !== h.cls)) return false;
+  if (!it || !isUnlocked(it, save.progress) || (it.cls && it.cls !== h.cls) || (it.hairV2 && !HAIRV2)) return false;
   if (ORIGIN_SLOTS.includes(it.type) && h.originSet) return false; // origin is chosen once (creation or the one free Wardrobe change)
   h.look[it.type] = id; return true;
 }
@@ -134,6 +141,7 @@ export function fakeProfile(name) {
 import { shade } from './pixel.js';
 import { GM_ITEMS, GM_CLASS } from './gm.js';
 import { composeHero64 } from './hero64.js';
+import { composeHeroV2 } from './hair64.js';
 import { composeGM, GM_TIERS as GM_FORMS } from './gm64.js';
 import { gmTier } from './gm.js';
 // ---------- layered sprite: 16x16 layer grid, shaded/outlined to 32x32 ----------
@@ -164,7 +172,7 @@ export const gmForm = (look, level = 1) => look?.weaponColor === 'gm-unsheathed'
 export function heroGridV2(look, cls, level = 1, { key = false, keyDy = 0 } = {}) { // key: the Root Key at the neck (only when it is equipped)
   if (cls === GM_CLASS) return composeGM(gmForm(look, level), { key, keyDy });
   const l = { ...defaultLook(cls), ...look }, v = id => byId(id)?.value;
-  return composeHero64({ body: v(l.body) === 'f' ? 'f' : 'm', hair: v(l.hairStyle) || 'short', race: v(l.race) || 'human', mount: 'hand', weapon: v(l.weapon) || 'sword',
+  return (HAIRV2 ? composeHeroV2 : composeHero64)({ body: v(l.body) === 'f' ? 'f' : 'm', hair: hairOf(l.hairStyle) || 'short', race: v(l.race) || 'human', mount: 'hand', weapon: v(l.weapon) || 'sword',
     outfit: v(l.outfitStyle), cls, skinSet: l.skinSet, S: v(l.skin), H: v(l.hairColor), O: v(l.outfitColor), T: v(l.trim), W: v(l.weaponColor) });
 }
 // Shop hero skins (owned server-side, see js/prestige.js): a palette plus a few arc-themed details over any look.
@@ -177,7 +185,7 @@ export function heroGrid16(look, cls) {
     return { rows: g.map(r => r.join('')), pal: { k: '#05030a', O: '#17131f', T: '#d9a93f', v: '#030106', c: '#5ff6ff', K: '#0a0710', y: '#ffd76a', b: '#241c30' } }; }
   const g = BASE.map(r => [...r]), set = (x, y, c) => { if (x >= 0 && x < 16 && y >= 0 && y < 16) g[y][x] = c; };
   const fill = (x0, x1, y0, y1, c) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) set(x, y, c); };
-  const style = byId(look.outfitStyle).value, hair = byId(look.hairStyle).value;
+  const style = byId(look.outfitStyle).value, hs0 = byId(look.hairStyle), hair = hs0?.hairV2 ? HAIR_V1[hs0.value] || 'short' : hs0.value; // classic 16x16: v2 styles map to the nearest classic one
   if (style === 'robe') { fill(4, 11, 13, 14, 'O'); fill(4, 11, 15, 15, 'T'); }
   if (style === 'plate') { [3, 4, 11, 12].forEach(x => set(x, 10, 'T')); set(6, 12, 'T'); set(9, 12, 'T'); }
   if (style === 'cloak') { fill(2, 2, 10, 14, 'O'); fill(13, 13, 10, 14, 'O'); set(1, 11, 'T'); set(14, 11, 'T'); }
