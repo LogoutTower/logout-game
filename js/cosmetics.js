@@ -142,6 +142,11 @@ import { shade } from './pixel.js';
 import { GM_ITEMS, GM_CLASS } from './gm.js';
 import { composeHero64 } from './hero64.js';
 import { composeHeroV2 } from './hair64.js';
+import { SIG_WEAPON, SIG_OUTFIT } from './drops-21-30.js';
+import { WEAPON as W64, OUTFIT as O64 } from './hero64.js';
+Object.assign(W64, SIG_WEAPON); Object.assign(O64, SIG_OUTFIT); // arc 3 signature layers (same as composeHeroSig's register)
+/** Look overrides from equipped arc 3 signature weapon/armor (look.sig = { weapon, outfit, W, O, T }). */
+export const sigLook = h => { const w = h?.equip?.weapon?.sigEquip, a = h?.equip?.armor?.sigEquip; return w || a ? { ...(a || {}), ...(w || {}), ...(w && a ? { T: w.T } : {}) } : null; };
 import { composeGM, GM_TIERS as GM_FORMS } from './gm64.js';
 import { gmTier } from './gm.js';
 // ---------- layered sprite: 16x16 layer grid, shaded/outlined to 32x32 ----------
@@ -171,9 +176,11 @@ export const heroGrid = (look, cls, v2 = false, level = 1, gmOpt = {}) => v2 ? h
 export const gmForm = (look, level = 1) => look?.weaponColor === 'gm-unsheathed' ? 'unsheathed' : GM_FORMS[gmTier(level).n];
 export function heroGridV2(look, cls, level = 1, { key = false, keyDy = 0 } = {}) { // key: the Root Key at the neck (only when it is equipped)
   if (cls === GM_CLASS) return composeGM(gmForm(look, level), { key, keyDy });
-  const l = { ...defaultLook(cls), ...look }, v = id => byId(id)?.value;
-  return (HAIRV2 ? composeHeroV2 : composeHero64)({ body: v(l.body) === 'f' ? 'f' : 'm', hair: hairOf(l.hairStyle) || 'short', race: v(l.race) || 'human', mount: 'hand', weapon: v(l.weapon) || 'sword',
-    outfit: v(l.outfitStyle), cls, skinSet: l.skinSet, S: v(l.skin), H: v(l.hairColor), O: v(l.outfitColor), T: v(l.trim), W: v(l.weaponColor) });
+  const l = { ...defaultLook(cls), ...look }, v = id => byId(id)?.value, sg = l.sig || {};
+  const P = { S: v(l.skin), H: v(l.hairColor), O: v(l.outfitColor), T: v(l.trim), W: v(l.weaponColor) };
+  for (const k of ['W', 'O', 'T']) if (sg[k]) P[k] = sg[k];
+  return (HAIRV2 ? composeHeroV2 : composeHero64)({ body: v(l.body) === 'f' ? 'f' : 'm', hair: hairOf(l.hairStyle) || 'short', race: v(l.race) || 'human', mount: l.sigMount === 'back' && sg.weapon ? 'back' : 'hand', weapon: sg.weapon || v(l.weapon) || 'sword',
+    outfit: sg.outfit || v(l.outfitStyle), cls, skinSet: l.skinSet, ...P });
 }
 // Shop hero skins (owned server-side, see js/prestige.js): a palette plus a few arc-themed details over any look.
 export const SKINS = {

@@ -50,7 +50,7 @@ import { loadTeam, isTeam, teamTag } from './teamstaff.js';
 import { setBossV2, bossIsV2 } from './sprites.js';
 import { setHeroV2, heroV2, npcSprite } from './sprites.js';
 import { bossSprite, bossIsBig, heroSprite, bossPhase, AWAKEN_NAME, AWAKEN_TITLE } from './sprites.js';
-import { ORIGIN_SLOTS } from './cosmetics.js';
+import { ORIGIN_SLOTS, sigLook } from './cosmetics.js';
 import { RACE_PERKS } from '../config.js';
 import { SLOTS, CREATION_SLOTS, itemsFor, isUnlocked, unlockText, defaultLook, migrateSave, recordClear, equip, titleOf, nameColorOf, fakeProfile, byId, SAVE_VERSION, setHairV2 } from './cosmetics.js';
 const $ = id => document.getElementById(id);
@@ -141,7 +141,7 @@ function handleClears(clears = [], quiet = false) {
 }
 function openWardrobe() {
   const h = save.heroes[0];
-  $('wpreview').style.backgroundImage = heroSprite(h.look, h.cls, undefined, h.level, { key: heroV2() && wearsRootKey(h) }); $('wpreview').innerHTML = gmValid && save.spirit ? haloHtml(spiritStage(h.level).n) : ''; // Solumbra halo on the portrait (staff only)
+  $('wpreview').style.backgroundImage = heroSprite(lookOf(h), h.cls, undefined, h.level, { key: heroV2() && wearsRootKey(h) }); $('wpreview').innerHTML = gmValid && save.spirit ? haloHtml(spiritStage(h.level).n) : ''; // Solumbra halo on the portrait (staff only)
   $('wname').innerHTML = `<span style="color:${nameColorOf(h)}">${esc(h.name)}</span><br><span class="ttl">«${esc(titleOf(h))}»</span>` + (h.cls === GM_CLASS && h.look.outfitStyle === 'gm-coat' ? `<p class="sub" id="vesper"><b class="uniq" style="color:${rarityOf('unique').color}">${esc(VESPERVEIL.label)}</b> <small style="color:${rarityOf('unique').color}">Unique · coat · ${esc(STAFF_STAMP)}</small><br>${esc(VESPERVEIL.lore)}<br><span style="color:#cfd8ff">✦ ${esc(VESPERVEIL.ability)}</span></p>` : '');
   picker($('wpick'), SLOTS, h.look, h.cls, save.progress, async id => { if (equip(save, id)) { await be.saveSave(save); render(); openWardrobe(); } });
   let wo = $('worigin'); if (!wo) { wo = document.createElement('div'); wo.id = 'worigin'; $('wpick').before(wo); }
@@ -313,8 +313,8 @@ function render() { syncArc3();
   { const ph = petHtml(save, gmValid); if (ph !== lastPet) { $('pet').innerHTML = ph; lastPet = ph; } }
   if (gmValid && h.cls === GM_CLASS && floor?.floor) { const t = gmTier(h.level); gmGear(save, floor.floor, legendaryWeaponDps(floor.floor), legendaryArmorPct(floor.floor)); if ((save.gmTierSeen || 1) < t.n) { save.gmTierSeen = t.n; gearAwaken(t); } } // staff gear follows the level tier; banner once per tier
   if (gmValid && save.spirit) { const ss = spiritStage(save.heroes[0].level); if ((save.spiritSeen || 0) < ss.n) { save.spiritSeen = ss.n; spiritEvolve(ss); } } // staff only: first time each stage is reached
-  { const kb = heroV2() && wearsRootKey(h), hb = $('hero'); hb.style.backgroundImage = heroSprite(h.look, h.cls, undefined, h.level, { key: kb }); hb.classList.toggle('v2', heroV2()); hb.classList.toggle('keybob', kb); // Root Key bob: two cached frames (keyDy 0 / -1)
-    if (kb) { hb.style.setProperty('--kf0', hb.style.backgroundImage); hb.style.setProperty('--kf1', heroSprite(h.look, h.cls, undefined, h.level, { key: true, keyDy: -1 })); } } $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; const phase = bossPhase(floor.floor, floor.hp, floor.maxHp); $('boss').style.backgroundImage = bossSprite(floor.floor, phase); $('boss').classList.toggle('big', bossIsBig(floor.floor)); bossV2Look(floor.floor, phase);
+  { const kb = heroV2() && wearsRootKey(h), hb = $('hero'); hb.style.backgroundImage = heroSprite(lookOf(h), h.cls, undefined, h.level, { key: kb }); hb.classList.toggle('v2', heroV2()); hb.classList.toggle('keybob', kb); // Root Key bob: two cached frames (keyDy 0 / -1)
+    if (kb) { hb.style.setProperty('--kf0', hb.style.backgroundImage); hb.style.setProperty('--kf1', heroSprite(lookOf(h), h.cls, undefined, h.level, { key: true, keyDy: -1 })); } } $('hero').classList.toggle('gmaura', false); renderCodexLook(h); const au = byId(h.look.aura || 'au-none')?.value; $('hero').style.filter = au ? `drop-shadow(0 0 1.5px ${au}) drop-shadow(0 0 3px ${au})` : ''; const phase = bossPhase(floor.floor, floor.hp, floor.maxHp); $('boss').style.backgroundImage = bossSprite(floor.floor, phase); $('boss').classList.toggle('big', bossIsBig(floor.floor)); bossV2Look(floor.floor, phase);
   const won = floor.floor >= capNow() && floor.hp <= 0, waiting = !won && floor.hp <= 0, bi = bossInfo(floor.floor), arc = arcOf(floor.floor); applyScene(floor.floor);
   // end of content after the last open floor; 'waiting' = the server has not opened the next floor yet (e.g. its floor cap is still lower)
   H('bname').textContent = won ? 'The spire falls silent' : bossName(floor.floor);
@@ -433,7 +433,8 @@ function renderGoods(f) {
 // ---- Bag: inventory grid, compare panel, equip and salvage
 let bagSel = -1;
 const DIVINE_R = { id: 'divine', label: 'Divine', color: '#f6d77a' };
-const itemCard = (it, cls = '') => { const R = it?.gm && it.divine ? DIVINE_R : rarityOf(shownRarity(it)); return `<div class="item ${cls}" style="--rc:${R.color}">${ico(it)}${it.locked ? '<span class="lock" title="Locked">🔒</span>' : ''}<b class="${R.id === 'unique' ? 'uniq' : ''}" style="color:${R.color}">${esc(it.name)}</b><small${R.id === 'divine' ? ' class="divine"' : ''}>${R.label}${it.gm && it.tierLabel && it.tier < 4 ? ` · ${esc(it.tierLabel)}` : it.gm && it.tier === 4 ? ' · Awakened' : ''} · ${it.slot} · Floor ${it.floor} · ${it.element}</small>${Object.entries(it.stats).map(([k, v]) => `<div>${statLabel(k, v)}</div>`).join('')}${it.rarity === 'unique' ? `<div class="ab">✦ ${esc(it.ability.text)}</div><div class="db">▾ ${esc(it.drawback.text)}</div><div class="lore">${esc(it.lore)}</div><small>${esc(it.stamp)}</small>` : it.gm ? `${it.staffPower ? `<div class="ab">✦ ${esc(it.staffPower)}</div>` : ''}<div class="lore">${esc(it.lore || '')}</div><small>${esc(STAFF_STAMP)}</small>` : ''}</div>`; };
+const lookOf = h => { const sg = sigLook(h); return sg ? { ...h.look, sig: sg } : h.look; }; // arc 3 signature gear shows on the hero
+const itemCard = (it, cls = '') => { const R = it?.gm && it.divine ? DIVINE_R : rarityOf(shownRarity(it)); return `<div class="item ${cls}" style="--rc:${R.color}">${ico(it)}${it.locked ? '<span class="lock" title="Locked">🔒</span>' : ''}<b class="${R.id === 'unique' ? 'uniq' : ''}" style="color:${R.color}">${esc(it.name)}</b><small${R.id === 'divine' ? ' class="divine"' : ''}>${R.label}${it.gm && it.tierLabel && it.tier < 4 ? ` · ${esc(it.tierLabel)}` : it.gm && it.tier === 4 ? ' · Awakened' : ''} · ${it.slot} · Floor ${it.floor} · ${it.element}</small>${Object.entries(it.stats).map(([k, v]) => `<div>${statLabel(k, v)}</div>`).join('')}${it.rarity === 'unique' ? `<div class="ab">✦ ${esc(it.ability.text)}</div><div class="db">▾ ${esc(it.drawback.text)}</div><div class="lore">${esc(it.lore)}</div><small>${esc(it.stamp)}</small>` : it.gm ? `${it.staffPower ? `<div class="ab">✦ ${esc(it.staffPower)}</div>` : ''}<div class="lore">${esc(it.lore || '')}</div><small>${esc(STAFF_STAMP)}</small>` : it.signature && it.flavor ? `<div class="lore">${esc(it.flavor)}</div>` : ''}</div>`; };
 function openBag() {
   const h = save.heroes[0];
   $('bagCount').textContent = `· ${save.inv.length} / ${bagSize(save)}`;

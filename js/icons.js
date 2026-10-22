@@ -4,6 +4,8 @@ import { shade } from './pixel.js';
 import { sprite } from './sprites.js';
 import { ELEMENTS } from './bosses.js';
 import { RARITIES } from './loot.js';
+import { SIGS_21_30 } from './drops-21-30.js';
+const SIG_ICON = Object.fromEntries(SIGS_21_30.filter(s => s.icon).map(s => [s.name, s])); // arc 3 signature icons (custom rows + flat glows)
 const H = s => { let h = 2166136261; for (const c of String(s)) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; };
 // m = metal, d = dark metal, a = element accent, h = handle, g = gem (rarity)
 export const SHAPES = {
@@ -39,13 +41,13 @@ const mixHex = (a, b, t) => '#' + [1, 3, 5].map(i => Math.round(parseInt(a.slice
 const cache = new Map();
 /** CSS background-image value for an item icon (cached). */
 export function itemIcon(it) {
-  const shape = iconShape(it), rc = it.gm ? '#ffd76a' : (RARITIES.find(r => r.id === it.rarity)?.color || '#c9c2d8'), el = ELEMENTS[it.element] || ELEMENTS.void, seed = H(it.id) % 3;
+  const sg = it.signature && SIG_ICON[it.name], shape = sg ? 'sig:' + it.name : iconShape(it), rc = it.gm ? '#ffd76a' : (RARITIES.find(r => r.id === it.rarity)?.color || '#c9c2d8'), el = ELEMENTS[it.element] || ELEMENTS.void, seed = H(it.id) % 3;
   const key = `${shape}|${it.rarity}|${it.element}|${seed}|${it.gm ? 'gm' : ''}|${it.divine ? 'dv' : ''}|${shape}`; if (cache.has(key)) return cache.get(key);
   const metal = it.gm ? '#20182e' : mixHex('#b8b4c8', rc, it.rarity === 'common' ? 0.1 : 0.45), pal = { m: metal, d: mixHex(metal, '#12062a', 0.45), a: it.gm ? '#ffd76a' : el.ramp[2], h: ['#6b4a2b', '#4a3a5a', '#8a6a3a'][seed], g: rc };
-  let rows = SHAPES[shape];
+  let rows = sg ? sg.icon : SHAPES[shape]; if (sg) Object.assign(pal, sg.iconPal || {});
   if (it.rarity === 'unique' || it.gm) rows = rows.map((r, y) => [...r].map((c, x) => c === '.' && (x === 0 || y === 0 || x === 15 || y === 15) && (x + y) % 2 === 0 ? 'f' : c).join('')); // prismatic frame
   if (it.rarity === 'unique') pal.f = '#7ff6ff'; if (it.gm) pal.f = '#ffd76a';
   if (it.divine) Object.assign(pal, { m: '#f6d77a', d: '#0b0a0f', a: '#fffaf0', g: '#f6d77a', w: '#fffaf0', f: '#fffaf0' }); // Divine: white, gold, black (as Solumbra)
-  const s = shade(rows, pal, { drop: '', eyes: '', flat: 'f' }), url = sprite(s.rows, s.pal); cache.set(key, url); return url;
+  const s = shade(rows, pal, { drop: '', eyes: '', flat: sg ? 'fcwp' : 'f' }), url = sprite(s.rows, s.pal); cache.set(key, url); return url;
 }
 export const iconCacheSize = () => cache.size;

@@ -130,7 +130,7 @@ export const SIGNATURE_RARITIES = ['epic', 'legendary'];
 export function signature(r, floor, it) {
   const sig = bossInfo(floor).sig || []; if (!sig.length || !SIGNATURE_RARITIES.includes(it.rarity)) return it;
   const m = sig.find(x => x.slot === it.slot); if (!m || r() >= 0.5) return it;
-  return { ...it, name: m.name, signature: true, lore: `System notice: signature drop of ${bossInfo(floor).name}, Floor ${floor}.` };
+  return { ...it, name: m.name, signature: true, lore: `System notice: signature drop of ${bossInfo(floor).name}, Floor ${floor}.`, ...(m.flavor ? { flavor: m.flavor } : {}), ...(m.equip ? { sigEquip: m.equip } : {}), ...(m.icon ? { sigIcon: 1 } : {}) };
 }
 export const signatureList = () => Array.from({ length: 100 }, (_, i) => bossInfo(i + 1)).flatMap(b => (b.sig || []).map(s => ({ floor: b.floor, boss: b.name, ...s })));
 /** Seeded drops for one boss kill. Same (heroId, floor, seq, share) always gives the same result. */

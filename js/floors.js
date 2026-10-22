@@ -3,6 +3,7 @@ import { RIVAL_NAME, RIVAL_TITLE } from './cutscenes.js';
 import { BOSSES_V2 } from './bosses-v2.js';
 import { prepV2 } from './bosses.js';
 import { BOSSES_21_30 } from './bosses-21-30.js';
+import { SIGS_21_30 } from './drops-21-30.js';
 import { setArcPreview } from './arcs.js';
 import { BOSSES, ARC2, ARC2_KEYS, SHAPES, ELEMENTS, ADDONS, composeShape, shadeShape } from './bosses.js';
 export const PLAN_FLOORS = 100;
@@ -59,7 +60,7 @@ const plan = [];
 const NATIVE_ELEMENT = { knight: 'holy', hydra: 'fire', boneking: 'shadow', seraph: 'fire', lich: 'venom', choir: 'storm', golem: 'frost', wyrm: 'storm', dryad: 'venom', dreadknight: 'void' };
 function fixedInfo(f, s) {
   if (s.arc2 != null) { const b = ARC2[s.arc2]; return { floor: f, kind: 'handmade', placeholder_special: false, base: b.key, element: 'native', native: b.element, addons: [], name: b.name, big: !!b.big, bossTitle: b.title, lore: b.lore, mech: b.mech, finale: !!b.finale, sig: b.sig || [] }; }
-  if (s.arc3 != null) { const b = BOSSES_21_30[s.arc3], [bossTitle, lore] = ARC3_TEXT[s.arc3]; return { floor: f, kind: 'handmade', placeholder_special: false, base: b.key, element: 'native', native: b.element, addons: [], name: b.name, big: !!b.big, bossTitle, lore, mech: ARC3_MECH[b.mech] || b.mech, finale: !!b.finale, sig: [], arc3: true }; }
+  if (s.arc3 != null) { const b = BOSSES_21_30[s.arc3], [bossTitle, lore] = ARC3_TEXT[s.arc3]; return { floor: f, kind: 'handmade', placeholder_special: false, base: b.key, element: 'native', native: b.element, addons: [], name: b.name, big: !!b.big, bossTitle, lore, mech: ARC3_MECH[b.mech] || b.mech, finale: !!b.finale, sig: SIGS_21_30.filter(x => x.floor === f).map(({ slot, name, flavor, rarity, icon, iconPal, equip }) => ({ slot, name, flavor, rarity, icon, iconPal, equip })), arc3: true }; }
   const b = BOSSES[s.idx];
   return { floor: f, kind: s.kind, placeholder_special: s.kind === 'placeholder_special', base: b.key, element: 'native', addons: [], name: b.name, big: !!b.big };
 }
