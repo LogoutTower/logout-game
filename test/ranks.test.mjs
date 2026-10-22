@@ -22,3 +22,5 @@ assert.equal(wouldRankLabel(staff[0]), 'Tower Staff · would rank #3');
   const bb = boardWithStaff([...many, { name: 'S', damage: 500, staff: true }], null, 10); assert.equal(bb.length, 11); assert.equal(bb.players.length, 50, 'full list kept for local staff rows');
   assert(bb.slice(1).every((r, i) => r.rank === i + 1 && !r.staff), 'numbered slots are players only'); }
 console.log('rank tests passed');
+{ const t = boardWithStaff([{ name: 'A', damage: 5 }], 'Nyx', 10, { meHidden: true }); const m = t.find(r => r.name === 'Nyx'); assert(m.hidden && m.damage === null && m.rank === 0, 'hidden team hero is not shown as 0 damage');
+  assert.equal(boardWithStaff([{ name: 'A', damage: 5 }], 'Z', 10).find(r => r.name === 'Z').damage, 0, 'normal player with no hits still shows 0'); }
