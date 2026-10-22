@@ -59,7 +59,7 @@ const plan = [];
 const NATIVE_ELEMENT = { knight: 'holy', hydra: 'fire', boneking: 'shadow', seraph: 'fire', lich: 'venom', choir: 'storm', golem: 'frost', wyrm: 'storm', dryad: 'venom', dreadknight: 'void' };
 function fixedInfo(f, s) {
   if (s.arc2 != null) { const b = ARC2[s.arc2]; return { floor: f, kind: 'handmade', placeholder_special: false, base: b.key, element: 'native', native: b.element, addons: [], name: b.name, big: !!b.big, bossTitle: b.title, lore: b.lore, mech: b.mech, finale: !!b.finale, sig: b.sig || [] }; }
-  if (s.arc3 != null) { const b = BOSSES_21_30[s.arc3], [bossTitle, lore] = ARC3_TEXT[s.arc3]; return { floor: f, kind: 'handmade', placeholder_special: false, base: b.key, element: 'native', native: b.element, addons: [], name: b.name, big: !!b.big, bossTitle, lore, mech: b.mech, finale: !!b.finale, sig: [], arc3: true }; }
+  if (s.arc3 != null) { const b = BOSSES_21_30[s.arc3], [bossTitle, lore] = ARC3_TEXT[s.arc3]; return { floor: f, kind: 'handmade', placeholder_special: false, base: b.key, element: 'native', native: b.element, addons: [], name: b.name, big: !!b.big, bossTitle, lore, mech: ARC3_MECH[b.mech] || b.mech, finale: !!b.finale, sig: [], arc3: true }; }
   const b = BOSSES[s.idx];
   return { floor: f, kind: s.kind, placeholder_special: s.kind === 'placeholder_special', base: b.key, element: 'native', addons: [], name: b.name, big: !!b.big };
 }
@@ -99,8 +99,11 @@ export const bossPhase = (f, hp, maxHp) => bossInfo(f).phases === 2 && maxHp > 0
 
 // ---- Signature mechanics (arc 2). Live-only context (save.ctx.mech / bossPct / element); offline maths ignore them, so they never cut
 // offline progress. All effects are small and use the existing systems: HP layers, enrage (last layer), element weakness, drain.
+const ARC3_MECH = { casing: 'reefShell' }; // artist file keeps mech 'casing'; arc 3 shows it as Reef shell
 export const MECHS = {
   casing: { text: 'Brass casing: −15% damage while its first HP layer holds (above 80%).', dps: c => (c.bossPct ?? 1) > 0.8 ? 0.85 : 1 },
+  // Arc 3 re-skin of casing (F26 Reefback Tortoise): same rule, reef wording. Floors 1-20 keep 'Brass casing'.
+  reefShell: { text: 'Reef shell: −15% damage while its first HP layer holds (above 80%).', dps: c => (c.bossPct ?? 1) > 0.8 ? 0.85 : 1 },
   frostbite: { text: 'Frostbite: your HP drains 20% faster on this floor.', drain: () => 1.2 },
   enrage: { text: 'Enrage: on its last HP layer (below 20%) it drains you 40% faster.', drain: c => (c.bossPct ?? 1) < 0.2 ? 1.4 : 1 },
   stillHour: { text: 'The Stilled Hour: time stops on alternate layers (−10% damage on layers 4 and 2) and races on the others (+10%).', dps: c => { const l = Math.ceil((c.bossPct ?? 1) * 5 - 1e-9); return l % 2 === 0 ? 0.9 : 1.1; } },

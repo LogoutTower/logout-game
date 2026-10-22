@@ -25,7 +25,7 @@ const hpOff = Array.from({ length: 30 }, (_, i) => floorBossHp(i + 1));
 setArc3Preview(true);
 assert.equal(BOSSES_21_30.length, 10);
 for (let f = 21; f <= 30; f++) { const i = bossInfo(f), b = BOSSES_21_30[f - 21];
-  assert.equal(i.kind, 'handmade'); assert.equal(i.name, b.name); assert.equal(i.base, b.key); assert.equal(i.lootElement, b.element); assert.equal(i.mech, b.mech);
+  assert.equal(i.kind, 'handmade'); assert.equal(i.name, b.name); assert.equal(i.base, b.key); assert.equal(i.lootElement, b.element); assert.equal(i.mech, b.mech === 'casing' ? 'reefShell' : b.mech);
   assert(i.title && !/Guardian of Floor/.test(i.title)); assert(/^System notice: /.test(i.lore)); assert(mechText(i.mech).length > 10, `mech text ${f}`);
   const g = bossV2Grid(f); assert.equal(g.rows.length, 96); assert(g.rows.every(r => r.length === 96)); assert(g.rows[95].replace(/\./g, '').length > 0, `F${f} stands on the floor line`);
   assert.deepEqual(bossGrid(f, 1, true), g); const s = bossGrid(f); assert.equal(s.rows.length, 32); assert(s.rows.every(r => r.length === 32)); assert(bossShape(f).rows.join('').replace(/\./g, '').length > 150);
@@ -49,3 +49,7 @@ for (const p of [0.05, 0.3, 0.5, 0.9]) { assert(mechDps(c('undertow', p)) <= max
 // off again: back to the classic plan
 setArc3Preview(false); for (let f = 1; f <= 100; f++) assert.deepEqual(bossInfo(f), off[f - 1]); assert.equal(arenaBgOf(25), null);
 console.log('arc 3 preview tests passed');
+// F26 shows 'Reef shell' (same rule as casing); Floors 1-20 keep 'Brass casing'
+{ const { mechText: mt, mechDps: md } = await import('../js/floors.js');
+  assert.match(mt('reefShell'), /^Reef shell:/); assert.match(mt('casing'), /^Brass casing:/); setArc3Preview(true); assert.match(mechText(bossInfo(26).mech), /^Reef shell:/); assert.match(mechText(bossInfo(11).mech), /^Brass casing:/); setArc3Preview(false);
+  assert.equal(md({ mech: 'reefShell', bossPct: 0.9 }), 0.85); assert.equal(md({ mech: 'reefShell', bossPct: 0.5 }), 1); }
