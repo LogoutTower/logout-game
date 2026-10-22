@@ -32,3 +32,6 @@ for (const hs of NEW) for (const race of ['race-human', 'race-sylvan', 'race-bea
 assert(!new Set(Object.values(heroGridV2({ ...defaultLook('Vanguard'), hairStyle: 'hs-afro', hairColor: 'hc-jet', skinSet: 'sk-stonekeep' }, 'Vanguard').pal)).has(JET_RAMP[1]), 'skin sets hair: no Jet ramp');
 { const c = new Set(Object.values(heroGridV2({ ...defaultLook('Vanguard'), hairStyle: 'hs-long', hairColor: 'hc-jet' }, 'Vanguard').pal)); assert(JET_RAMP.some(x => c.has(x)), 'Jet on classic styles too'); }
 setHairV2(false); console.log('hair v2 tests passed', n, 'legacy combos');
+// hats: only a class whose head layer draws pixels (Arcanist) gets the under-hat variant; Vanguard/Blade keep full volume (artist rev 4)
+{ const top = cls => composeHeroV2({ body: 'm', hair: 'afro', race: Object.keys(H.RACE)[0], cls, weapon: H.WEAPONS[0], mount: 'hand', outfit: 'tunic', ...P }).rows.slice(0, 20).join('\n');
+  const H0 = top(''); assert.equal(top('Vanguard'), H0, 'Vanguard afro full volume'); assert.equal(top('Blade'), H0, 'Blade afro full volume'); assert.notEqual(top('Arcanist'), H0, 'Arcanist uses the hat variant'); }

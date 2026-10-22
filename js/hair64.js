@@ -42,7 +42,7 @@ export function composeHeroV2(look) {
     classBack: C ? (healer ? (M.haloTop ? EMPTY : shift(C.classBack, 0, hy)) : C.classBack) : EMPTY, skinOver: H.SKINSET[look.skinSet]?.[b] || EMPTY };
   if (H.CAPE_REPLACE.includes(look.cls)) { src.capeBack = EMPTY; src.capeFront = EMPTY; }
   // Hats and helmets (Arcanist hat, stonekeep helm): hair above the hat's lowest row is tucked in (only what the hat covers is kept).
-  const hats = [!healer && look.cls && src.classHead.some(r => /[^.]/.test(r)) ? src.classHead : null, look.skinSet === 'sk-stonekeep' ? src.skinOver : null].filter(Boolean);
+  const hats = [!healer && look.cls ? src.classHead : null, look.skinSet === 'sk-stonekeep' ? src.skinOver : null].filter(h => h && h.some(r => /[^.]/.test(r))); // only layers that actually draw a hat/helm
   if (hats.length && HAIR_V2[hs][b].hairFrontHat) { src.hairFront = HAIR_V2[hs][b].hairFrontHat; src.hairBack = EMPTY; }
   else for (const hat of hats) { let yb = -1; hat.forEach((r, y) => { if (/[^.]/.test(r)) yb = y; });
     for (const ln of ['hairFront', 'hairBack']) src[ln] = src[ln].map((r, y) => y >= yb - 1 ? r : [...r].map((c, x) => hat[y][x] !== '.' ? c : '.').join('')); }
