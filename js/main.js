@@ -2,6 +2,7 @@ import { countPoller, countText, clearPlayers } from './towercount.js';
 import { effectsOf, CLASSES, newHero, heroDps, levelCost, gearCost, accrue, offlineProgress, applyXp, heroHp, heroMaxHp, isWorn, effectiveDps, buffsOf, bossName, fmt, fmtDur, xpToNext } from './game.js';
 import { makeBackend, onlineConfigured } from './storage.js';
 import { BUILD } from './build.js';
+import { initTips } from './tips.js';
 import { priceFor, innCost, rest, shopStock, buy as shopBuy, soldOut, npcGrid } from './town.js';
 import { sprite } from './sprites.js';
 import { isSpecialSlot, bossInfo, mechText, setArc3Preview, arc3Unlocked } from './floors.js'; // arc 3 preview: FEATURES.arc3
@@ -431,17 +432,20 @@ function renderGoods(f) {
 }
 
 // ---- Bag: inventory grid, compare panel, equip and salvage
-let bagSel = -1;
+let bagSel = -1, eqSel = null;
+// Phones: the bag sheet stacks gear, grid, then the item card, so a selected item's card and Equip button sat below the fold. Bring it into view.
+const bagReveal = () => { if (matchMedia('(max-width: 640px)').matches) requestAnimationFrame(() => $('bagDetail').scrollIntoView({ block: 'start', behavior: 'auto' })); };
 const DIVINE_R = { id: 'divine', label: 'Divine', color: '#f6d77a' };
 const lookOf = h => { const sg = sigLook(h); return sg ? { ...h.look, sig: sg } : h.look; }; // arc 3 signature gear shows on the hero
 const itemCard = (it, cls = '') => { const R = it?.gm && it.divine ? DIVINE_R : rarityOf(shownRarity(it)); return `<div class="item ${cls}" style="--rc:${R.color}">${ico(it)}${it.locked ? '<span class="lock" title="Locked">🔒</span>' : ''}<b class="${R.id === 'unique' ? 'uniq' : ''}" style="color:${R.color}">${esc(it.name)}</b><small${R.id === 'divine' ? ' class="divine"' : ''}>${R.label}${it.gm && it.tierLabel && it.tier < 4 ? ` · ${esc(it.tierLabel)}` : it.gm && it.tier === 4 ? ' · Awakened' : ''} · ${it.slot} · Floor ${it.floor} · ${it.element}</small>${Object.entries(it.stats).map(([k, v]) => `<div>${statLabel(k, v)}</div>`).join('')}${it.rarity === 'unique' ? `<div class="ab">✦ ${esc(it.ability.text)}</div><div class="db">▾ ${esc(it.drawback.text)}</div><div class="lore">${esc(it.lore)}</div><small>${esc(it.stamp)}</small>` : it.gm ? `${it.staffPower ? `<div class="ab">✦ ${esc(it.staffPower)}</div>` : ''}<div class="lore">${esc(it.lore || '')}</div><small>${esc(STAFF_STAMP)}</small>` : it.signature && it.flavor ? `<div class="lore">${esc(it.flavor)}</div>` : ''}</div>`; };
 function openBag() {
   const h = save.heroes[0];
   $('bagCount').textContent = `· ${save.inv.length} / ${bagSize(save)}`;
-  $('eqrow').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip[s]; return `<div class="eqslot" title="${s}">${it ? itemCard(it, 'mini') : `<div class="item mini empty">${s}: empty</div>`}</div>`; }).join('');
+  $('eqrow').innerHTML = GEAR_SLOTS.map(s => { const it = h.equip[s]; return it ? `<button type="button" class="eqslot ${eqSel === s ? 'sel' : ''}" data-slot="${s}" aria-label="${esc(s + ': ' + it.name)}">${itemCard(it, 'mini')}</button>` : `<div class="eqslot" title="${s}"><div class="item mini empty">${s}: empty</div></div>`; }).join('');
+  $('eqrow').onclick = e => { const b = e.target.closest('button.eqslot[data-slot]'); if (b) { eqSel = eqSel === b.dataset.slot ? null : b.dataset.slot; bagSel = -1; openBag(); bagReveal(); } };
   $('bagGrid').innerHTML = Array.from({ length: Math.max(bagSize(save), save.inv.length) }, (_, i) => { const it = save.inv[i]; if (!it) return '<button class="cell" disabled aria-label="empty slot"></button>';
     const R = rarityOf(shownRarity(it)); return `<button class="cell ${i === bagSel ? 'sel' : ''} ${R.id === 'unique' ? 'ucell' : ''}" data-i="${i}" style="--rc:${R.color}" title="${esc(R.label + ' ' + it.name)}">${ico(it, 'ico big')}${it.locked ? '<span class="lock">🔒</span>' : ''}</button>`; }).join('');
-  $('bagGrid').onclick = e => { const b = e.target.closest('button.cell[data-i]'); if (b) { bagSel = +b.dataset.i; openBag(); } };
+  $('bagGrid').onclick = e => { const b = e.target.closest('button.cell[data-i]'); if (b) { bagSel = +b.dataset.i; eqSel = null; openBag(); bagReveal(); } };
   const it = save.inv[bagSel];
   if (it) {
     const cur = h.equip[it.slot], before = heroDps(h), trial = { ...h, equip: { ...h.equip, [it.slot]: it } }, delta = heroDps(trial) - before;
@@ -453,7 +457,8 @@ function openBag() {
     $('bEquip').onclick = async () => { const back = it.rarity === 'unique' ? GEAR_SLOTS.map(k => h.equip[k]).find(x => x?.rarity === 'unique' && x.slot !== it.slot) : null; if (!equipItem(save, bagSel)) { notice('Your Unique weapon refuses to share you with a trinket'); return; } log(`Equipped ${it.name}.`, rarityOf(it.rarity).color); if (back) log(`System notice: one Unique at a time. ${back.name} returned to your bag.`, '#7ff6ff'); bagSel = -1; await be.saveSave(save); render(); openBag(); };
     if ($('bLock')) $('bLock').onclick = async () => { toggleLock(save, bagSel); await be.saveSave(save); openBag(); };
     $('bagDetail').insertAdjacentHTML('beforeend', `<p class="sub">${sellable(it) ? `Sell at Quill's in Town · ${fmt(sellPrice(save, it))}g` : 'Staff items cannot be sold.'}</p>`);
-  } else $('bagDetail').innerHTML = '<p class="sub">Select an item to compare it with what you have equipped.</p>';
+  } else if (eqSel && h.equip[eqSel]) { const e = h.equip[eqSel]; $('bagDetail').innerHTML = `<div class="vs">equipped · ${esc(eqSel)}</div>${itemCard(e)}<p class="sub">Tap a bag item to compare and swap it in.</p>`; }
+  else $('bagDetail').innerHTML = '<p class="sub">Select an item to compare it with what you have equipped.</p>';
   if (!$('bag').open) $('bag').showModal();
 }
 
@@ -494,7 +499,7 @@ async function checkDeploy() {
 document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDeploy(); });
 window.addEventListener('pageshow', e => { if (e.persisted) checkDeploy(); }); // restored from Safari's back-forward cache
 setInterval(checkDeploy, 5 * 60 * 1000);
-boot(); checkDeploy();
+initTips(); boot(); checkDeploy();
 
 // ---- Talents: glass-HUD tree, tap a node for its tooltip, Learn / Respec.
 let talSel = null;

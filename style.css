@@ -119,8 +119,8 @@ header{padding-top:max(14px,env(safe-area-inset-top))}main{padding-left:max(12px
 .item{border:1px solid var(--rc,var(--line));border-radius:8px;padding:8px;background:rgba(10,4,24,.5);font-size:13px}.item small{display:block;color:var(--mut);font-size:11px;text-transform:capitalize;margin-bottom:3px}
 .item.mini{font-size:11px;padding:6px}.item.mini small{font-size:10px}.item.empty{color:var(--mut);text-transform:capitalize}
 .detail{flex:1;min-width:240px}.vs{text-align:center;font-size:11px;letter-spacing:3px;color:var(--mut);margin:6px 0;text-transform:uppercase}.delta{font-size:16px;margin:8px 0}
-.bagbtns{display:flex;gap:6px}.bagbtns button{flex:1;min-height:44px}
-@media(max-width:640px){#bag{width:calc(100vw - 16px)}.bagwrap{flex-direction:column}.eqrow{grid-template-columns:1fr}#bag>button{position:sticky;bottom:0;width:100%;background:rgba(30,15,65,.95)}}
+.bagbtns{display:flex;gap:6px}button.eqslot{display:block;width:100%;margin:0;padding:0;background:none;border:0;text-align:left;cursor:pointer;color:inherit}button.eqslot.sel .item{outline:2px solid #fff;outline-offset:1px}.bagbtns button{flex:1;min-height:44px}
+@media(max-width:640px){#bag{width:calc(100vw - 16px);scroll-padding-bottom:124px}.bagwrap{display:block}.bagwrap>.detail{margin-top:12px;min-width:0}.eqrow{grid-template-columns:1fr}#bag>button{position:sticky;bottom:0;width:100%;background:rgba(30,15,65,.95)}#bagDetail{scroll-margin-top:8px}.bagbtns{position:sticky;bottom:52px;z-index:2;background:rgba(22,10,48,.97);padding:6px 0;box-shadow:0 -8px 20px #0a0418}}
 
 /* hero HP + buffs */
 .seg.mid i:not(.off){background:#ffd84f;box-shadow:0 0 5px #ffd84f88}.seg.worn i:not(.off){background:#ff3355;box-shadow:0 0 6px #ff3355aa}
@@ -552,3 +552,5 @@ body.tabhidden .halo .corona{animation-play-state:paused}
   linear-gradient(var(--a-sky,#2c1f4a),var(--a-sky2,#1a1030) 80%,var(--a-deep,#120a22))}
 #arena.abg::after{display:none}#arena.abg .torch,#arena.abg .gear,#arena.abg .icicles{display:none!important}
 @media(max-width:640px){#arena.abg{--a-bg-scale:2}}
+#tip{position:fixed;z-index:9999;padding:6px 10px;border-radius:8px;background:rgba(14,6,34,.97);color:#f2eaff;border:1px solid #7a3cff;box-shadow:0 6px 18px #000a;font:600 13px/1.35 Rajdhani,system-ui,sans-serif;pointer-events:none;white-space:normal;margin:0}#tip[hidden]{display:none}
+@media (hover:none),(pointer:coarse){button[title],.buff[title],.eqslot,[title]{-webkit-touch-callout:none}}
