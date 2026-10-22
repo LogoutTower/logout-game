@@ -176,6 +176,10 @@ export class SupabaseBackend {
   async decorList() { try { return (await this._rpc('guild_decor_list', {})) || []; } catch { return []; } }
   async decorBuy(id, save) { return this._spendRpc('guild_decor_buy', { p_id: id }, save); }
   async guildUpgrade(kind) { return this._rpc('guild_upgrade', { p_kind: kind }); }
+  // Guild Hub (FEATURES.guildHub): one read when the guild panel opens; presence is polled only when a card / roster opens (no realtime).
+  async guildHub() { return this._rpc('guild_hub', {}); }
+  async guildBuyBuff(key) { return this._rpc('guild_buy_buff', { p_key: key }); }
+  async guildPresence(names) { if (this.holdUploads) return {}; const { data, error } = await this.sb.rpc('guild_presence', { p_names: [].concat(names || []).slice(0, 50) }); return error ? {} : data || {}; }
   async guildSetBanner(sigil, c1, c2) { return this._rpc('guild_set_banner', { p_sigil: sigil, p_c1: c1, p_c2: c2 }); }
   async guildChatFetch(after = 0) { const { data, error } = await this.sb.from('guild_messages').select('id, author, name, is_staff, body, at').gt('id', after).order('id', { ascending: true }).limit(50); return error ? [] : data || []; }
   async guildChatPost(name, body) { const m = await this._rpc('guild_chat_post', { p_name: name, p_body: body }); (this.mine ||= new Set()).add(m?.id); return m; }

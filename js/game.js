@@ -1,4 +1,5 @@
 import { GUILD_BUFF } from './guilds.js';
+import { buffDmgMul } from './guildhub.js';
 import { RACE_PERKS } from '../config.js';
 // Pure, deterministic game logic (no DOM) — importable in node for tests.
 export const CLASSES = {
@@ -88,6 +89,7 @@ export const layerMul = save => { const e = effectsOf(save.heroes[0]), c = save.
   if (t.layerPct && (c.bossPct ?? 1) < FX.lastLayer.below) m *= 1 + t.layerPct / 100;
   if (t.elementPct && w && c.element && w.element === c.element) m *= 1 + t.elementPct / 100;
   m *= mechDps(c, w?.element); // floor signature mechanic (arc 2+), live context only
+  m *= buffDmgMul(c); // Guild Hub bank buff (ctx.gbDmg/gbUntil set only when FEATURES.guildHub is on; the server raises its cap by the same %)
   return m; };
 export const effectiveDps = save => totalDps(save.heroes) * petM(save, 'dpsPct') * critM(save) * (!save.ctx?.gm && isWorn(save.heroes[0]) ? lowMulOf(save.heroes[0]) : 1) * (buffsOf(save).elixir > 0 ? ELIXIR.mul : 1) * layerMul(save) * ((save.ctx?.bossPct ?? 1) < 0.5 ? 1 + talentBonus(save.heroes[0]).lowBossPct / 100 : 1);
 /** Simulate `secs` of fighting (live or offline: same rules). Splits time at HP-threshold and buff-expiry breakpoints.

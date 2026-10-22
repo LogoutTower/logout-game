@@ -5,19 +5,20 @@ import { STAFF_MARK } from './guilds.js';
 import { isTeam, teamTag } from './teamstaff.js';
 import { bannerIcon, bannerBadge, hallArt } from './banner.js';
 import { cleanChat } from './chatfilter.js';
+import { presenceHtml, champHtml, raceHtml, buffsHtml } from './guildhubui.js';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 const fmtN = n => Number(n || 0).toLocaleString('en-US');
 const ago = at => { const s = (Date.now() - Date.parse(at)) / 1000; return s < 3600 ? `${Math.max(1, Math.round(s / 60))}m ago` : s < 86400 ? `${Math.round(s / 3600)}h ago` : `${Math.round(s / 86400)}d ago`; };
-export const TABS = ['overview', 'members', 'bank', 'quests', 'banner', 'chat'];
+export const TABS = ['overview', 'members', 'race', 'bank', 'quests', 'banner', 'chat'];
 let tab = 'overview', draft = null, gchat = [], gchatLast = 0, gchatTimer = null, gchatGuild = null;
 export const setGuildTab = t => { if (TABS.includes(t)) tab = t; };
 /** Render the v2 panel for a member. ctx: { be, save, el, name, canPost, staff, refresh, log } */
 export function renderGuildV2(info, ctx) {
-  const g0 = info.guild, sg = !!g0.is_staff, g = { ...g0, banner: R.displayBanner(g0.banner, sg) }, me = info.me, tabs = sg ? TABS.filter(t => t !== 'bank' && t !== 'quests') : TABS, mgr = R.canManage(me.role), lead = me.role === 'leader', el = ctx.el;
+  const g0 = info.guild, sg = !!g0.is_staff, g = { ...g0, banner: R.displayBanner(g0.banner, sg) }, me = info.me, hub = ctx.hub || null, tabs = TABS.filter(t => !(sg && (t === 'bank' || t === 'quests' || t === 'race')) && !(t === 'race' && !hub)), mgr = R.canManage(me.role), lead = me.role === 'leader', el = ctx.el;
   if (!tabs.includes(tab)) tab = 'overview';
   if (gchatGuild !== g.id) { gchatGuild = g.id; gchat = []; gchatLast = 0; }
   const next = R.xpForLevel(g.level + 1), cur = R.xpForLevel(g.level), pct = g.level >= R.LEVEL_CAP ? 100 : Math.min(100, ((g.xp - cur) / (next - cur)) * 100);
-  const head = `<div class="ghead">${bannerBadge(g.banner, g.tag, 'gbadge big')}<div><b>[${esc(g.tag)}]${sg ? ` <span class="smark" title="Staff guild">${STAFF_MARK}</span>` : ''} ${esc(g.name)}</b> <small class="role r-${me.role}">${me.role}</small>
+  const head = `<div class="ghead">${bannerBadge(g.banner, g.tag, 'gbadge big')}<div><b>[${esc(g.tag)}]${sg ? ` <span class="smark" title="Staff guild">${STAFF_MARK}</span>` : ''} ${esc(g.name)}</b> <small class="role r-${me.role}">${me.role}</small>${hub && hub.champion?.guild_id === g.id ? ' ' + champHtml(hub.champion) : ''}${hub && !sg && hub.buffs?.length ? ` <span class="gbuffchip">⚔ +${hub.buffs[0].pct}% dmg</span>` : ''}
     <div class="sub">${sg ? `Staff guild · Prestige Lv ${g.level}${g.level >= R.LEVEL_CAP ? ' (max)' : ''} · ${info.members.length}/${g.slots} members · invite-only · private · <b class="prest">Prestige only, no rewards</b>` : `Level ${g.level}${g.level >= R.LEVEL_CAP ? ' (max)' : ''} · ${info.members.length}/${g.slots} members · bank ${fmtN(g.bank)}g · ${g.open ? 'open' : 'invite-only'}`}</div>
     <div class="gxp${sg ? ' prestige' : ''}" title="${fmtN(g.xp)} ${sg ? 'prestige' : 'guild'} XP"><i style="width:${pct.toFixed(1)}%"></i></div></div></div>
     <div class="grow tabs gtabs">${tabs.map(t => `<button data-tab="${t}" aria-pressed="${tab === t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div><p class="sub" id="gMsg"></p>`;
@@ -28,16 +29,18 @@ export function renderGuildV2(info, ctx) {
     ${mgr ? `<div class="grow">${sg ? '' : `<button id="gOpen">${g.open ? 'Make invite-only' : 'Open to everyone'}</button>`}<input id="gInv" placeholder="Tower ID to invite" maxlength="40"><button id="gInvB">Invite</button></div>` : ''}
     ${mgr && info.requests.length ? `<h3>Join requests</h3>${info.requests.map(r => `<div class="grow greq"><span>${esc(r.name)} <small class="sub">${ago(r.at)}</small></span><button data-acc="${esc(r.user_id)}" class="cta">Accept</button><button data-deny="${esc(r.user_id)}">Deny</button></div>`).join('')}` : ''}
     <button id="gLeave">Leave guild</button>`;
-  else if (tab === 'members') body = `<table class="gmem"><tr><th>Name</th><th>Rank</th><th>Damage</th><th>Seen</th><th></th></tr>${info.members.map(m => {
+  else if (tab === 'members') body = `<table class="gmem"><tr><th>Name</th><th>Rank</th><th>Damage</th><th>${hub ? 'Floor · status' : 'Seen'}</th><th></th></tr>${info.members.map(m => {
       const self = m.user_id === me.user_id, acts = [];
       if (!self && R.canKick(me.role, m.role)) acts.push(`<button data-kick="${esc(m.user_id)}">Kick</button>`);
       if (!self && lead && !m.is_staff) { if (m.role === 'member') acts.push(`<button data-role="officer" data-u="${esc(m.user_id)}">Promote</button>`); if (m.role === 'officer') acts.push(`<button data-role="member" data-u="${esc(m.user_id)}">Demote</button>`); acts.push(`<button data-role="leader" data-u="${esc(m.user_id)}">Make leader</button>`); }
-      return `<tr class="${self ? 'mine' : ''}"><td><span class="cardlink" data-card="${esc(m.name)}" role="button" tabindex="0">${m.is_staff ? '◈ ' : ''}${esc(m.name)}${isTeam(m.name) ? ' ' + teamTag() : ''}</span></td><td><small class="role r-${m.role}">${m.role}</small></td><td>${fmtN(m.contrib)}</td><td class="sub">${ago(m.last_active)}</td><td class="gacts">${acts.join('')}</td></tr>`; }).join('')}</table>
+      return `<tr class="${self ? 'mine' : ''}"><td>${hub ? bannerBadge(g.banner, g.tag) : ''}<span class="cardlink" data-card="${esc(m.name)}" role="button" tabindex="0">${m.is_staff ? '◈ ' : ''}${esc(m.name)}${isTeam(m.name) ? ' ' + teamTag() : ''}</span></td><td><small class="role r-${m.role}">${m.role}</small></td><td>${fmtN(m.contrib)}</td><td class="sub">${hub && hub.presence?.[m.name] ? presenceHtml(hub.presence[m.name]) : ago(m.last_active)}</td><td class="gacts">${acts.join('')}</td></tr>`; }).join('')}</table>
     <p class="sub">Officers and the leader invite, kick members and answer requests. The leader promotes, demotes and hands over leadership. A leader inactive for ${R.INACTIVE_DAYS} days passes it to the most active officer.</p>`;
+  else if (tab === 'race') body = raceHtml(hub, g.id);
   else if (tab === 'bank') body = `<p>Bank: <b>${fmtN(g.bank)} gold</b>. Gold only: it is spent on guild upgrades and never paid out to players.</p>
     ${ctx.staff ? '<p class="sub">Staff cannot donate.</p>' : `<div class="grow"><input id="gDon" type="number" min="1" max="${R.DONATE_DAILY_CAP}" placeholder="Gold to donate" inputmode="numeric"><button id="gDonB" class="cta">Donate</button></div><p class="sub">You have ${fmtN(Math.floor(ctx.save.gold))}g. At most ${fmtN(R.DONATE_DAILY_CAP)} a day, one donation every ${R.DONATE_COOLDOWN_S}s.</p>`}
     <h3>Upgrades</h3>${Object.entries(R.UPGRADES).map(([k, u]) => { const n = R.nextUpgrade(g, k), cur = g[R.upgradeCol[k]];
       return `<div class="grow gup"><span><b>${esc(u.label)}</b> <small class="sub">${cur}/${u.max}${n ? ` · next ${fmtN(n.cost)}g, guild Lv ${n.level}` : ' · max'}</small></span>${mgr && n ? `<button data-up="${k}" ${n.ok ? '' : 'disabled'}>Buy</button>` : ''}</div>`; }).join('')}
+    ${hub ? buffsHtml(hub, { mgr, bank: g.bank, staff: ctx.staff }) : ''}
     <h3>Log</h3><div class="gledger">${info.ledger.length ? info.ledger.map(l => `<div class="l-${l.kind}">${l.kind === 'donate' ? `+${fmtN(l.amount)}g · ${esc(l.name)} donated` : l.kind === 'spend' ? `−${fmtN(l.amount)}g · ${esc(l.name)} bought ${esc(l.item)}` : `+${fmtN(l.amount)}g · ${esc(l.item)}`}<small class="sub"> · ${ago(l.at)}</small></div>`).join('') : '<p class="sub">No donations yet.</p>'}</div>`;
   else if (tab === 'quests') { const mr = info.mreward, share = mr ? `${fmtN(mr.g)}g + XP each` : null;
     body = `<p class="sub">Week ${info.week}: three goals, the same for every guild, counted by the server. Resets Monday 00:00 UTC. Rewards go to guild XP and the bank${share ? `, and every member who helped claims a share (${share}; damage and donations: at least 1% of the goal)` : ''}.</p>${info.quests.map(q => { const p = Math.min(100, (Number(q.progress) / Number(q.target)) * 100), can = share && q.done && q.ok && !q.claimed;
@@ -66,6 +69,7 @@ export function renderGuildV2(info, ctx) {
   if ($q('#gDonB')) $q('#gDonB').onclick = () => { const n = Math.floor(+$q('#gDon').value); if (!(n >= 1)) return msg('enter an amount'); if (n > ctx.save.gold) return msg('not enough gold');
     act(async () => { await ctx.be.guildDonate(n, ctx.save); await ctx.be.saveSave(ctx.save); }, `donated ${fmtN(n)} gold to the guild bank.`); };
   el.querySelectorAll('[data-gqc]').forEach(b => b.onclick = () => { const [w, i] = b.dataset.gqc.split(':').map(Number); b.disabled = true; act(() => ctx.claimQuest ? ctx.claimQuest(w, i) : ctx.be.guildQuestClaim(w, i, ctx.save)); });
+  el.querySelectorAll('[data-buff]').forEach(b => b.onclick = () => confirm('Spend bank gold on this guild buff?') && act(() => ctx.be.guildBuyBuff(b.dataset.buff), 'guild buff bought.'));
   el.querySelectorAll('[data-up]').forEach(b => b.onclick = () => confirm(`Spend bank gold on ${R.UPGRADES[b.dataset.up].label}?`) && act(() => ctx.be.guildUpgrade(b.dataset.up), 'guild upgrade bought.'));
   el.querySelectorAll('[data-sig]').forEach(b => b.onclick = () => { if (b.dataset.sig === R.STAFF_SIGIL) draft = { ...R.ZERO_BANNER }; else { if (draft.sigil === R.STAFF_SIGIL) draft = { ...R.DEFAULT_BANNER }; draft.sigil = b.dataset.sig; } renderGuildV2(info, ctx); });
   el.querySelectorAll('[data-c]').forEach(b => b.onclick = () => { draft[b.dataset.c] = b.dataset.h; renderGuildV2(info, ctx); });

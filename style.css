@@ -554,3 +554,11 @@ body.tabhidden .halo .corona{animation-play-state:paused}
 @media(max-width:640px){#arena.abg{--a-bg-scale:2}}
 #tip{position:fixed;z-index:9999;padding:6px 10px;border-radius:8px;background:rgba(14,6,34,.97);color:#f2eaff;border:1px solid #7a3cff;box-shadow:0 6px 18px #000a;font:600 13px/1.35 Rajdhani,system-ui,sans-serif;pointer-events:none;white-space:normal;margin:0}#tip[hidden]{display:none}
 @media (hover:none),(pointer:coarse){button[title],.buff[title],.eqslot,[title]{-webkit-touch-callout:none}}
+/* Guild Hub (FEATURES.guildHub) */
+.pres{display:inline-flex;align-items:center;gap:4px;font-size:11px;white-space:nowrap}.pres .pdot{width:8px;height:8px;border-radius:50%;background:#6b6080;display:inline-block}.pres.on{color:#5cff8a}.pres.on .pdot{background:#5cff8a;box-shadow:0 0 6px #5cff8a}.pres.off{color:#9a90b0}
+.idpres{margin-top:3px}
+.gchamp{font-size:10px;padding:1px 6px;border-radius:3px;border:1px solid #ffd76a;color:#ffd76a;background:#ffd76a14;white-space:nowrap}
+.gbuffchip{font-size:10px;padding:1px 6px;border-radius:3px;border:1px solid #ff9b3d;color:#ff9b3d}
+.gchampcard{display:flex;gap:10px;align-items:center;padding:8px;border:1px solid #ffd76a55;border-radius:6px;background:#ffd76a0a;margin-bottom:6px}
+.gbuff.on{border:1px solid #ff9b3d66;border-radius:4px;padding:4px 6px}.lead{color:#5cff8a;font-size:10px}
+@media (max-width:520px){.gmem .pres{white-space:normal}}

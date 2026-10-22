@@ -16,6 +16,7 @@ delete from public.guild_quest_contrib;
 delete from public.guild_quests;
 delete from public.guild_ledger;
 delete from public.guild_decor;
+do $$ begin if to_regclass('public.guild_race_wins') is not null then delete from public.guild_race_wins; delete from public.guild_buffs; end if; end $$; -- Guild Hub addendum (if run)
 update public.guilds set xp = 0, bank = 0, bonus_tier = 0, hall = 0, banner_unlocks = 0 where not is_staff and (xp <> 0 or bank <> 0 or bonus_tier <> 0 or hall <> 0 or banner_unlocks <> 0); -- the staff guild keeps its prestige
 -- 4) tester heroes' progress (every account that is neither the GM nor team staff): saves, pets, shop purchases/tokens, login streaks, daily quests
 delete from public.saves where user_id not in (select id from public.profiles where role = 'gm' or team);
