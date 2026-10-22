@@ -17,10 +17,10 @@ const cache = new Map(); let BV2 = false; // boss art v2 (FEATURES.bossV2); main
 export const setBossV2 = on => { BV2 = !!on; }; export const bossV2 = () => BV2;
 let V2 = false; // hero art v2 (FEATURES.heroV2)
 const memo = (k, f) => { if (!cache.has(k)) cache.set(k, f()); return cache.get(k); };
-import { bossGrid } from './floors.js';
+import { bossGrid, arc3Preview } from './floors.js';
 export { bossGrid, bossShape, bossIsBig, bossInfo, bossPhase, AWAKEN_NAME, AWAKEN_TITLE } from './floors.js';
 export { BOSS_SIZE } from './bosses.js';
-export const bossSprite = (f, phase = 1) => memo('b' + f + ':' + phase + (BV2 ? ':v2' : ''), () => { const g = bossGrid(f, phase, BV2); return sprite(g.rows, g.pal); });
+export const bossSprite = (f, phase = 1) => memo('b' + f + ':' + phase + (BV2 ? ':v2' : '') + (arc3Preview() ? ':a3' : ''), () => { const g = bossGrid(f, phase, BV2); return sprite(g.rows, g.pal); });
 import { bossV2Grid } from './floors.js';
 /** True when this floor/phase is drawn from the art v2 registry right now (flag on + entry present). */
 export const bossIsV2 = (f, phase = 1) => BV2 && phase === 1 && !!bossV2Grid(f);
