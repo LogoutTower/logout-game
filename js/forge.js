@@ -2,6 +2,7 @@
 // Online the SERVER rolls (forge_upgrade RPC); this file mirrors the rules for display and rolls on this browser in local mode only.
 // Materials are in-game only: never the token, never real value. Staff gear (Eventide / Vesperveil, it.gm) keeps its own tier path.
 import { UP_DPS, EVO_DPS, EVO_CAP, evoTier } from './game.js';
+import { refPlayerDps } from './loot.js';
 export { UP_DPS, EVO_DPS, EVO_CAP, evoTier };
 export const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
 export const MAX_UP = 10;
@@ -83,6 +84,18 @@ export function gainMats(save, secs, f, farm = false) {
 // and the Evolution Sigil on milestone floors) but deals NO damage to the live shared boss. Offline time counts like live time.
 /** The floor being farmed, or 0. Only a cleared floor (below the shared floor) can be farmed. */
 export const farmFloor = (save, current) => { const f = Math.floor(+save?.farm || 0); return f >= 1 && f < current ? f : 0; };
+// The echo is this hero's own private boss: its HP is sized to the floor's reference player DPS (about ECHO_SECS seconds to break at
+// par), the hero's full damage drains it, and it re-forms at once when broken. It never touches the shared floor_state.
+export const ECHO_SECS = 45;
+export const echoMaxHp = f => Math.max(100, Math.round(refPlayerDps(f) * ECHO_SECS / 10) * 10);
+/** Apply dmg to the farmed echo of floor f (fresh HP when the farmed floor changes). Returns how many times it broke. */
+export function hitEcho(save, f, dmg) {
+  let e = save.echo; const max = echoMaxHp(f);
+  if (!e || e.f !== f || !(e.maxHp > 0)) e = save.echo = { f, hp: max, maxHp: max, kills: 0 };
+  e.hp -= Math.max(0, +dmg || 0); let k = 0;
+  if (e.hp <= 0) { k = Math.floor(-e.hp / e.maxHp) + 1; e.hp += k * e.maxHp; e.kills += k; }
+  return k;
+}
 /** Loot key for a 10-floor set: [{ key, kind, rarity, color, icon, name, where, fight, farm }] (rates per hour). Floors above `upTo` stay hidden. */
 export function lootKey(set, upTo = set * 10) {
   const from = (set - 1) * 10 + 1, to = set * 10, rows = [], row = (key, where, fight, farm) => { const m = MAT_KINDS[kindOf(key)]; rows.push({ key, kind: kindOf(key), rarity: m.rarity, color: m.color, icon: m.icon, name: matName(key), where, fight, farm }); };
