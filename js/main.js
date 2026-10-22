@@ -32,6 +32,7 @@ import { towerRows, towerProgress, TOWER_TOP } from './towermap.js';
 import { renderGuildV2, invitesHtml } from './guildpanel.js';
 import { bannerBadge, hallArt } from './banner.js';
 import { presenceHtml, champHtml } from './guildhubui.js';
+import { friendsHtml, wireFriends, cardFriendHtml } from './friendsui.js';
 import { slotsOf, displayBanner, ZERO_BANNER, staffHall } from './guildsv2.js';
 import { itemIcon } from './icons.js';
 import { openDen } from './casinoui.js';
@@ -162,7 +163,7 @@ async function startGame(fresh = false) {
   initUI({ gear: () => $('gearSheet').showModal(), bag: openBag, talents: () => { talSel = null; openTalents(); }, wardrobe: openWardrobe, town: openTown, guild: openGuild });
   $('helpBtn').onclick = () => { $('more').close(); tourShow(0); }; $('sysBtn').onclick = openSystem; $('mapBtn').onclick = openMap; $('floorBtn').onclick = openMap; $('chatBtn').onclick = openChat;
   $('lbBtn').onclick = () => $('lbSheet').showModal(); $('top3').onclick = () => $('lbSheet').showModal(); $('logBtn').onclick = () => $('logSheet').showModal(); $('sbBtn').onclick = openSandboxUi;
-  $('tabGuild').hidden = !featureOn(FEATURES, 'guilds', gmValid); $('chatBtn').hidden = !featureOn(FEATURES, 'chat', gmValid);
+  $('friendsBtn').hidden = !frOn(); $('friendsBtn').onclick = openFriends; if (frOn()) setTimeout(friendsBadge, 5000); $('tabGuild').hidden = !featureOn(FEATURES, 'guilds', gmValid); $('chatBtn').hidden = !featureOn(FEATURES, 'chat', gmValid);
   $('topbar').classList.remove('hidden'); $('tabbar').classList.remove('hidden'); setInterval(badgePoll, 60000); setTimeout(badgePoll, 4000);
   ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => addEventListener(ev, () => be?.touch?.(), { passive: true })); addEventListener('pagehide', () => { try { if (be?._dirty) be._push(be._dirty); } catch {} });
   document.addEventListener('visibilitychange', () => document.body.classList.toggle('tabhidden', document.hidden)); // pauses CSS loops (Solumbra halo, pet bob)
@@ -236,7 +237,18 @@ async function openCard(name, author = null) {
   $('idCardSub').textContent = card ? '· hero ID' : '';
   body.innerHTML = card ? cardHtml(card, { team: !card.st && isTeam(card.name || name, author), fmt, esc, sprite: heroSprite, guildBadge: g => gv2On() && g.banner ? bannerBadge(displayBanner(g.banner, g.staff), g.tag) : '', presence: pres ? presenceHtml(pres) : '' })
     : `<p class="sub">${be.playerCard && !be.noCard ? 'No ID card for this hero yet. They need to play and sync once.' : 'ID cards open soon.'}</p>`;
+  const cn = card?.name || name; if (card && frOn() && cn && cn !== me.name) { const L = await be.friendsList().catch(() => null); if (L && d.open) { body.insertAdjacentHTML('beforeend', cardFriendHtml(cn, L)); wireCardFriend(cn, L); } }
 }
+// ---- Friends (Guild Hub update, same flag): Friends view in More, Add friend / Block on ID cards. Server RPCs only; one read per open.
+const frOn = () => hubOn() && !!be?.friendsList;
+function wireCardFriend(n, L) { const m = t => { const x = $('cardFrMsg'); if (x) x.textContent = t; };
+  const run = async (fn, ok) => { try { await fn(); m(ok); setTimeout(() => openCard(n), 600); } catch (e) { m(String(e.message || e).replace(/^.*?: /, '')); } };
+  if ($('cardFrAdd')) $('cardFrAdd').onclick = () => { const inc = (L.incoming || []).find(x => x.name === n); run(() => inc ? be.friendRespond(inc.id, true) : be.friendRequest(n), inc ? 'friend added.' : 'friend request sent.'); };
+  if ($('cardFrBlk')) $('cardFrBlk').onclick = () => confirm(`Block ${n}? They are removed from your friends and cannot send you requests.`) && run(() => be.friendBlock(n, true), 'blocked.'); }
+async function openFriends() { const d = $('friends'), el = $('friendsBody'); $('more').close(); if (!d.open) d.showModal(); el.innerHTML = '<p class="sub">Loading…</p>';
+  const draw = async () => { let L = null; try { L = await be.friendsList(); } catch {} $('friendsSub').textContent = L ? `· ${(L.friends || []).length}/${L.cap}` : ''; el.innerHTML = friendsHtml(L); $('dotFriends').hidden = !(L?.incoming || []).length; wireFriends({ be, el, refresh: draw }); };
+  await draw(); }
+async function friendsBadge() { if (!frOn()) return; try { const L = await be.friendsList(); $('dotFriends').hidden = !(L?.incoming || []).length; } catch {} }
 document.addEventListener('click', e => { const t = e.target.closest?.('[data-card]'); if (!t || !save) return; e.preventDefault(); e.stopPropagation(); openCard(t.dataset.card, t.dataset.author || null); }, true);
 // ---- Arc scenes (js/arcs.js): one scene per 10 floors, per-floor tint toward the guardian's element.
 let sceneFor = '';

@@ -1,8 +1,8 @@
--- $LOGOUT addendum: GUILD HUB (presence, guild boss races, bank buffs). Idempotent: safe to run twice. Run AFTER
+-- $LOGOUT addendum: GUILD HUB (presence, friends list, guild boss races + champion bank payout, bank buffs). Idempotent: safe to run twice. Run AFTER
 -- schema-addendum-forge-prestige.sql (it re-creates submit_damage from that file with one extra line) and the floors 21-30 addendum.
 -- Safe before the pre-launch tower reset: it only adds tables/functions; admin-reset-tower.sql clears the two new tables.
 -- Client flag: FEATURES.guildHub ('gm' = staff preview, 'all' = everyone). Free tier: no realtime, every read is one RPC on view open.
--- Gold only: buffs are bought with guild bank gold; nothing is ever paid out to players.
+-- Gold only: buffs are bought with guild bank gold; the race payout goes to the champion guild's bank; nothing is ever paid out to players.
 
 -- ============================== tables ==============================
 create table if not exists public.guild_race_wins (          -- one row per cleared floor: the top guild by member damage
@@ -23,15 +23,53 @@ create table if not exists public.guild_buffs (
   at timestamptz not null default now()
 );
 create index if not exists guild_buffs_g on public.guild_buffs (guild_id, kind, until desc);
+-- Friends: one row per direction once accepted (a<->b = two rows), pending requests, blocks, and a send log for the rate limit.
+create table if not exists public.friends (
+  user_id uuid not null references auth.users on delete cascade,
+  friend_id uuid not null references auth.users on delete cascade,
+  since timestamptz not null default now(),
+  primary key (user_id, friend_id), check (user_id <> friend_id)
+);
+create table if not exists public.friend_requests (
+  id bigserial primary key,
+  from_user uuid not null references auth.users on delete cascade,
+  to_user uuid not null references auth.users on delete cascade,
+  at timestamptz not null default now(),
+  unique (from_user, to_user), check (from_user <> to_user)
+);
+create index if not exists friend_requests_to on public.friend_requests (to_user, at desc);
+create table if not exists public.friend_blocks (
+  user_id uuid not null references auth.users on delete cascade,
+  blocked_id uuid not null references auth.users on delete cascade,
+  at timestamptz not null default now(),
+  primary key (user_id, blocked_id), check (user_id <> blocked_id)
+);
+create table if not exists public.friend_req_log (user_id uuid not null references auth.users on delete cascade, at timestamptz not null default now());
+create index if not exists friend_req_log_u on public.friend_req_log (user_id, at desc);
+alter table public.friends enable row level security;            -- no policies on any friend table: read/write only through the RPCs below
+alter table public.friend_requests enable row level security;
+alter table public.friend_blocks enable row level security;
+alter table public.friend_req_log enable row level security;
+revoke all on public.friends, public.friend_requests, public.friend_blocks, public.friend_req_log from anon, authenticated;
+-- Race payouts are logged in the guild ledger as kind 'race'.
+do $$ begin
+  alter table public.guild_ledger drop constraint if exists guild_ledger_kind_check;
+  alter table public.guild_ledger add constraint guild_ledger_kind_check check (kind in ('donate', 'spend', 'quest', 'race'));
+end $$;
+alter table public.guild_race_wins add column if not exists payout bigint not null default 0;
 alter table public.guild_race_wins enable row level security;     -- no policies: read only through guild_hub()
 alter table public.guild_buffs enable row level security;         -- no policies: read/write only through the RPCs below
 revoke all on public.guild_race_wins, public.guild_buffs from anon, authenticated;
 
 -- ============================== helpers ==============================
--- Who may see whose presence: yourself or a guildmate. There is no friends list yet; add it here when one exists.
+-- Who may see whose presence: yourself, a guildmate, or an accepted friend. Mirrors canSeePresence() in js/guildhub.js.
 create or replace function public.gh_can_see(viewer uuid, target uuid) returns boolean language sql stable security definer set search_path = public as $$
-  select viewer is not null and target is not null and (viewer = target or exists (
-    select 1 from public.guild_members a join public.guild_members b on b.guild_id = a.guild_id where a.user_id = viewer and b.user_id = target)) $$;
+  select viewer is not null and target is not null and (viewer = target
+    or exists (select 1 from public.friends f where f.user_id = viewer and f.friend_id = target)
+    or exists (select 1 from public.guild_members a join public.guild_members b on b.guild_id = a.guild_id where a.user_id = viewer and b.user_id = target)) $$;
+-- Race champion payout to the guild bank: base + perFloor x floor, capped. Mirrors GUILD_RACE_PAYOUT in config.js.
+create or replace function public.gh_race_payout(p_floor int) returns bigint language sql immutable as $$
+  select least(50000, 2500 + 500 * greatest(p_floor, 1))::bigint $$;
 -- Buff catalogue (server-priced; the client list in js/guildhub.js BUFFS mirrors it).
 create or replace function public.gh_buff(p_key text) returns jsonb language sql immutable as $$
   select case p_key when 'dmg5' then jsonb_build_object('kind', 'dmg', 'pct', 5, 'hours', 24, 'price', 40000, 'label', '+5% damage for 24h') end $$;
@@ -53,7 +91,12 @@ declare r record;
 begin
   select * into r from public.gh_race(new.floor) limit 1;
   if r.guild_id is not null then
-    insert into public.guild_race_wins (floor, guild_id, tag, name, banner, damage) values (new.floor, r.guild_id, r.tag, r.name, r.banner, r.damage)
+    -- paid once per floor (a re-insert of the same floor's clear updates the title but never pays twice); gh_race already excludes the staff guild
+    if not exists (select 1 from public.guild_race_wins where floor = new.floor) then
+      update public.guilds set bank = bank + public.gh_race_payout(new.floor) where id = r.guild_id and not coalesce(is_staff, false);
+      insert into public.guild_ledger (guild_id, user_id, name, kind, amount, item) values (r.guild_id, null, 'Guild race', 'race', public.gh_race_payout(new.floor), 'Race Champion · Floor ' || new.floor);
+    end if;
+    insert into public.guild_race_wins (floor, guild_id, tag, name, banner, damage, payout) values (new.floor, r.guild_id, r.tag, r.name, r.banner, r.damage, public.gh_race_payout(new.floor))
       on conflict (floor) do update set guild_id = excluded.guild_id, tag = excluded.tag, name = excluded.name, banner = excluded.banner, damage = excluded.damage, at = now();
   end if;
   return new;
@@ -71,7 +114,7 @@ begin
   select guild_id into gid from public.guild_members where user_id = uid;
   return jsonb_build_object('floor', f,
     'live', coalesce((select jsonb_agg(jsonb_build_object('guild_id', r.guild_id, 'tag', r.tag, 'name', r.name, 'banner', r.banner, 'damage', r.damage)) from public.gh_race(f) r), '[]'),
-    'champion', (select jsonb_build_object('floor', w.floor, 'guild_id', w.guild_id, 'tag', w.tag, 'name', w.name, 'banner', w.banner, 'damage', w.damage)
+    'champion', (select jsonb_build_object('floor', w.floor, 'guild_id', w.guild_id, 'tag', w.tag, 'name', w.name, 'banner', w.banner, 'damage', w.damage, 'payout', w.payout)
                  from public.guild_race_wins w where w.floor = f - 1),   -- only the floor that just fell: stale rows never show (e.g. after a reset)
     'history', coalesce((select jsonb_agg(jsonb_build_object('floor', w.floor, 'tag', w.tag, 'name', w.name, 'banner', w.banner, 'damage', w.damage) order by w.floor desc)
                  from (select * from public.guild_race_wins where floor < f order by floor desc limit 5) w), '[]'),
@@ -98,7 +141,7 @@ begin
   return jsonb_build_object('until', u, 'bank', g.bank - (b->>'price')::bigint);
 end $$;
 -- Presence for up to 50 names: current floor (their latest damage row) and last seen (latest damage submit or cloud save).
--- Only names the caller may see (self or guildmate) are returned; everyone else is silently left out.
+-- Only names the caller may see (self, guildmate or friend) are returned; everyone else is silently left out.
 create or replace function public.guild_presence(p_names text[]) returns jsonb language plpgsql stable security definer set search_path = public as $$
 declare uid uuid := auth.uid(); out jsonb := '{}'; r record;
 begin
@@ -110,6 +153,110 @@ begin
       'seen', (select greatest(p.last_submit, s.updated_at) from public.profiles p left join public.saves s on s.user_id = p.id where p.id = r.user_id)));
   end loop;
   return out;
+end $$;
+
+-- ============================== friends ==============================
+-- Handles are opaque (never user ids). Names resolve like everywhere else: the hero name on the player's highest damage row.
+-- Nothing about the other player leaks beyond name, floor and online / last seen: no class, gear, items, role or staff flag, and a
+-- block is never revealed (a request to someone who blocked you looks sent and is never delivered).
+create or replace function public.fr_handle(u uuid) returns text language sql immutable as $$ select left(md5('logout-friend:' || u::text), 16) $$;
+create or replace function public.fr_uid(p_name text) returns uuid language sql stable security definer set search_path = public as $$
+  select coalesce((select d.user_id from public.damage d where d.name = left(btrim(p_name), 20) order by d.floor desc, d.damage desc limit 1),
+                  (select p.id from public.profiles p where p.display_name = left(btrim(p_name), 20) limit 1)) $$;
+-- Resolve a handle, but only among people already linked to the caller (friends, requests either way, blocks).
+create or replace function public.fr_from_handle(viewer uuid, h text) returns uuid language sql stable security definer set search_path = public as $$
+  select u from (select friend_id u from public.friends where user_id = viewer union select from_user from public.friend_requests where to_user = viewer
+    union select to_user from public.friend_requests where from_user = viewer union select blocked_id from public.friend_blocks where user_id = viewer) x
+  where public.fr_handle(u) = h limit 1 $$;
+-- Floor and last seen for a friend (same source as guild_presence).
+create or replace function public.fr_presence(u uuid) returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('floor', (select max(floor) from public.damage where user_id = u),
+    'seen', (select greatest(p.last_submit, s.updated_at) from public.profiles p left join public.saves s on s.user_id = p.id where p.id = u)) $$;
+create or replace function public.friends_list() returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare uid uuid := auth.uid();
+begin
+  if uid is null then raise exception 'not signed in'; end if;
+  return jsonb_build_object('cap', 100,
+    'friends', coalesce((select jsonb_agg(jsonb_build_object('h', public.fr_handle(f.friend_id), 'name', public.gv2_name(f.friend_id), 'since', f.since) || public.fr_presence(f.friend_id) order by public.gv2_name(f.friend_id))
+                 from public.friends f where f.user_id = uid), '[]'),
+    'incoming', coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'h', public.fr_handle(r.from_user), 'name', public.gv2_name(r.from_user), 'at', r.at) order by r.at desc)
+                 from public.friend_requests r where r.to_user = uid
+                 and not exists (select 1 from public.friend_blocks b where b.user_id = uid and b.blocked_id = r.from_user)), '[]'),
+    'outgoing', coalesce((select jsonb_agg(jsonb_build_object('id', r.id, 'h', public.fr_handle(r.to_user), 'name', public.gv2_name(r.to_user), 'at', r.at) order by r.at desc)
+                 from public.friend_requests r where r.from_user = uid), '[]'),
+    'blocked', coalesce((select jsonb_agg(jsonb_build_object('h', public.fr_handle(b.blocked_id), 'name', public.gv2_name(b.blocked_id)) order by b.at desc)
+                 from public.friend_blocks b where b.user_id = uid), '[]'));
+end $$;
+create or replace function public.friend_request(p_name text) returns jsonb language plpgsql security definer set search_path = public as $$
+declare uid uuid := auth.uid(); t uuid; rq public.friend_requests;
+begin
+  if uid is null then raise exception 'not signed in'; end if;
+  if coalesce(btrim(p_name), '') = '' then raise exception 'enter a hero name'; end if;
+  perform pg_advisory_xact_lock(hashtext('friend:' || uid::text));
+  t := public.fr_uid(p_name);
+  if t is null then raise exception 'no hero with that name'; end if;
+  if t = uid then raise exception 'that is you'; end if;
+  if exists (select 1 from public.friend_blocks where user_id = uid and blocked_id = t) then raise exception 'unblock them first'; end if;
+  if exists (select 1 from public.friends where user_id = uid and friend_id = t) then raise exception 'already friends'; end if;
+  if exists (select 1 from public.friend_requests where from_user = uid and to_user = t) then raise exception 'request already sent'; end if;
+  if (select count(*) from public.friends where user_id = uid) >= 100 then raise exception 'friend list full (100)'; end if;
+  -- they already asked you (and have not blocked you): accept instead
+  select * into rq from public.friend_requests where from_user = t and to_user = uid;
+  if rq.id is not null and not exists (select 1 from public.friend_blocks where user_id = t and blocked_id = uid) then return public.friend_respond(rq.id, true); end if;
+  if (select count(*) from public.friend_req_log where user_id = uid and at > now() - interval '1 hour') >= 20 then raise exception 'too many requests, try again later'; end if;
+  if (select count(*) from public.friend_requests where from_user = uid) >= 50 then raise exception 'too many pending requests'; end if;
+  if (select count(*) from public.friends where user_id = t) >= 100 then raise exception 'their friend list is full'; end if;
+  insert into public.friend_req_log (user_id) values (uid);
+  delete from public.friend_req_log where user_id = uid and at < now() - interval '1 day';
+  if not exists (select 1 from public.friend_blocks where user_id = t and blocked_id = uid) then -- blocked by them: looks sent, never delivered
+    insert into public.friend_requests (from_user, to_user) values (uid, t) on conflict do nothing;
+  end if;
+  return jsonb_build_object('sent', true);
+end $$;
+create or replace function public.friend_respond(p_id bigint, p_accept boolean) returns jsonb language plpgsql security definer set search_path = public as $$
+declare uid uuid := auth.uid(); rq public.friend_requests;
+begin
+  if uid is null then raise exception 'not signed in'; end if;
+  select * into rq from public.friend_requests where id = p_id and to_user = uid for update;
+  if rq.id is null then raise exception 'request not found'; end if;
+  delete from public.friend_requests where id = rq.id;
+  if coalesce(p_accept, false) then
+    if (select count(*) from public.friends where user_id = uid) >= 100 then raise exception 'friend list full (100)'; end if;
+    if (select count(*) from public.friends where user_id = rq.from_user) >= 100 then raise exception 'their friend list is full'; end if;
+    insert into public.friends (user_id, friend_id) values (uid, rq.from_user), (rq.from_user, uid) on conflict do nothing;
+    delete from public.friend_requests where from_user = uid and to_user = rq.from_user;
+  end if;
+  return jsonb_build_object('ok', true);
+end $$;
+create or replace function public.friend_remove(p_handle text) returns jsonb language plpgsql security definer set search_path = public as $$
+declare uid uuid := auth.uid(); t uuid;
+begin
+  if uid is null then raise exception 'not signed in'; end if;
+  t := public.fr_from_handle(uid, p_handle);
+  if t is not null then
+    delete from public.friends where (user_id = uid and friend_id = t) or (user_id = t and friend_id = uid);
+    delete from public.friend_requests where from_user = uid and to_user = t; -- also cancels your own pending request
+  end if;
+  return jsonb_build_object('ok', true);
+end $$;
+create or replace function public.friend_block(p_handle text, p_name text default null) returns jsonb language plpgsql security definer set search_path = public as $$
+declare uid uuid := auth.uid(); t uuid;
+begin
+  if uid is null then raise exception 'not signed in'; end if;
+  t := coalesce(public.fr_from_handle(uid, p_handle), case when p_name is not null then public.fr_uid(p_name) end);
+  if t is null or t = uid then raise exception 'cannot block that hero'; end if;
+  if (select count(*) from public.friend_blocks where user_id = uid) >= 500 then raise exception 'block list full'; end if;
+  delete from public.friends where (user_id = uid and friend_id = t) or (user_id = t and friend_id = uid);
+  delete from public.friend_requests where (from_user = uid and to_user = t) or (from_user = t and to_user = uid);
+  insert into public.friend_blocks (user_id, blocked_id) values (uid, t) on conflict do nothing;
+  return jsonb_build_object('ok', true);
+end $$;
+create or replace function public.friend_unblock(p_handle text) returns jsonb language plpgsql security definer set search_path = public as $$
+declare uid uuid := auth.uid();
+begin
+  if uid is null then raise exception 'not signed in'; end if;
+  delete from public.friend_blocks where user_id = uid and public.fr_handle(blocked_id) = p_handle;
+  return jsonb_build_object('ok', true);
 end $$;
 
 -- ============================== submit_damage ==============================
@@ -155,8 +302,11 @@ begin
 end $$;
 
 -- ============================== grants ==============================
-revoke all on function public.gh_can_see(uuid, uuid), public.gh_dmg_mul(uuid), public.gh_race(int), public.gh_on_clear() from public, anon, authenticated;
-revoke all on function public.guild_hub(), public.guild_buy_buff(text), public.guild_presence(text[]) from public, anon;
-grant execute on function public.guild_hub(), public.guild_buy_buff(text), public.guild_presence(text[]) to authenticated;
+revoke all on function public.gh_can_see(uuid, uuid), public.gh_dmg_mul(uuid), public.gh_race(int), public.gh_on_clear(), public.gh_race_payout(int),
+  public.fr_handle(uuid), public.fr_uid(text), public.fr_from_handle(uuid, text), public.fr_presence(uuid) from public, anon, authenticated;
+revoke all on function public.guild_hub(), public.guild_buy_buff(text), public.guild_presence(text[]), public.friends_list(), public.friend_request(text),
+  public.friend_respond(bigint, boolean), public.friend_remove(text), public.friend_block(text, text), public.friend_unblock(text) from public, anon;
+grant execute on function public.guild_hub(), public.guild_buy_buff(text), public.guild_presence(text[]), public.friends_list(), public.friend_request(text),
+  public.friend_respond(bigint, boolean), public.friend_remove(text), public.friend_block(text, text), public.friend_unblock(text) to authenticated;
 revoke all on function public.submit_damage(bigint, text, int, int) from public, anon;
 grant execute on function public.submit_damage(bigint, text, int, int) to authenticated;

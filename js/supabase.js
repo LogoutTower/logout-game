@@ -180,6 +180,13 @@ export class SupabaseBackend {
   async guildHub() { return this._rpc('guild_hub', {}); }
   async guildBuyBuff(key) { return this._rpc('guild_buy_buff', { p_key: key }); }
   async guildPresence(names) { if (this.holdUploads) return {}; const { data, error } = await this.sb.rpc('guild_presence', { p_names: [].concat(names || []).slice(0, 50) }); return error ? {} : data || {}; }
+  // Friends (Guild Hub update): server RPCs only; handles are opaque (never user ids). Read once when the view or a card opens.
+  async friendsList() { return this._rpc('friends_list', {}); }
+  async friendRequest(name) { return this._rpc('friend_request', { p_name: String(name ?? '').trim().slice(0, 20) }); }
+  async friendRespond(id, accept) { return this._rpc('friend_respond', { p_id: +id, p_accept: !!accept }); }
+  async friendRemove(h) { return this._rpc('friend_remove', { p_handle: h }); }
+  async friendBlock(ref, byName = false) { return this._rpc('friend_block', byName ? { p_handle: null, p_name: ref } : { p_handle: ref, p_name: null }); }
+  async friendUnblock(h) { return this._rpc('friend_unblock', { p_handle: h }); }
   async guildSetBanner(sigil, c1, c2) { return this._rpc('guild_set_banner', { p_sigil: sigil, p_c1: c1, p_c2: c2 }); }
   async guildChatFetch(after = 0) { const { data, error } = await this.sb.from('guild_messages').select('id, author, name, is_staff, body, at').gt('id', after).order('id', { ascending: true }).limit(50); return error ? [] : data || []; }
   async guildChatPost(name, body) { const m = await this._rpc('guild_chat_post', { p_name: name, p_body: body }); (this.mine ||= new Set()).add(m?.id); return m; }

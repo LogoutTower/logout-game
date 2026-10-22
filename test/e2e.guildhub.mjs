@@ -1,7 +1,7 @@
 // Offline e2e for the Guild Hub preview (FEATURES.guildHub). Supabase blocked, fresh context per case, Chromium desktop + phone emulation.
 //  1) regular player with the shipped flag ('gm'): no Race tab, no presence column, no buffs (no change)
 //  2) staff with the shipped flag: Race tab, presence and buffs show
-//  3) mockups: flag forced to 'all' for a regular player (what players get at launch): members, race, bank + buff, ID card presence
+//  3) mockups: flag forced to 'all' for a regular player (what players get at launch): members, race, bank + buff, ID card presence, friends list + ID card Add friend
 // node test/e2e.guildhub.mjs [url]   shots: $GH_SHOTS (default /tmp/guild-hub)
 import assert from 'node:assert/strict'; import { chromium } from 'playwright-core'; import { createHash } from 'node:crypto'; import { mkdirSync } from 'node:fs'; import { offline } from './e2e-offline.mjs';
 const { TEAM_PASS_HASH } = await import('../config.js');
@@ -27,24 +27,28 @@ async function page(dev, { gm = false, flag = null } = {}) {
     g.me = 'Tester'; g.raceWins = [{ floor: Math.max(1, f - 2), guild_id: 2, tag: 'EMB', name: 'Ember Court', banner: { sigil: 'tower', c1: '#ffd76a', c2: '#2a1450' }, damage: 3100000, at: ago(9000) },
       { floor: Math.max(1, f - 1), guild_id: 9, tag: 'LW', name: 'Lantern Watch', banner: { sigil: 'flame', c1: '#ff9b3d', c2: '#2a1450' }, damage: 4200000, at: ago(1200) }];
     localStorage.setItem(k + '.guilds', JSON.stringify(g));
+    localStorage.setItem(k + '.friends', JSON.stringify({ next: 50, sent: [], blocked: [], outgoing: [{ id: 41, name: 'Eldrinn', at: ago(900) }], incoming: [{ id: 42, name: 'Thornwick', at: ago(600) }],
+      friends: [['Mossveil', 40, f], ['Ravensong', 2 * 3600, f - 1], ['Kaelith', 3 * 86400, f - 4], ['LyssDawn', 90, f], ['Wren', 20, f]].map(([name, sec, fl]) => ({ name, since: ago(9 * 86400), seen: ago(sec), floor: fl })) }));
     Object.assign(w.dmg, { Wren: 900000, Ash: 640000, Mira: 220000, Brightmoor: 700000, Ravensong: 380000, SableFen: 300000 }); localStorage.setItem(k + '.world', JSON.stringify(w)); });
   await p.reload(); await p.waitForTimeout(2200); await p.evaluate(() => document.querySelectorAll('#cutscene .cs-skip').forEach(x => x.click())); if (await p.isVisible('#tskip')) await p.click('#tskip');
   return { ctx, p, hits }; }
 const openGuild = async p => { await p.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close())); await p.click('#tabGuild'); await p.waitForSelector('#guild[open] .gtabs'); await p.waitForTimeout(300); };
 const tab = async (p, t) => { await p.click(`#guildBody [data-tab="${t}"]`); await p.waitForTimeout(400); };
 const tabs = p => p.evaluate(() => [...document.querySelectorAll('#guildBody .gtabs [data-tab]')].map(x => x.dataset.tab));
-const shot = (p, n) => p.screenshot({ path: `${OUT}/${n}.png` });
+const shot = async (p, n) => { await p.waitForTimeout(450); return p.screenshot({ path: `${OUT}/${n}.png` }); }; // let the sheet slide-in finish
 for (const dev of ['desktop', 'phone']) {
   // 1) regular player, shipped flag: nothing new
   { const { ctx, p, hits } = await page(dev); await openGuild(p);
     assert.deepEqual(await tabs(p), ['overview', 'members', 'bank', 'quests', 'banner', 'chat'], 'no Race tab for players');
     await tab(p, "members"); if (!(await p.isVisible(`#guildBody th:has-text("Seen")`))) { await shot(p, "debug"); console.log((await p.textContent("#guildBody")).slice(0, 600)); } assert.ok(await p.isVisible(`#guildBody th:has-text("Seen")`)); assert.equal(await p.locator('#guildBody .pres').count(), 0, 'no presence');
     await tab(p, 'bank'); assert.equal(await p.locator('#guildBody [data-buff]').count(), 0, 'no buffs'); assert.equal(await p.locator('.gchamp').count(), 0);
+    assert.equal(await p.$eval('#friendsBtn', e => e.hidden), true, 'no Friends for players yet');
     await p.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close())); await p.evaluate(() => document.querySelector('[data-card]')?.click()); await p.waitForTimeout(500);
-    assert.equal(await p.locator('#idCardBody .idpres').count(), 0, 'no presence on cards'); assert.deepEqual(hits, []); await ctx.close(); }
+    assert.equal(await p.locator('#idCardBody .idpres').count(), 0, 'no presence on cards'); await p.waitForTimeout(400); assert.equal(await p.locator('#idCardBody .idfr').count(), 0, 'no Add friend on cards');
+    assert.equal(await p.locator('#friends[open]').count(), 0); assert.deepEqual(hits, []); await ctx.close(); }
   // 2) staff, shipped flag: preview visible
   { const { ctx, p, hits } = await page(dev, { gm: true }); await openGuild(p);
-    assert.ok((await tabs(p)).includes('race'), 'staff sees the Race tab'); await tab(p, 'members'); assert.ok(await p.locator('#guildBody .pres.on').count() >= 2, 'online dots');
+    assert.ok((await tabs(p)).includes('race'), 'staff sees the Race tab'); assert.equal(await p.$eval('#friendsBtn', e => e.hidden), false, 'staff sees Friends'); await tab(p, 'members'); assert.ok(await p.locator('#guildBody .pres.on').count() >= 2, 'online dots');
     assert.deepEqual(hits, []); await ctx.close(); }
   // 3) mockups: regular player with the flag on (launch view)
   { const { ctx, p, hits } = await page(dev, { flag: 'all' }); await openGuild(p);
@@ -63,6 +67,20 @@ for (const dev of ['desktop', 'phone']) {
     // a stranger's card shows no presence
     await p.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close())); await p.evaluate(() => { const e = document.createElement('b'); e.dataset.card = 'Brightmoor'; document.body.append(e); e.click(); });
     await p.waitForSelector('#idCard[open] .idcard'); assert.equal(await p.locator('#idCardBody .idpres').count(), 0, 'stranger: no presence');
+    // friends view: list with floor + status, requests, add by name, accept, ID card Add friend + presence for a friend outside the guild
+    await p.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close())); await p.evaluate(() => document.getElementById('more').showModal()); await p.click('#friendsBtn'); await p.waitForSelector('#friends[open] .frl');
+    const fr = await p.evaluate(() => [...document.querySelectorAll('#friendsBody .frl tr')].slice(1).map(r => r.innerText.replace(/\s+/g, ' ')));
+    assert.equal(fr.length, 5); assert.match(fr[0], /online/); assert.ok(fr.some(x => /last seen 2h ago/.test(x)) && fr.some(x => /last seen 3d ago/.test(x)));
+    assert.match(await p.textContent('#friendsBody'), /5\/100 · 3 online/); assert.ok(await p.isVisible('#friendsBody [data-fracc="42"]')); assert.match(await p.textContent('#friendsBody'), /Eldrinn waiting/);
+    await shot(p, `${dev}-friends-list`);
+    await p.click('#friendsBody [data-fracc="42"]'); await p.waitForTimeout(500); assert.match(await p.textContent('#friendsBody'), /6\/100/); assert.match(await p.textContent('#frMsg'), /friend added/);
+    await p.fill('#frName', 'Grimhallow'); await p.click('#frAdd'); await p.waitForTimeout(500); assert.match(await p.textContent('#frMsg'), /request sent to Grimhallow/);
+    await p.fill('#frName', 'Nobody Here'); await p.click('#frAdd'); await p.waitForTimeout(300); assert.match(await p.textContent('#frMsg'), /no hero with that name/);
+    await p.fill('#frName', ''); await p.evaluate(() => document.getElementById('friendsBody').scrollTop = 0); await shot(p, `${dev}-friends-after-accept`);
+    await p.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close())); await p.evaluate(() => { const e = document.createElement('b'); e.dataset.card = 'Mossveil'; document.body.append(e); e.click(); });
+    await p.waitForSelector('#idCard[open] .idfr'); assert.match(await p.textContent('#idCardBody .idpres'), /online/, 'friend in another guild: presence'); assert.match(await p.textContent('#idCardBody .idfr'), /Friends ✓/); await shot(p, `${dev}-idcard-friend`);
+    await p.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close())); await p.evaluate(() => { const e = document.createElement('b'); e.dataset.card = 'SableFen'; document.body.append(e); e.click(); });
+    await p.waitForSelector('#idCard[open] #cardFrAdd'); await shot(p, `${dev}-idcard-add-friend`); await p.click('#cardFrAdd'); await p.waitForTimeout(300); assert.match(await p.textContent('#cardFrMsg'), /friend request sent/);
     assert.deepEqual(hits, []); await ctx.close(); }
 }
 await b.close(); assert.deepEqual(errs, []); console.log('guild hub e2e ok');

@@ -1,6 +1,6 @@
 // Guild Hub (schema-addendum-guild-hub.sql), offline in PGlite, every addendum applied twice (+ the tower reset twice). Never the live DB.
 import assert from 'node:assert'; import fs from 'node:fs';
-import { BUFFS, MAX_DMG_PCT } from '../js/guildhub.js';
+import { BUFFS, MAX_DMG_PCT, racePayout } from '../js/guildhub.js'; import { FRIEND_CAP, REQ_PER_HOUR } from '../js/friends.js';
 let PGlite; try { ({ PGlite } = await import('@electric-sql/pglite')); } catch { console.log('pglite not installed, skipped'); process.exit(0); }
 const { ADDENDA } = await import('./addenda.mjs'); const ALL = [...ADDENDA, 'schema-addendum-floors-21-30.sql', 'schema-addendum-guild-hub.sql'];
 const db = new PGlite();
@@ -30,7 +30,11 @@ await db.exec(`insert into public.guild_race_wins (floor, tag) values (999, 'X')
 let h = await as(A, `select public.guild_hub() r`);
 assert.deepEqual(h.live.map(x => [x.tag, +x.damage]), [['IRON', 150], ['SALT', 120]]); assert.equal(h.champion, null);
 await db.exec(`insert into public.floor_clears (floor, max_hp, ranking, dmg) values (1, 1000, '{}', '{}'); update public.floor_state set floor = 2 where id = 1;`);
-h = await as(C, `select public.guild_hub() r`); assert.equal(h.champion.tag, 'IRON'); assert.equal(h.champion.floor, 1); assert.equal(h.history.length, 1); assert.deepEqual(h.live, []);
+h = await as(C, `select public.guild_hub() r`); assert.equal(h.champion.tag, 'IRON'); assert.equal(+h.champion.payout, racePayout(1));
+const race = (await db.query(`select amount, item from public.guild_ledger where guild_id = $1 and kind = 'race'`, [g1])).rows; assert.equal(race.length, 1); assert.equal(+race[0].amount, racePayout(1), 'champion bank paid'); assert.match(race[0].item, /Race Champion · Floor 1/);
+const bankAfter = +(await db.query(`select bank from public.guilds where id = $1`, [g1])).rows[0].bank; assert.ok(bankAfter >= racePayout(1));
+await db.exec(`insert into public.floor_clears (floor, max_hp, ranking, dmg) values (1, 1000, '{}', '{}')`); assert.equal((await db.query(`select count(*)::int n from public.guild_ledger where guild_id = $1 and kind = 'race'`, [g1])).rows[0].n, 1, 'paid once per floor'); assert.equal((await db.query(`select count(*)::int n from public.guild_ledger where kind = 'race'`)).rows[0].n, 1, 'only the champion');
+for (const f of [1, 10, 20, 30, 100, 200]) assert.equal(+(await db.query(`select public.gh_race_payout($1) p`, [f])).rows[0].p, racePayout(f), `payout parity F${f}`); assert.equal(h.champion.floor, 1); assert.equal(h.history.length, 1); assert.deepEqual(h.live, []);
 // ---- buffs: officers/leader only, server price, one at a time, capped multiplier
 assert.match(await err(as(B, `select public.guild_buy_buff('dmg5') r`)), /officers and the leader only/);
 assert.match(await err(as(A, `select public.guild_buy_buff('dmg5') r`)), /not enough gold in the bank/);
@@ -46,6 +50,40 @@ h = await as(C, `select public.guild_hub() r`); assert.equal(h.buffs.length, 1);
 // ---- submit_damage: the ceiling rises by exactly the buff %
 const sub = async u => { await db.exec(`update public.floor_state set floor = 2, hp = 9e15, max_hp = 9e15 where id = 1`); await db.exec(`update public.profiles set last_submit = now() - interval '10 seconds' where id = '${u}'`); return +(await as(u, `select public.submit_damage(1000000000000, 'x', 5, 0) r`)).accepted; };
 const a = await sub(A), c = await sub(C); assert.ok(a > 0); assert.ok(Math.abs(c / a - 1.05) < 0.01, `buffed ceiling ${c / a}`);
+// ---- friends: request / accept / presence / remove / block / caps / rate limit / RLS / no leaks
+{ const fl = u => as(u, `select public.friends_list() r`);
+  await db.exec(`update public.damage d set name = (select d1.name from public.damage d1 where d1.user_id = d.user_id and d1.floor = 1) where d.floor = 2`); // heroes keep their names
+  assert.match(await err(as(A, `select public.friend_request('Nobody') r`)), /no hero with that name/); assert.match(await err(as(A, `select public.friend_request('Ash') r`)), /that is you/);
+  assert.ok(!('Tess' in await as(A, `select public.guild_presence(array['Tess']) r`)), 'stranger before friending');
+  await as(A, `select public.friend_request('Tess') r`); assert.match(await err(as(A, `select public.friend_request('Tess') r`)), /already sent/);
+  let lc = await fl(C); assert.equal(lc.incoming.length, 1); assert.equal(lc.incoming[0].name, 'Ash'); assert.ok(!JSON.stringify(lc).includes(A), 'no user ids'); assert.equal(lc.incoming[0].h.length, 16);
+  assert.match(await err(as(B, `select public.friend_respond(${lc.incoming[0].id}, true) r`)), /request not found/, 'only the addressee answers');
+  await as(C, `select public.friend_respond(${lc.incoming[0].id}, true) r`); lc = await fl(C); assert.deepEqual(lc.friends.map(f => f.name), ['Ash']); assert.equal(lc.friends[0].floor, 2, "their highest floor"); assert.ok(lc.friends[0].seen);
+  assert.deepEqual(Object.keys(lc.friends[0]).sort(), ['floor', 'h', 'name', 'seen', 'since'], 'only name, floor, seen');
+  assert.ok('Tess' in await as(A, `select public.guild_presence(array['Tess']) r`), 'friend sees presence (gh_can_see)'); assert.ok('Ash' in await as(C, `select public.guild_presence(array['Ash']) r`));
+  assert.match(await err(as(A, `select public.friend_request('Tess') r`)), /already friends/);
+  // mutual request = accept
+  await as(B, `select public.friend_request('Tess') r`); await as(C, `select public.friend_request('Wren') r`); assert.deepEqual((await fl(B)).friends.map(f => f.name), ['Tess']);
+  // remove
+  await as(A, `select public.friend_remove($1) r`, [(await fl(A)).friends[0].h]); assert.equal((await fl(C)).friends.length, 1, 'both sides removed (Wren stays)'); assert.ok(!('Tess' in await as(A, `select public.guild_presence(array['Tess']) r`)));
+  // block: removes, hides their requests, request to a blocker looks sent but is never delivered
+  await as(C, `select public.friend_block(null, 'Ash') r`); assert.match(await err(as(C, `select public.friend_request('Ash') r`)), /unblock them first/);
+  assert.equal((await as(A, `select public.friend_request('Tess') r`)).sent, true); assert.equal((await fl(C)).incoming.length, 0, 'block not revealed, nothing delivered');
+  const bh = (await fl(C)).blocked[0].h; await as(C, `select public.friend_unblock($1) r`, [bh]); assert.equal((await fl(C)).blocked.length, 0);
+  // the GM can friend like anyone; nothing staff-related is exposed
+  await db.exec(`insert into public.damage (user_id, floor, name, damage, is_staff) values ('${G}', 1, 'Vesper', 5, true)`);
+  await as(A, `select public.friend_request('Vesper') r`); const lg = await fl(G); await as(G, `select public.friend_respond(${lg.incoming[0].id}, true) r`);
+  const la = JSON.stringify(await fl(A)); assert.ok(!/staff|gm|role|cls|gear|items|is_/i.test(la.replace(/"name":"[^"]*"/g, '')), 'no GM identity or items in friends_list');
+  // caps + rate limit
+  await db.exec(`delete from public.friend_req_log; insert into public.friend_req_log (user_id) select '${B}' from generate_series(1, ${REQ_PER_HOUR})`);
+  assert.match(await err(as(B, `select public.friend_request('Ash') r`)), /too many requests/); await db.exec(`delete from public.friend_req_log`);
+  await db.exec(`insert into auth.users (id) select ('00000000-0000-0000-0001-' || lpad(i::text, 12, '0'))::uuid from generate_series(1, ${FRIEND_CAP}) i;
+    insert into public.friends (user_id, friend_id) select '${S}', ('00000000-0000-0000-0001-' || lpad(i::text, 12, '0'))::uuid from generate_series(1, ${FRIEND_CAP}) i`);
+  assert.match(await err(as(B, `select public.friend_request('Dev') r`)), /their friend list is full/); assert.match(await err(as(S, `select public.friend_request('Wren') r`)), /friend list full \(100\)/);
+  // RLS: no direct access to any friend table
+  for (const t of ['friends', 'friend_requests', 'friend_blocks', 'friend_req_log']) { await db.exec(`set role authenticated`); try { assert.equal((await db.query(`select * from public.${t}`)).rows.length, 0, `RLS ${t}`); } finally { await db.exec('reset role'); } }
+  await db.exec(`set role anon`); assert.ok(await err(db.query(`select public.friends_list()`)), 'anon cannot call'); await db.exec('reset role');
+  assert.ok(await err(as(A, `select public.fr_uid('Tess') r`)), 'helpers not callable'); }
 // ---- the pre-launch reset clears race wins and buffs, and can run twice
 if (fs.existsSync(new URL('../supabase/admin-reset-tower.sql', import.meta.url))) { await db.exec(rd('admin-reset-tower.sql')); await db.exec(rd('admin-reset-tower.sql'));
   assert.equal((await db.query(`select count(*)::int n from public.guild_race_wins`)).rows[0].n, 0); assert.equal((await db.query(`select count(*)::int n from public.guild_buffs`)).rows[0].n, 0); }

@@ -562,3 +562,7 @@ body.tabhidden .halo .corona{animation-play-state:paused}
 .gchampcard{display:flex;gap:10px;align-items:center;padding:8px;border:1px solid #ffd76a55;border-radius:6px;background:#ffd76a0a;margin-bottom:6px}
 .gbuff.on{border:1px solid #ff9b3d66;border-radius:4px;padding:4px 6px}.lead{color:#5cff8a;font-size:10px}
 @media (max-width:520px){.gmem .pres{white-space:normal}}
+/* Friends (Guild Hub update) */
+.fadd input{flex:1;min-width:0}.freq{justify-content:space-between}.frl td:last-child{text-align:right}.idfr{margin-top:8px;gap:6px;align-items:center;flex-wrap:wrap}
+.frb summary{cursor:pointer;color:#9a90b0;margin:6px 0}
+@media (max-width:520px){.frl .gacts button{padding:4px 6px;font-size:12px}.freq{flex-wrap:wrap}}
