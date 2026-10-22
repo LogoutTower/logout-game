@@ -12,7 +12,10 @@ export const TOKEN_MINT = '';         // $LOGOUT mint address; empty disables th
 export const HOLDER_THRESHOLD = 0;    // minimum token balance (UI units) for the holder perk
 // ---- Feature flags: 'off' | 'gm' (staff early access) | 'all'
 // online stays 'off' until supabase/schema.sql has been run on the project (see supabase/SETUP.md).
-export const FEATURES = { online: 'all', bindIdentity: 'all', sandbox: 'gm', guilds: 'all', chat: 'all', guildsV2: 'all', bossV2: 'all', heroV2: 'all', arenaBg: 'all', arc3: 'all', hairV2: 'all', prelaunchLock: true }; // v2 addendum ran 2026-10-19; // addendum ran 2026-10-19; chat posting still needs a bound identity (bindIdentity)
+export const FEATURES = { online: 'all', bindIdentity: 'all', sandbox: 'gm', guilds: 'all', chat: 'all', guildsV2: 'all', bossV2: 'all', heroV2: 'all', arenaBg: 'all', arc3: 'all', hairV2: 'all', guildHub: 'all', prelaunchLock: true }; // v2 addendum ran 2026-10-19; // addendum ran 2026-10-19; chat posting still needs a bound identity (bindIdentity)
+// ---- Guild Hub (FEATURES.guildHub): race champion payout to the winning guild's BANK (never to players) when a floor falls,
+// base + perFloor x floor, capped. Mirrored in supabase/schema-addendum-guild-hub.sql gh_race_payout() (pglite parity test).
+export const GUILD_RACE_PAYOUT = { base: 2500, perFloor: 500, max: 50000 };
 // ---- Local-only staff unlock (used only while Supabase is off). SHA-256 hex of a passphrase; empty disables it.
 export const GM_PASS_HASH = '374da5e28297c53b43468e29236c132652675fbf158573f24daaf9cfcbbed19b';
 // ---- Pre-launch gate (index.html at the site root): only a passcode screen until LAUNCH_AT, or until FEATURES.prelaunchLock is false.

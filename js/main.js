@@ -31,6 +31,8 @@ import { pendingCutscene, CUTSCENES } from './cutscenes.js';
 import { towerRows, towerProgress, TOWER_TOP } from './towermap.js';
 import { renderGuildV2, invitesHtml } from './guildpanel.js';
 import { bannerBadge, hallArt } from './banner.js';
+import { presenceHtml, champHtml } from './guildhubui.js';
+import { friendsHtml, wireFriends, cardFriendHtml } from './friendsui.js';
 import { slotsOf, displayBanner, ZERO_BANNER, staffHall } from './guildsv2.js';
 import { itemIcon } from './icons.js';
 import { openDen } from './casinoui.js';
@@ -103,6 +105,7 @@ async function boot() {
   if (!save) return showCreate();
   if (gmValid) save.heroes[0].hp = null; if (gmValid && save.heroes[0].cls === GM_CLASS) { const f = (await be.getFloor()).floor; gmGear(save, f, legendaryWeaponDps(f), legendaryArmorPct(f)); } // migrate older GM saves: Vesperveil lands in the armor slot // staff perk: always full HP
   { const fl0 = await be.getFloor(), f0 = fl0.floor, bi = bossInfo(f0); myGuild = featureOn(FEATURES, 'guilds', gmValid) && !localStaffOnly() ? await be.myGuild?.().catch(() => null) : null; if (myGuild && gv2On()) gv2Info = await be.guildInfo().catch(() => null); save.ctx = { heroV2: heroV2On(), element: bi.lootElement, special: isSpecialSlot(f0), gm: gmValid, guild: !!myGuild && !myGuild.is_staff, bossPct: fl0.maxHp ? fl0.hp / fl0.maxHp : 1, gmPresent: (gmValid && (wearsVesperveil(save.heroes[0]) || save.heroes[0].cls === GM_CLASS)) || (fl0.gmUntil || 0) > Date.now() }; } // offline maths sees the same floor context
+  if (hubOn()) await syncHub(); // Guild Hub: active bank buff (staff preview while FEATURES.guildHub is 'gm')
   const p = offlineProgress(save, Date.now(), OFFLINE_CAP_HOURS), cap = p.cap, h0 = save.heroes[0];
   const sanc0 = inSanctum(save, sanctumOk()); // offline time accrues to the mode the staff hero was in
   if (!sanc0 && gmValid) p.damage = softenGm(p.damage, p.secs, (await be.getFloor()).floor, GM_SOFTEN_MULT); // raid softener
@@ -160,7 +163,7 @@ async function startGame(fresh = false) {
   initUI({ gear: () => $('gearSheet').showModal(), bag: openBag, talents: () => { talSel = null; openTalents(); }, wardrobe: openWardrobe, town: openTown, guild: openGuild });
   $('helpBtn').onclick = () => { $('more').close(); tourShow(0); }; $('sysBtn').onclick = openSystem; $('mapBtn').onclick = openMap; $('floorBtn').onclick = openMap; $('chatBtn').onclick = openChat;
   $('lbBtn').onclick = () => $('lbSheet').showModal(); $('top3').onclick = () => $('lbSheet').showModal(); $('logBtn').onclick = () => $('logSheet').showModal(); $('sbBtn').onclick = openSandboxUi;
-  $('tabGuild').hidden = !featureOn(FEATURES, 'guilds', gmValid); $('chatBtn').hidden = !featureOn(FEATURES, 'chat', gmValid);
+  $('friendsBtn').hidden = !frOn(); $('friendsBtn').onclick = openFriends; if (frOn()) setTimeout(friendsBadge, 5000); $('tabGuild').hidden = !featureOn(FEATURES, 'guilds', gmValid); $('chatBtn').hidden = !featureOn(FEATURES, 'chat', gmValid);
   $('topbar').classList.remove('hidden'); $('tabbar').classList.remove('hidden'); setInterval(badgePoll, 60000); setTimeout(badgePoll, 4000);
   ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => addEventListener(ev, () => be?.touch?.(), { passive: true })); addEventListener('pagehide', () => { try { if (be?._dirty) be._push(be._dirty); } catch {} });
   document.addEventListener('visibilitychange', () => document.body.classList.toggle('tabhidden', document.hidden)); // pauses CSS loops (Solumbra halo, pet bob)
@@ -230,10 +233,22 @@ async function openCard(name, author = null) {
   if (name === me.name && !author) { const g = gv2Info?.guild || myGuild; guild = g ? { tag: g.tag, name: g.name, banner: g.banner, staff: !!g.is_staff } : null; card = cardFromSave(save, { guild, staff: gmValid }); }
   else if (be.name === 'local') { const gs = be._g?.(), m = gs?.members.find(x => x.name === name), gu = m && gs.guilds.find(x => x.id === m.guild_id); card = fakeCard(name, floor?.floor || 1, gu ? { tag: gu.tag, name: gu.name, banner: gu.banner, staff: !!gu.is_staff } : null); }
   else if (be.playerCard) card = await cards.get(author ? 'a:' + author : 'n:' + name, () => be.playerCard({ name: author ? null : name, author })).catch(() => null);
+  const pres = card && hubOn() ? await be.guildPresence([card.name || name]).then(r => r?.[card.name || name]).catch(() => null) : null;
   $('idCardSub').textContent = card ? '· hero ID' : '';
-  body.innerHTML = card ? cardHtml(card, { team: !card.st && isTeam(card.name || name, author), fmt, esc, sprite: heroSprite, guildBadge: g => gv2On() && g.banner ? bannerBadge(displayBanner(g.banner, g.staff), g.tag) : '' })
+  body.innerHTML = card ? cardHtml(card, { team: !card.st && isTeam(card.name || name, author), fmt, esc, sprite: heroSprite, guildBadge: g => gv2On() && g.banner ? bannerBadge(displayBanner(g.banner, g.staff), g.tag) : '', presence: pres ? presenceHtml(pres) : '' })
     : `<p class="sub">${be.playerCard && !be.noCard ? 'No ID card for this hero yet. They need to play and sync once.' : 'ID cards open soon.'}</p>`;
+  const cn = card?.name || name; if (card && frOn() && cn && cn !== me.name) { const L = await be.friendsList().catch(() => null); if (L && d.open) { body.insertAdjacentHTML('beforeend', cardFriendHtml(cn, L)); wireCardFriend(cn, L); } }
 }
+// ---- Friends (Guild Hub update, same flag): Friends view in More, Add friend / Block on ID cards. Server RPCs only; one read per open.
+const frOn = () => hubOn() && !!be?.friendsList;
+function wireCardFriend(n, L) { const m = t => { const x = $('cardFrMsg'); if (x) x.textContent = t; };
+  const run = async (fn, ok) => { try { await fn(); m(ok); setTimeout(() => openCard(n), 600); } catch (e) { m(String(e.message || e).replace(/^.*?: /, '')); } };
+  if ($('cardFrAdd')) $('cardFrAdd').onclick = () => { const inc = (L.incoming || []).find(x => x.name === n); run(() => inc ? be.friendRespond(inc.id, true) : be.friendRequest(n), inc ? 'friend added.' : 'friend request sent.'); };
+  if ($('cardFrBlk')) $('cardFrBlk').onclick = () => confirm(`Block ${n}? They are removed from your friends and cannot send you requests.`) && run(() => be.friendBlock(n, true), 'blocked.'); }
+async function openFriends() { const d = $('friends'), el = $('friendsBody'); $('more').close(); if (!d.open) d.showModal(); el.innerHTML = '<p class="sub">Loading…</p>';
+  const draw = async () => { let L = null; try { L = await be.friendsList(); } catch {} $('friendsSub').textContent = L ? `· ${(L.friends || []).length}/${L.cap}` : ''; el.innerHTML = friendsHtml(L); $('dotFriends').hidden = !(L?.incoming || []).length; wireFriends({ be, el, refresh: draw }); };
+  await draw(); }
+async function friendsBadge() { if (!frOn()) return; try { const L = await be.friendsList(); $('dotFriends').hidden = !(L?.incoming || []).length; } catch {} }
 document.addEventListener('click', e => { const t = e.target.closest?.('[data-card]'); if (!t || !save) return; e.preventDefault(); e.stopPropagation(); openCard(t.dataset.card, t.dataset.author || null); }, true);
 // ---- Arc scenes (js/arcs.js): one scene per 10 floors, per-floor tint toward the guardian's element.
 let sceneFor = '';
@@ -619,14 +634,22 @@ async function submitDmg(name, amount, hero) {
 let myGuild = null, guildAll = false;
 const meArg = () => ({ name: save.heroes[0].name, staff: gmValid });
 let gv2Info = null; const gv2On = () => featureOn(FEATURES, 'guildsV2', gmValid) && !!be?.guildInfo;
+// Guild Hub (FEATURES.guildHub: 'gm' = staff preview): presence, race board, bank buffs. Read once when a view opens; no realtime.
+const hubOn = () => gv2On() && featureOn(FEATURES, 'guildHub', gmValid) && !!be?.guildHub && !localStaffOnly();
+let hubInfo = null;
+async function syncHub() { if (!hubOn()) { hubInfo = null; if (save?.ctx) { delete save.ctx.gbDmg; delete save.ctx.gbUntil; } return null; }
+  try { hubInfo = await be.guildHub(); } catch { hubInfo = null; }
+  const b = (hubInfo?.buffs || []).find(x => x.kind === 'dmg'); if (save?.ctx) { if (b && myGuild && !myGuild.is_staff) { save.ctx.gbDmg = b.pct; save.ctx.gbUntil = Date.parse(b.until); } else { delete save.ctx.gbDmg; delete save.ctx.gbUntil; } }
+  return hubInfo; }
 let gTags = {}, gTagsAt = 0; const tagBanner = tag => { const t = Object.values(gTags).find(x => x.tag === tag); return t ? displayBanner(t.banner, t.staff) : tag === STAFF_GUILD.tag ? ZERO_BANNER : undefined; }; // ZERO is reserved for the staff guild
 async function refreshTags() { if (!gv2On() || Date.now() - gTagsAt < 300000) return; gTagsAt = Date.now(); try { gTags = await be.guildTags(floor.floor) || {}; } catch {} }
 async function openGuild() {
   if (gv2On() && !localStaffOnly()) { try { gv2Info = await be.guildInfo(); } catch (e) { gv2Info = null; } } guildSeen();
-  if (gv2Info?.guild) { $('guildSub').textContent = `· [${gv2Info.guild.tag}] ${gv2Info.guild.name}`; renderGuildV2(gv2Info, { be, save, claimQuest: claimGuildQuest, el: $('guildBody'), name: save.heroes[0].name, canPost: (be.canChat?.() ?? true) && !localStaffOnly(), staff: gmValid, log: m => log(`System notice: ${m}`), refresh: async () => { myGuild = await be.myGuild(); if (save.ctx) save.ctx.guild = !!myGuild; render(); await openGuild(); } }); if (!$('guild').open) $('guild').showModal(); return; }
+  if (gv2Info?.guild) { $('guildSub').textContent = `· [${gv2Info.guild.tag}] ${gv2Info.guild.name}`; if (hubOn()) { await syncHub(); if (hubInfo) hubInfo.presence = await be.guildPresence(gv2Info.members.map(m => m.name)).catch(() => ({})); } renderGuildV2(gv2Info, { hub: hubOn() ? hubInfo : null, be, save, claimQuest: claimGuildQuest, el: $('guildBody'), name: save.heroes[0].name, canPost: (be.canChat?.() ?? true) && !localStaffOnly(), staff: gmValid, log: m => log(`System notice: ${m}`), refresh: async () => { myGuild = await be.myGuild(); if (save.ctx) save.ctx.guild = !!myGuild; render(); await openGuild(); } }); if (!$('guild').open) $('guild').showModal(); return; }
   const blocked = localStaffOnly() ? '<p class="sub">Local staff unlock: guilds need the server role (nothing is sent from this device).</p>' : '';
+  if (hubOn() && !gv2Info?.guild) await syncHub();
   let board = []; try { board = await be.guildBoard(guildAll); } catch {}
-  const rows = board.map(g => `<tr class="${myGuild?.id === g.id ? 'mine' : ''}"><td>${g.rank}</td><td>${gv2On() ? bannerBadge(g.banner, g.tag) : ''}[${esc(g.tag)}] ${esc(g.name)}${gv2On() && g.level ? ` <small class="sub">Lv ${g.level}${g.open === false ? ' · invite-only' : ''}</small>` : ''}</td><td>${g.members}/${gv2On() && g.level ? slotsOf(g.level) : GUILD_CAP}</td><td>${fmt(g.damage)}</td>${!myGuild && !blocked ? `<td><button data-join="${esc(g.tag)}">Join</button></td>` : '<td></td>'}</tr>`).join('');
+  const rows = board.map(g => `<tr class="${myGuild?.id === g.id ? 'mine' : ''}"><td>${g.rank}</td><td>${gv2On() ? bannerBadge(g.banner, g.tag) : ''}[${esc(g.tag)}] ${esc(g.name)}${hubOn() && hubInfo?.champion?.guild_id === g.id ? ' ' + champHtml(hubInfo.champion) : ''}${gv2On() && g.level ? ` <small class="sub">Lv ${g.level}${g.open === false ? ' · invite-only' : ''}</small>` : ''}</td><td>${g.members}/${gv2On() && g.level ? slotsOf(g.level) : GUILD_CAP}</td><td>${fmt(g.damage)}</td>${!myGuild && !blocked ? `<td><button data-join="${esc(g.tag)}">Join</button></td>` : '<td></td>'}</tr>`).join('');
   $('guildSub').textContent = myGuild ? `· [${myGuild.tag}] ${myGuild.name}` : '· none';
   $('guildBody').innerHTML = `${blocked}${myGuild ? `<p>You are in <b>[${esc(myGuild.tag)}] ${esc(myGuild.name)}</b>${myGuild.owner ? ' (founder)' : ''} · ${myGuild.members}/${GUILD_CAP} members.</p>
     <p class="sub">${myGuild.is_staff ? `${STAFF_MARK} Staff guild: no bonus · invite only.` : gmValid ? 'Staff: no guild bonus, and your damage never counts toward the guild.' : `Guild bonus: +${GUILD_BUFF * 100}% XP and gold. It never changes damage, ranks or rewards.`}</p><button id="gLeave">Leave guild</button>`
